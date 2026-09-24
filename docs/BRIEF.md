@@ -121,3 +121,13 @@ Resultaatvorm van schrijftools is onbekend: behandel succes generiek, zoek een `
 is dat dus te weinig. Regel: gebruik `callTool`/`watchTool` en parse **alle** `result.content`-blokken met
 `type === "text"` via JSON.parse (try/catch per blok), laat objecten met `moreResults`/`nextOffset`/`nextCursor`
 weg. Voor Atlassian volstaat het eerste blok (`payload`). Eén helper `items(result)` doet dit voor beide.
+
+## Besluit klant (24 sep): Actiepagina vervangt later de PAF actielijst
+Fase 1 (nu): link naar de PAF actielijst blijft, eigen `acties` in `db`.
+Fase 2: Actiepagina wordt de hoofdlijst. Daarom nu al een PAF-compatibel datamodel in collectie `acties`:
+`{ text, who ("eigen actie" | naam | "prive"), due (kort, bv. "1 okt"), prog (een van de PAF-programma's),
+extra, why, status ("open"|"done"|"dropped"), vandaag (bool), bron ("klad"|"mail"|"teams"|"jira"|"cowork"),
+bronUrl, van, onderwerp, createdAt, updatedAt }`. Programma's: UI/UX, Platform Core, CI Acceleration, OIDC,
+Object Store, Jakarta migratie, Platform Stability, Contracten, Overig. Groepering per programma + een Vandaag-sectie.
+Fase 2-werk (later): Cowork-ochtendrun schrijft voorstellen ("Uit je mail") naar collectie `voorstellen`
+van deze pagina; import van de huidige PAF-lijst; Claude deelt nieuwe acties in per programma.
