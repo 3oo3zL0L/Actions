@@ -15,7 +15,7 @@ nl:
         text: Actie
         who: Wie
         due_on: Deadline
-        mail_url: Link naar mail
+        mail_url: Link naar de bron
       user:
         email_address: E-mailadres
         password: Wachtwoord

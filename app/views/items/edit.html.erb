@@ -25,7 +25,7 @@
           <label class="field">Deadline <%= form.date_field :due_on %></label>
           <label class="field">Programma <%= form.collection_select :program_id, Program.ordered, :id, :name %></label>
           <label class="field field--wide">Toelichting <%= form.text_area :note, rows: 2 %></label>
-          <label class="field field--wide">Link naar mail <%= form.url_field :mail_url, placeholder: "https://outlook.office365.com/..." %></label>
+          <label class="field field--wide">Link naar de bron <%= form.url_field :mail_url, placeholder: "https://..." %></label>
         </div>
         <div class="actions">
           <%= form.button "Bewaar", class: "btn btn--primary" %>

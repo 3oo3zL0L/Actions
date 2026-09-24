@@ -11,7 +11,7 @@ class ImportsControllerTest < ActionDispatch::IntegrationTest
       post import_path, params: { markdown: "## OIDC\n- [ ] Scope bepalen | - | -\n- [ ] Reviewen | Krishna | 3 okt" }
     end
 
-    assert_redirected_to root_path
+    assert_redirected_to items_path
     assert Program.exists?(name: "OIDC")
   end
 end

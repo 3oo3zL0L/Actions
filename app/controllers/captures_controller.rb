@@ -6,7 +6,7 @@ class CapturesController < ApplicationController
     items = capture.spoken? ? [] : capture.process
 
     respond_to do |format|
-      format.html { redirect_to root_path, notice: notice_for(capture, items) }
+      format.html { redirect_back_or_to items_path, notice: notice_for(capture, items) }
       format.json { render json: { id: capture.id, items: items.map(&:id) }, status: :created }
     end
   end

@@ -3,6 +3,6 @@ class Items::RewritesController < ApplicationController
 
   def create
     @item.rewrite_later params.expect(:instruction)
-    redirect_to root_path
+    redirect_to items_path
   end
 end

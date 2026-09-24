@@ -3,11 +3,11 @@ class Items::CompletionsController < ApplicationController
 
   def create
     @item.complete
-    redirect_to root_path
+    redirect_back_or_to items_path
   end
 
   def destroy
     @item.reopen
-    redirect_to root_path
+    redirect_back_or_to items_path
   end
 end

@@ -1,0 +1,91 @@
+/* De werkplek: bronnen links, eigen acties rechts. Op de telefoon onder elkaar, acties eerst. */
+.wrap--wide { max-width: 1240px; }
+
+.nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  margin-bottom: 22px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.nav__link {
+  color: var(--faint);
+  text-decoration: none;
+  padding: 4px 0;
+  border-bottom: 2px solid transparent;
+
+  &:hover { color: var(--ink); }
+}
+
+.nav__link--current { color: var(--ink); border-bottom-color: var(--honey); }
+
+.tally--alarm b { color: var(--alarm); }
+
+.desk {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+  gap: 0 36px;
+  align-items: start;
+}
+
+.desk__main > :first-child, .desk__side > :first-child { margin-top: 30px; }
+
+.entries { list-style: none; margin: 0; padding: 0; }
+
+.entry {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr) auto;
+  gap: 0 12px;
+  align-items: start;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--line-soft);
+
+  &:last-child { border-bottom: none; }
+}
+
+.entry__when { font-size: 12px; color: var(--faint); padding-top: 2px; }
+.entry__title { display: block; text-decoration: none; letter-spacing: -.01em; text-wrap: pretty; }
+a.entry__title:hover { text-decoration: underline; text-decoration-color: var(--line-strong); }
+.entry__summary { display: block; margin-top: 4px; font-size: 13px; color: var(--faint); overflow-wrap: anywhere; }
+.entry__actions form { margin: 0; }
+
+.entry--unread .entry__title { font-weight: 600; }
+.entry--unread .entry__when::before { content: "● "; color: var(--honey); }
+.entry--now { box-shadow: inset 2px 0 0 var(--sage); padding-left: 10px; }
+.entry--now .entry__when { color: var(--sage); }
+
+.desk__side .entry { grid-template-columns: 52px minmax(0, 1fr) auto; }
+
+.meta a { color: var(--muted); text-decoration: none; }
+
+.btn--small { min-height: 30px; padding: 5px 11px; font-size: 12px; white-space: nowrap; }
+
+
+.source { margin-top: 20px; padding-bottom: 16px; }
+
+.programs { list-style: none; margin: 16px 0; padding: 0; }
+.program { border-bottom: 1px solid var(--line-soft); }
+
+.program__link {
+  display: block;
+  padding: 14px 0;
+  text-decoration: none;
+
+  &:hover .text { text-decoration: underline; text-decoration-color: var(--line-strong); }
+}
+
+/* Smal: één kolom, eigen acties voor vandaag bovenaan, daarna de agenda. */
+@media (max-width: 860px) {
+  .desk { grid-template-columns: 1fr; }
+  .desk__main, .desk__side { display: contents; }
+  .desk__side > .card--today, .desk__side > [aria-labelledby=late] { order: -1; }
+  .desk > * > section { margin-top: 30px; }
+}
+
+@media (max-width: 560px) {
+  .tallies { gap: 18px; }
+  .entry, .desk__side .entry { grid-template-columns: 1fr auto; }
+  .entry__when { grid-column: 1 / -1; }
+}

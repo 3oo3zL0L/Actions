@@ -1,0 +1,22 @@
+<% content_for :title, "#{@program.name} aanpassen" %>
+
+<header class="masthead"><h1><%= @program.name %></h1></header>
+
+<%= form_with model: @program, class: "import" do |form| %>
+  <% if @program.errors.any? %>
+    <p class="flash flash--alert"><%= @program.errors.full_messages.to_sentence %></p>
+  <% end %>
+  <label class="field">Trefwoorden, met komma's
+    <%= form.text_field :keywords, placeholder: "PLAT, Index Advisor, Santhosh" %>
+  </label>
+  <label class="field">Link naar het Claude-project
+    <%= form.url_field :claude_url, placeholder: "https://claude.ai/project/..." %>
+  </label>
+  <label class="field">Toelichting
+    <%= form.text_area :note, rows: 2 %>
+  </label>
+  <div class="actions">
+    <%= form.button "Bewaar", class: "btn btn--primary" %>
+    <%= link_to "Terug", @program, class: "btn btn--quiet" %>
+  </div>
+<% end %>

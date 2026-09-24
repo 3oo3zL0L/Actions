@@ -33,7 +33,7 @@ class Items::StateControllersTest < ActionDispatch::IntegrationTest
   test "rewrite" do
     post item_rewrite_path(@item), params: { instruction: "Kim is met verlof, Sander pakt het op" }
 
-    assert_redirected_to root_path
+    assert_redirected_to items_path
     assert_enqueued_with job: Item::RewriteJob, args: [ @item ]
   end
 end

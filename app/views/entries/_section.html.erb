@@ -1,0 +1,12 @@
+<%# locals: (title:, entries:, empty:, id: title.parameterize, card: false, **options) %>
+<%= tag.section class: [ "stack", { card: card } ], aria: { labelledby: id } do %>
+  <div class="section-head">
+    <h2 id="<%= id %>"><%= title %></h2>
+    <span class="count"><%= entries.size %></span>
+  </div>
+  <% if entries.any? %>
+    <ul class="entries"><%= render partial: "entries/entry", collection: entries, locals: options %></ul>
+  <% else %>
+    <p class="section-note"><%= empty %></p>
+  <% end %>
+<% end %>

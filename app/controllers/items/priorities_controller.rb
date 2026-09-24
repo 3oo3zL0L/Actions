@@ -3,11 +3,11 @@ class Items::PrioritiesController < ApplicationController
 
   def create
     @item.prioritize why: params[:why]
-    redirect_to root_path
+    redirect_back_or_to items_path
   end
 
   def destroy
     @item.deprioritize
-    redirect_to root_path
+    redirect_back_or_to items_path
   end
 end

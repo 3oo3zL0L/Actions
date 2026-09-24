@@ -1,0 +1,32 @@
+<% content_for :title, "Programma's" %>
+
+<header class="masthead">
+  <h1>Programma's</h1>
+</header>
+
+<ul class="programs">
+  <% @programs.each do |program| %>
+    <li class="program">
+      <%= link_to program, class: "program__link" do %>
+        <span class="text"><%= program.name %></span>
+        <span class="meta">
+          <span class="who"><%= pluralize @open.fetch(program.id, 0), "actie", plural: "acties" %></span>
+          <% %w[ epic page deck mail chat ].each do |kind| %>
+            <% if (count = @counts[[ program.id, kind ]]) %>
+              <span><%= count %> <%= kind_label(kind).downcase %></span>
+            <% end %>
+          <% end %>
+          <%= tag.span "Claude", class: "chip" if program.claude_url %>
+        </span>
+      <% end %>
+    </li>
+  <% end %>
+</ul>
+
+<p class="section-note">
+  Wat uit je bronnen komt, landt bij het programma waarvan de naam of een trefwoord erin staat.
+  Geef elk programma trefwoorden: Jira-sleutels, systeemnamen, namen van mensen.
+  <% if (unassigned = Entry.unassigned.where(kind: %w[ epic page deck ]).count).positive? %>
+    <%= unassigned %> epics, pagina's en decks hebben nog geen programma.
+  <% end %>
+</p>

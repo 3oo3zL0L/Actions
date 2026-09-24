@@ -1,0 +1,43 @@
+<% content_for :title, @program.name %>
+<% content_for :wide, true %>
+<%= turbo_stream_from :desk %>
+
+<header class="masthead">
+  <div>
+    <h1><%= @program.name %></h1>
+    <p class="section-note">
+      <%= @program.note %>
+      <% if @program.keywords %>Trefwoorden: <%= @program.keywords %>.<% end %>
+      <%= link_to "Aanpassen", edit_program_path(@program) %>
+    </p>
+  </div>
+  <% if @program.claude_url %>
+    <%= link_to "Open Claude-project", @program.claude_url, class: "btn btn--primary", target: "_blank", rel: "noopener" %>
+  <% end %>
+</header>
+
+<div class="desk">
+  <div class="desk__main">
+    <%= render "entries/section", title: "Epics", entries: @entries.fetch("epic", []), program: false, card: true,
+          empty: "Geen open epics die bij #{@program.name} horen. Voeg de Jira-sleutel toe als trefwoord." %>
+    <%= render "entries/section", title: "Mail", entries: @entries.fetch("mail", []), program: false, empty: "Geen open mail hierover." %>
+    <%= render "entries/section", title: "Teams", entries: @entries.fetch("chat", []), program: false, empty: "Geen chats hierover." %>
+    <%= render "entries/section", title: "Agenda", entries: @entries.fetch("event", []).reverse, program: false, empty: "Geen afspraken deze week." %>
+  </div>
+
+  <aside class="desk__side">
+    <section class="card card--today" aria-labelledby="open">
+      <div class="section-head"><h2 id="open">Open acties</h2><span class="count"><%= @items.size %></span></div>
+      <% if @items.any? %>
+        <ul class="items"><%= render partial: "items/item", collection: @items %></ul>
+      <% else %>
+        <p class="section-note">Niets open.</p>
+      <% end %>
+    </section>
+
+    <%= render "entries/section", title: "Decks", entries: @entries.fetch("deck", []), program: false, summary: false, empty: "Geen decks." %>
+    <%= render "entries/section", title: "Confluence", entries: @entries.fetch("page", []), program: false, summary: false, empty: "Geen pagina's." %>
+    <%= render "entries/section", title: "Claude", entries: @entries.fetch("project", []), program: false, summary: false,
+          empty: @program.claude_url ? "Het project staat bovenaan." : "Geen Claude-project. Zet de link erbij via Aanpassen." %>
+  </aside>
+</div>

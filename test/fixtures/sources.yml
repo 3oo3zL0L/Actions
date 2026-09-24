@@ -1,0 +1,16 @@
+microsoft:
+  type: Source::Microsoft
+  account: thomas@planon.example
+  access_token: graph-token
+  refresh_token: graph-refresh
+  expires_at: <%= 1.hour.from_now %>
+  synced_at: <%= 5.minutes.ago %>
+
+atlassian:
+  type: Source::Atlassian
+  account: thomas@planon.example
+  access_token: atlassian-token
+  refresh_token: atlassian-refresh
+  expires_at: <%= 1.hour.from_now %>
+  site_id: cloud-1
+  site_url: https://planon.atlassian.net

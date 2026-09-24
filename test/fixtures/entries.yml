@@ -1,0 +1,32 @@
+standup:
+  source: microsoft
+  kind: event
+  external_id: evt-1
+  title: Platform Core standup
+  program: platform_core
+  url: https://teams.microsoft.com/l/meetup-join/1
+  starts_at: <%= Time.current.change(hour: 23, min: 0) %>
+  ends_at: <%= Time.current.change(hour: 23, min: 30) %>
+  seen_at: <%= 5.minutes.ago %>
+
+sander_mail:
+  source: microsoft
+  kind: mail
+  external_id: mail-1
+  title: "Re: Verzoek om akkoord Bitbucket"
+  person: Sander
+  url: https://outlook.office365.com/owa/?ItemID=mail-1
+  unread: true
+  starts_at: <%= 1.hour.ago %>
+  seen_at: <%= 5.minutes.ago %>
+
+index_epic:
+  source: atlassian
+  kind: epic
+  external_id: PLAT-12
+  title: Index Advisor
+  status: In Progress
+  program: platform_core
+  url: https://planon.atlassian.net/browse/PLAT-12
+  starts_at: <%= 1.day.ago %>
+  seen_at: <%= 5.minutes.ago %>

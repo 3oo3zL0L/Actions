@@ -1,11 +1,11 @@
 <!DOCTYPE html>
 <html lang="nl">
   <head>
-    <title><%= content_for(:title) || "Actielijst" %></title>
+    <title><%= content_for(:title) || "Werkplek" %></title>
     <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="application-name" content="Actielijst">
+    <meta name="application-name" content="Werkplek">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="theme-color" content="#101113">
     <%= csrf_meta_tags %>
@@ -24,7 +24,15 @@
   </head>
 
   <body>
-    <div class="wrap">
+    <div class="<%= class_names "wrap", "wrap--wide": content_for?(:wide) %>">
+      <% if authenticated? %>
+        <nav class="nav" aria-label="Hoofdmenu">
+          <%= link_to "Werkplek", root_path, class: class_names("nav__link", "nav__link--current": current_page?(root_path) || current_page?(desk_path)) %>
+          <%= link_to "Acties", items_path, class: class_names("nav__link", "nav__link--current": controller_name == "items") %>
+          <%= link_to "Programma's", programs_path, class: class_names("nav__link", "nav__link--current": controller_name == "programs") %>
+          <%= link_to "Koppelingen", sources_path, class: class_names("nav__link", "nav__link--current": controller_name == "sources") %>
+        </nav>
+      <% end %>
       <%= tag.p notice, class: "flash", role: "status" if notice %>
       <%= tag.p alert, class: "flash flash--alert", role: "alert" if alert %>
       <%= yield %>

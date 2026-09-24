@@ -8,7 +8,7 @@ class CapturesControllerTest < ActionDispatch::IntegrationTest
       post captures_path, params: { capture: { body: "Een\nTwee", spoken: false } }
     end
 
-    assert_redirected_to root_path
+    assert_redirected_to items_path
     assert_equal "2 acties op de lijst.", flash[:notice]
   end
 

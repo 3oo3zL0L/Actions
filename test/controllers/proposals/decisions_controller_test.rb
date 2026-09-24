@@ -22,7 +22,7 @@ class Proposals::DecisionsControllerTest < ActionDispatch::IntegrationTest
     post proposal_dismissal_path(@proposal)
     assert_not_includes Proposal.pending, @proposal
 
-    get root_path
+    get items_path
     assert_select ".undo", text: /is weg/
 
     delete proposal_dismissal_path(@proposal)

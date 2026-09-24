@@ -1,6 +1,7 @@
 platform_core:
   name: Platform Core
   position: 1
+  keywords: PLAT, Index Advisor
 
 contracten:
   name: Contracten

@@ -1,0 +1,72 @@
+<% content_for :wide, true %>
+<%= turbo_stream_from :desk %>
+<%= turbo_stream_from :items %>
+
+<header class="masthead">
+  <div>
+    <h1><%= l Date.current, format: "%A %-d %B" %></h1>
+    <p class="section-note">
+      <% if (next_event = @events.find { |event| !event.now? }) %>
+        Volgende: <b><%= next_event.title %></b> om <%= l next_event.starts_at, format: "%H:%M" %>.
+      <% else %>
+        Geen afspraken meer vandaag.
+      <% end %>
+    </p>
+  </div>
+  <div class="tallies">
+    <div class="tally"><b><%= @events.size %></b><span>afspraken</span></div>
+    <div class="tally"><b><%= @mails.count(&:unread?) %></b><span>ongelezen</span></div>
+    <div class="tally"><b><%= @today.size %></b><span>vandaag</span></div>
+    <div class="tally <%= "tally--alarm" if @late.any? %>"><b><%= @late.size %></b><span>verlopen</span></div>
+  </div>
+</header>
+
+<% if @sources.none? %>
+  <p class="flash">Nog niets gekoppeld. <%= link_to "Koppel Microsoft 365, Jira en Confluence", sources_path %> en je werk komt hier binnen.</p>
+<% end %>
+
+<%= render "captures/form" %>
+
+<div class="desk">
+  <div class="desk__main">
+    <%= render "entries/section", title: "Agenda", id: "agenda", entries: @events, card: true, summary: true,
+          empty: @sources.any? ? "Vrij. Morgen: #{pluralize @later_events.size, "afspraak", plural: "afspraken"}." : "Koppel Outlook om je agenda te zien." %>
+    <%= render "entries/section", title: "Mail", entries: @mails, empty: "Geen ongelezen of gemarkeerde mail van deze week." %>
+    <%= render "entries/section", title: "Teams", entries: @chats, empty: "Geen chats deze week." %>
+  </div>
+
+  <aside class="desk__side">
+    <section class="card card--today" aria-labelledby="today">
+      <div class="section-head">
+        <h2 id="today">Vandaag</h2>
+        <%= link_to "alle acties", items_path, class: "count" %>
+      </div>
+      <% if @today.any? %>
+        <ul class="items"><%= render partial: "items/item", collection: @today %></ul>
+      <% else %>
+        <p class="section-note">Nog niets voor vandaag. Zet een actie hierheen met Prioritiseer.</p>
+      <% end %>
+    </section>
+
+    <% if @late.any? %>
+      <section aria-labelledby="late">
+        <div class="section-head"><h2 id="late">Verlopen</h2><span class="count"><%= @late.size %></span></div>
+        <ul class="items"><%= render partial: "items/item", collection: @late %></ul>
+      </section>
+    <% end %>
+
+    <% if @proposals.any? %>
+      <p class="section-note"><%= link_to pluralize(@proposals.size, "voorstel", plural: "voorstellen") + " uit je mail", items_path(anchor: "proposals") %> wacht op een besluit.</p>
+    <% end %>
+
+    <%= render "entries/section", title: "Decks", entries: @decks, summary: false, empty: "Geen recente PowerPoints." %>
+    <%= render "entries/section", title: "Confluence", entries: @pages, summary: false, empty: "Geen recente pagina's." %>
+  </aside>
+</div>
+
+<footer class="footer">
+  <% @sources.each do |source| %>
+    <span><%= source.title %> <%= source_status(source) %></span>
+  <% end %>
+  <%= button_to "Nu verversen", sync_path, class: "link" if @sources.any? %>
+</footer>

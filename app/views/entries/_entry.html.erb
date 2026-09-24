@@ -1,0 +1,22 @@
+<%= tag.li class: [ "entry", "entry--#{entry.kind}", { "entry--unread": entry.unread?, "entry--now": entry.now? } ], id: dom_id(entry) do %>
+  <%= tag.span entry_when(entry), class: "entry__when" %>
+
+  <div class="entry__body">
+    <%= link_to_if entry.url, entry.title, entry.url, class: "entry__title", target: "_blank", rel: "noopener" %>
+    <%= tag.span entry.summary, class: "entry__summary" if entry.summary.present? && local_assigns.fetch(:summary, true) %>
+    <span class="meta">
+      <%= tag.span "gemarkeerd", class: "chip chip--busy" if entry.flagged? %>
+      <%= tag.span entry.status, class: "chip" if entry.status.present? && entry.kind == "epic" %>
+      <%= tag.span entry.person, class: "who" if entry.person.present? %>
+      <%= link_to entry.program.name, entry.program if entry.program && local_assigns.fetch(:program, true) %>
+    </span>
+  </div>
+
+  <div class="entry__actions">
+    <% if entry.actioned? %>
+      <span class="chip">op de lijst</span>
+    <% else %>
+      <%= button_to "+ Actie", entry_action_path(entry), class: "btn btn--small", aria: { label: "Maak een actie van #{entry.title}" } %>
+    <% end %>
+  </div>
+<% end %>

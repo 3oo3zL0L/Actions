@@ -4,7 +4,7 @@ class ItemsControllerTest < ActionDispatch::IntegrationTest
   setup { sign_in_as users(:thomas) }
 
   test "index groups today, programs and closed" do
-    get root_path
+    get items_path
 
     assert_response :success
     assert_select ".card--today .item", text: /Index Advisor/
@@ -29,7 +29,7 @@ class ItemsControllerTest < ActionDispatch::IntegrationTest
 
     patch item_path(items(:jprofiler)), params: { item: { who: "Santhosh", program_id: programs(:platform_core).id } }
 
-    assert_redirected_to root_path
+    assert_redirected_to items_path
     assert_equal "Santhosh", items(:jprofiler).reload.who
     assert_equal programs(:platform_core), items(:jprofiler).program
   end
@@ -43,14 +43,14 @@ end
 
 class ItemsControllerWithoutSessionTest < ActionDispatch::IntegrationTest
   test "html goes to sign in" do
-    get root_path
+    get items_path
     assert_redirected_to new_session_path
   end
 
   test "first visitor creates the account" do
     User.delete_all
 
-    get root_path
+    get items_path
     assert_redirected_to new_first_run_path
   end
 
@@ -60,7 +60,7 @@ class ItemsControllerWithoutSessionTest < ActionDispatch::IntegrationTest
   end
 
   test "a token does not open the html app" do
-    get root_path, headers: { "Authorization" => "Bearer token-for-the-morning-run" }
+    get items_path, headers: { "Authorization" => "Bearer token-for-the-morning-run" }
     assert_redirected_to new_session_path
   end
 end

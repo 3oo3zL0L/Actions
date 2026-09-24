@@ -3,30 +3,30 @@
     {
       "warning_type": "Cross-Site Scripting",
       "warning_code": 4,
-      "fingerprint": "500c81db88cf294dd9c5f195d80b7c3895ea1d17d33ec93a898ee474f2894446",
+      "fingerprint": "776b16370749c5326f4019f6a7bed525e87cda8d03ed9f0c86dbf446eb63fea4",
       "check_name": "LinkToHref",
       "message": "Potentially unsafe model attribute in `link_to` href",
       "file": "app/views/items/_item.html.erb",
       "line": 31,
       "link": "https://brakemanscanner.org/docs/warning_types/link_to_href",
-      "code": "link_to(Item.find(params[:id]).mail_url, :class => \"mail\", :target => \"_blank\", :rel => \"noopener\", :title => \"Open mail\", :aria => ({ :label => \"Open mail\" }))",
+      "code": "link_to(Item.new.mail_url, :class => \"mail\", :target => \"_blank\", :rel => \"noopener\", :title => \"Open mail\", :aria => ({ :label => \"Open mail\" }))",
       "render_path": [
         {
           "type": "controller",
-          "class": "ItemsController",
+          "class": "DesksController",
           "method": "show",
-          "line": 22,
-          "file": "app/controllers/items_controller.rb",
+          "line": 15,
+          "file": "app/controllers/desks_controller.rb",
           "rendered": {
-            "name": "items/show",
-            "file": "app/views/items/show.html.erb"
+            "name": "desks/show",
+            "file": "app/views/desks/show.html.erb"
           }
         },
         {
           "type": "template",
-          "name": "items/show",
-          "line": 1,
-          "file": "app/views/items/show.html.erb",
+          "name": "desks/show",
+          "line": 45,
+          "file": "app/views/desks/show.html.erb",
           "rendered": {
             "name": "items/_item",
             "file": "app/views/items/_item.html.erb"
@@ -37,12 +37,69 @@
         "type": "template",
         "template": "items/_item"
       },
-      "user_input": "Item.find(params[:id]).mail_url",
+      "user_input": "Item.new.mail_url",
       "confidence": "Weak",
       "cwe_id": [
         79
       ],
-      "note": "mail_url is validated to be an https:// URL in Item."
+      "note": "mail_url is gevalideerd op https:// in Item."
+    },
+    {
+      "warning_type": "Redirect",
+      "warning_code": 18,
+      "fingerprint": "9cbf64438465522461845096ebe411c1e89785f2f4040ab9add2bec1f6b2e41f",
+      "check_name": "Redirect",
+      "message": "Possible unprotected redirect",
+      "file": "app/controllers/sources/authorizations_controller.rb",
+      "line": 7,
+      "link": "https://brakemanscanner.org/docs/warning_types/redirect/",
+      "code": "redirect_to(Source.for(params[:provider]).authorize_url(:state => SecureRandom.urlsafe_base64(24), :redirect_uri => callback_url), :allow_other_host => true)",
+      "render_path": null,
+      "location": {
+        "type": "method",
+        "class": "Sources::AuthorizationsController",
+        "method": "new"
+      },
+      "user_input": "Source.for(params[:provider]).authorize_url(:state => SecureRandom.urlsafe_base64(24), :redirect_uri => callback_url)",
+      "confidence": "Weak",
+      "cwe_id": [
+        601
+      ],
+      "note": "Doel is een vast OAuth-endpoint van Microsoft of Atlassian; provider is beperkt door de route-constraint en Source::PROVIDERS."
+    },
+    {
+      "warning_type": "Cross-Site Scripting",
+      "warning_code": 4,
+      "fingerprint": "f57b214f08e7a3c24617392f7dc6ccf743195d437d4627f790ab2365a11807a3",
+      "check_name": "LinkToHref",
+      "message": "Potentially unsafe model attribute in `link_to` href",
+      "file": "app/views/programs/show.html.erb",
+      "line": 15,
+      "link": "https://brakemanscanner.org/docs/warning_types/link_to_href",
+      "code": "link_to(\"Open Claude-project\", Program.find(params[:id]).claude_url, :class => \"btn btn--primary\", :target => \"_blank\", :rel => \"noopener\")",
+      "render_path": [
+        {
+          "type": "controller",
+          "class": "ProgramsController",
+          "method": "show",
+          "line": 14,
+          "file": "app/controllers/programs_controller.rb",
+          "rendered": {
+            "name": "programs/show",
+            "file": "app/views/programs/show.html.erb"
+          }
+        }
+      ],
+      "location": {
+        "type": "template",
+        "template": "programs/show"
+      },
+      "user_input": "Program.find(params[:id]).claude_url",
+      "confidence": "Weak",
+      "cwe_id": [
+        79
+      ],
+      "note": "claude_url is gevalideerd op https:// in Program."
     }
   ],
   "brakeman_version": "8.0.6"

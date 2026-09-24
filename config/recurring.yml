@@ -1,4 +1,7 @@
 production:
+  sync_sources:
+    command: "Source.sync_all_later"
+    schedule: every 10 minutes
   sweep_closed_items:
     command: "Item.sweep"
     schedule: every day at 4am

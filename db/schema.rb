@@ -10,13 +10,38 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_24_083442) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_24_090420) do
   create_table "captures", force: :cascade do |t|
     t.text "body", null: false
     t.datetime "created_at", null: false
     t.datetime "processed_at"
     t.boolean "spoken", default: false, null: false
     t.datetime "updated_at", null: false
+  end
+
+  create_table "entries", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.datetime "ends_at"
+    t.string "external_id", null: false
+    t.boolean "flagged", default: false, null: false
+    t.integer "item_id"
+    t.string "kind", null: false
+    t.string "person"
+    t.integer "program_id"
+    t.datetime "seen_at", null: false
+    t.integer "source_id", null: false
+    t.datetime "starts_at"
+    t.string "status"
+    t.text "summary"
+    t.string "title", null: false
+    t.boolean "unread", default: false, null: false
+    t.datetime "updated_at", null: false
+    t.string "url"
+    t.index ["item_id"], name: "index_entries_on_item_id"
+    t.index ["kind", "starts_at"], name: "index_entries_on_kind_and_starts_at"
+    t.index ["program_id"], name: "index_entries_on_program_id"
+    t.index ["source_id", "kind", "external_id"], name: "index_entries_on_source_id_and_kind_and_external_id", unique: true
+    t.index ["source_id"], name: "index_entries_on_source_id"
   end
 
   create_table "items", force: :cascade do |t|
@@ -41,7 +66,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_24_083442) do
   end
 
   create_table "programs", force: :cascade do |t|
+    t.string "claude_url"
     t.datetime "created_at", null: false
+    t.string "keywords"
     t.string "name", null: false
     t.text "note"
     t.integer "position", default: 0, null: false
@@ -72,6 +99,21 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_24_083442) do
     t.index ["user_id"], name: "index_sessions_on_user_id"
   end
 
+  create_table "sources", force: :cascade do |t|
+    t.text "access_token"
+    t.string "account"
+    t.datetime "created_at", null: false
+    t.datetime "expires_at"
+    t.text "refresh_token"
+    t.string "site_id"
+    t.string "site_url"
+    t.string "sync_error"
+    t.datetime "synced_at"
+    t.string "type", null: false
+    t.datetime "updated_at", null: false
+    t.index ["type"], name: "index_sources_on_type", unique: true
+  end
+
   create_table "users", force: :cascade do |t|
     t.string "api_token"
     t.datetime "created_at", null: false
@@ -82,6 +124,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_24_083442) do
     t.index ["email_address"], name: "index_users_on_email_address", unique: true
   end
 
+  add_foreign_key "entries", "items", on_delete: :nullify
+  add_foreign_key "entries", "programs", on_delete: :nullify
+  add_foreign_key "entries", "sources", on_delete: :cascade
   add_foreign_key "items", "programs"
   add_foreign_key "proposals", "items", on_delete: :nullify
   add_foreign_key "sessions", "users"

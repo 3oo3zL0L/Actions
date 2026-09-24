@@ -3,11 +3,11 @@ class Proposals::AcceptancesController < ApplicationController
 
   def create
     @proposal.accept
-    redirect_to root_path
+    redirect_to items_path
   end
 
   def destroy
     @proposal.undecide
-    redirect_to root_path
+    redirect_to items_path
   end
 end

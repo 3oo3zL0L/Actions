@@ -1,0 +1,56 @@
+<% content_for :title, "Koppelingen" %>
+
+<header class="masthead"><h1>Koppelingen</h1></header>
+
+<% [ [ Source::Microsoft, "Outlook-mail en agenda, Teams-chats en PowerPoint uit OneDrive en SharePoint. Alleen lezen." ],
+     [ Source::Atlassian, "Jira-epics (geen stories of taken) en Confluence-pagina's waar je aan werkt of die je volgt. Alleen lezen." ] ].each do |source_class, description| %>
+  <% source = @sources[source_class.provider] %>
+  <section class="card source" aria-labelledby="<%= source_class.provider %>">
+    <div class="section-head">
+      <h2 id="<%= source_class.provider %>"><%= source_class.new.title %></h2>
+      <%= source_status(source) if source %>
+    </div>
+    <p class="section-note"><%= description %></p>
+    <div class="actions">
+      <% if !source_class.configured? %>
+        <p class="section-note">
+          Zet eerst <code><%= source_class.provider.upcase %>_CLIENT_ID</code> en <code><%= source_class.provider.upcase %>_CLIENT_SECRET</code>.
+          Callback: <code><%= authorization_url(provider: source_class.provider) %></code>
+        </p>
+      <% elsif source %>
+        <span class="who"><%= source.account %></span>
+        <%= button_to "Verversen", source_sync_path(source), class: "btn" %>
+        <%= link_to "Opnieuw koppelen", new_authorization_path(provider: source_class.provider), class: "btn btn--quiet", data: { turbo: false } %>
+        <%= button_to "Ontkoppelen", source, method: :delete, class: "btn btn--quiet" %>
+      <% else %>
+        <%= link_to "Koppelen", new_authorization_path(provider: source_class.provider), class: "btn btn--primary", data: { turbo: false } %>
+      <% end %>
+    </div>
+  </section>
+<% end %>
+
+<% claude = @sources["claude"] %>
+<section class="card source" aria-labelledby="claude">
+  <div class="section-head">
+    <h2 id="claude">Claude</h2>
+    <%= source_status(claude) if claude %>
+  </div>
+  <p class="section-note">
+    claude.ai heeft geen API voor je eigen projecten. Twee wegen: zet per programma de link naar het project
+    (<%= link_to "Programma's", programs_path %>), of koppel met een sleutel voor de Compliance API van Claude Enterprise,
+    dan komen je projecten vanzelf binnen.
+  </p>
+  <% if claude %>
+    <div class="actions">
+      <span class="who"><%= claude.account %></span>
+      <%= button_to "Verversen", source_sync_path(claude), class: "btn" %>
+      <%= button_to "Ontkoppelen", claude, method: :delete, class: "btn btn--quiet" %>
+    </div>
+  <% else %>
+    <%= form_with model: Source::Claude.new, url: sources_path, scope: :source, class: "fields" do |form| %>
+      <label class="field">Compliance-sleutel <%= form.password_field :access_token, required: true, autocomplete: "off" %></label>
+      <label class="field">Je e-mailadres bij Claude <%= form.email_field :account, required: true, value: Current.user.email_address %></label>
+      <div class="field"><span>&nbsp;</span><%= form.button "Koppelen", class: "btn" %></div>
+    <% end %>
+  <% end %>
+</section>
