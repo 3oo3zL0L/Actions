@@ -1,5 +1,7 @@
 # Actiepagina
 
+Live: https://claude.ai/artifact/PqANDMJuGom3jRqvm8k7zv
+
 Eén pagina om de werkdag vanuit te doen: agenda, Outlook-mail, Teams, Jira, Confluence, je acties en
 Claude als collega, samen op één scherm. Draait als claude.ai-Artifact en leest je gegevens via je eigen
 claude.ai-connectors (Microsoft 365, Atlassian Rovo). Er staan geen tokens of gegevens in de code.
