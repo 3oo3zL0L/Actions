@@ -285,8 +285,16 @@ a.stretch:focus-visible::after { outline: 2px solid var(--focus); outline-offset
 .amenu { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
 .arow .more { display: inline-flex; }
 details.klaar summary { cursor: pointer; color: var(--text-2); font-size: var(--fs-sm); font-weight: 600; padding: 8px 4px; min-height: 40px; display: flex; align-items: center; }
-.paf { display: block; margin-top: var(--sp-4); border: 1.5px solid var(--accent); border-radius: var(--r-md); padding: 10px 14px; text-decoration: none; color: var(--text); background: var(--surface); }
-.paf:hover { background: var(--accent-soft); }
+.paf { display: block; margin-top: var(--sp-4); border-top: 1px solid var(--border); padding: 10px 4px 0; text-decoration: none; color: var(--text-2); font-size: var(--fs-sm); }
+.paf:hover strong { text-decoration: underline; }
+.paf strong { font-weight: 500 !important; color: var(--text-2); }
+.vblock { background: var(--accent-soft); border-radius: var(--r-md); padding: var(--sp-3); margin-bottom: var(--sp-3); }
+.vblock h3 { font-size: var(--fs-sm); font-weight: 600; margin: 0 0 4px; color: var(--accent-text); }
+.vblock .row:hover { background: transparent; }
+.vblock .vbtns { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.vblock .undo { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: var(--fs-sm); color: var(--text-2); margin-top: 6px; }
+.arow .why { color: var(--text-3); font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.arow .extra { color: var(--text-3); font-size: var(--fs-xs); overflow-wrap: anywhere; white-space: pre-line; }
 .paf strong { font-weight: 600; display: block; }
 .paf span { font-size: var(--fs-sm); color: var(--text-2); }
 .jqlform { background: var(--surface-2); border-radius: var(--r-md); padding: var(--sp-3); margin-bottom: var(--sp-3); }
@@ -412,6 +420,7 @@ dialog td { padding: 4px 8px 4px 0; vertical-align: top; }
       <button class="icon-btn refresh" type="button" data-refresh="acties" aria-label="Ververs Acties"><span class="spin" aria-hidden="true">⟳</span></button>
     </div>
     <div class="card-body" id="body-acties">
+      <div id="voorstellen" hidden></div>
       <form class="add" id="addForm" autocomplete="off">
         <label class="sr" for="addInput">Nieuwe actie</label>
         <input id="addInput" type="text" placeholder="Nieuwe actie… (Enter)" enterkeyhint="done">
@@ -421,8 +430,8 @@ dialog td { padding: 4px 8px 4px 0; vertical-align: top; }
       <div id="acties-state"></div>
       <div id="acties-list"></div>
       <a class="paf" id="pafLink" href="https://claude.ai/artifact/Ar6sRYzLNFu5dzdLw1Y4gw" target="_blank" rel="noopener noreferrer">
-        <strong>PAF actielijst openen <span aria-hidden="true">↗</span><span class="sr"> (opent in nieuw tabblad)</span></strong>
-        <span>Hoofdlijst. Deze lijst is voor losse acties van vandaag.</span>
+        <strong>Oude PAF actielijst (archief) <span aria-hidden="true">↗</span><span class="sr"> (opent in nieuw tabblad)</span></strong>
+        <span>Alles staat nu hier. Alleen nog ter referentie.</span>
       </a>
     </div>
   </section>
@@ -1751,7 +1760,7 @@ dialog td { padding: 4px 8px 4px 0; vertical-align: top; }
   }
   function actiesCompact() {
     return actieList().filter(function (a) { return a.status === "open"; }).slice(0, 60).map(function (a) {
-      return { tekst: a.text, wie: a.who, deadline: a.due, programma: a.prog, vandaag: !!a.vandaag, bron: a.bron };
+      return { tekst: a.text, wie: a.who, deadline: a.due, programma: a.prog, vandaag: !!a.vandaag, bron: a.bron, why: trunc(a.why, 300), extra: trunc(a.extra, 300) };
     });
   }
   function buildTools(ctx) {
@@ -1792,7 +1801,9 @@ dialog td { padding: 4px 8px 4px 0; vertical-align: top; }
           if (!/^(mail|calendar|teams):\/\/\//.test(u)) throw new Error("ongeldige uri; gebruik de uri uit een zoekresultaat");
           return readFull(u, c.signal).then(function (t) { tl("Item gelezen"); return t; }, function (e) { throw new Error("lezen mislukt" + (e && e.code ? ": " + e.code : "")); });
         } },
-      { name: "acties_lijst", description: "Thomas' eigen open acties op deze pagina: tekst, wie, deadline, programma, vandaag, bron.",
+      { name: "voorstellen_lijst", description: "Nieuwe actievoorstellen uit Thomas' mail (ochtendrun) die hij nog moet beoordelen: tekst, van, onderwerp, programma, why.",
+        execute: function () { tl("Voorstellen bekeken"); if (!cap.db) return "Voorstellen zijn niet beschikbaar in deze weergave."; return voorstNieuw().slice(0, 40).map(function (v) { return { tekst: v.text, van: v.van, onderwerp: v.onderwerp, programma: v.prog, why: trunc(v.why, 300) }; }); } },
+      { name: "acties_lijst", description: "Thomas' open acties (de hoofdlijst): tekst, wie, deadline, programma, vandaag, bron, why (achtergrond), extra (notities).",
         execute: function () { tl("Acties bekeken"); if (!cap.db) return "Acties zijn niet beschikbaar in deze weergave."; return actiesCompact(); } },
       { name: "stel_actie_voor", description: "Stel een schrijfactie voor. Voert NIETS uit: de pagina toont een bevestigkaart en Thomas klikt zelf op Uitvoeren. soort: mail_concept (messageId uit mail_zoeken), teams_bericht (chatId uit teams_zoeken), jira_commentaar (issueKey), actie (nieuwe eigen actie).",
         inputSchema: { type: "object", properties: {
@@ -2065,9 +2076,109 @@ dialog td { padding: 4px 8px 4px 0; vertical-align: top; }
     if (!c.bronUrl && safeUrl(c.bron)) { c.bronUrl = c.bron; c.bron = /outlook|mail/i.test(c.bron) ? "mail" : /teams/i.test(c.bron) ? "teams" : /jira|atlassian/i.test(c.bron) ? "jira" : "klad"; }
     var st = str(c.status).toLowerCase();
     c.status = st === "done" || st === "klaar" || st === "gedaan" ? "done" : st === "dropped" || st === "vervallen" ? "dropped" : "open";
+    if (c.why == null && c.waarom != null) c.why = c.waarom;
+    c.why = c.why == null ? "" : str(c.why); c.extra = c.extra == null ? "" : str(c.extra);
     c.text = str(c.text); c.who = c.who == null ? "" : str(c.who); c.due = c.due == null ? "" : str(c.due);
     if (PROGS.indexOf(c.prog) < 0) c.prog = matchProg(c.prog) || "Overig";
     return c;
+  }
+  // ---------- Voorstellen (Cowork-ochtendrun) ----------
+  var voorst = { docs: [], unsub: null, loaded: false, error: null, last: null, busy: {} };
+  function voorstCol() { return cap.db.collection("voorstellen"); }
+  function normVoorstel(id, o) {
+    var st = str(o.status).toLowerCase();
+    return { id: id, text: str(o.text != null ? o.text : o.tekst), van: str(o.van), onderwerp: str(o.onderwerp),
+      prog: PROGS.indexOf(o.prog) >= 0 ? o.prog : (matchProg(o.prog != null ? o.prog : o.programma) || "Overig"),
+      mail: safeUrl(o.mail || o.bronUrl) || "", why: str(o.why != null ? o.why : o.waarom), createdAt: str(o.createdAt), run: str(o.run),
+      status: st === "ja" || st === "nee" ? st : "nieuw" };
+  }
+  function voorstNieuw() {
+    return voorst.docs.filter(function (v) { return v.status === "nieuw" && v.text && !voorst.busy[v.id]; })
+      .sort(function (a, b) { return a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0; });
+  }
+  function subscribeVoorstellen() {
+    if (!cap.db || voorst.unsub) return;
+    try {
+      voorst.unsub = voorstCol().onSnapshot(function (snap) {
+        voorst.docs = (snap && snap.docs ? snap.docs : []).filter(function (d) { return d.exists !== false; }).map(function (d) { return normVoorstel(d.id, d.data() || {}); });
+        voorst.loaded = true; voorst.error = null;
+        renderVoorstellen();
+      }, function (err) { voorst.unsub = null; voorst.error = err || { code: "unavailable" }; renderVoorstellen(); });
+    } catch (e) { voorst.error = { code: "unavailable" }; renderVoorstellen(); }
+  }
+  function setVoorstStatus(v, status) {
+    var local = voorst.docs.filter(function (d) { return d.id === v.id; })[0];
+    if (local) local.status = status;
+    return queueWrite("voorstel:" + v.id, function () { return voorstCol().doc(v.id).update({ status: status, updatedAt: new Date().toISOString() }); });
+  }
+  function acceptVoorstel(v) {
+    if (!cap.db || voorst.busy[v.id]) return;
+    voorst.busy[v.id] = true; renderVoorstellen();
+    var fields = { text: v.text, who: "eigen actie", prog: v.prog, bron: "mail", bronUrl: v.mail, van: v.van, onderwerp: v.onderwerp, why: v.why };
+    addActie(fields, true, "v-" + v.id).then(function () {
+      return setVoorstStatus(v, "ja");
+    }).then(function () {
+      delete voorst.busy[v.id];
+      voorst.last = { v: v, kind: "ja" };
+      announce("Op de lijst gezet: " + trunc(v.text, 60));
+      renderVoorstellen();
+    }, function (e) {
+      delete voorst.busy[v.id];
+      voorst.error = e || { code: "unavailable" };
+      renderVoorstellen();
+    });
+  }
+  function rejectVoorstel(v) {
+    if (!cap.db || voorst.busy[v.id]) return;
+    voorst.busy[v.id] = true; renderVoorstellen();
+    setVoorstStatus(v, "nee").then(function () {
+      delete voorst.busy[v.id]; voorst.last = { v: v, kind: "nee" }; announce("Voorstel weggelegd"); renderVoorstellen();
+    }, function (e) { delete voorst.busy[v.id]; setLocal(v.id, "nieuw"); voorst.error = e || { code: "unavailable" }; renderVoorstellen(); });
+  }
+  function setLocal(id, st) { voorst.docs.forEach(function (d) { if (d.id === id) d.status = st; }); }
+  function undoVoorstel() {
+    var l = voorst.last; if (!l || !cap.db) return;
+    voorst.last = null;
+    var id = l.v.id;
+    var p = l.kind === "ja"
+      ? queueWrite("v-" + id, function () { return actiesCol().doc("v-" + id).delete(); }).then(function () {
+          acties.docs = acties.docs.filter(function (d) { return d.id !== "v-" + id; }); delete acties.pending["v-" + id]; renderActies(); renderNowStrip();
+        })
+      : Promise.resolve();
+    p.then(function () { return setVoorstStatus(l.v, "nieuw"); }).then(function () { announce("Ongedaan gemaakt"); renderVoorstellen(); },
+      function (e) { voorst.error = e || { code: "unavailable" }; renderVoorstellen(); });
+    renderVoorstellen();
+  }
+  function renderVoorstellen() {
+    var box = clear($("voorstellen"));
+    var list = cap.db ? voorstNieuw() : [];
+    var show = !!cap.db && (list.length || voorst.last || voorst.error && voorst.loaded);
+    box.hidden = !show;
+    if (!show) return;
+    box.className = "vblock";
+    box.append(h("h3", { id: "h-voorstellen", text: "Uit je mail (" + list.length + ")" }));
+    if (voorst.error) box.append(h("p", { class: "errmsg", role: "alert", text: "Opslaan van je besluit lukte niet. Probeer het opnieuw." }));
+    var ul = h("ul", { class: "list", "aria-labelledby": "h-voorstellen" });
+    list.forEach(function (v) {
+      var src = [v.van, v.onderwerp, v.prog].filter(Boolean).join(" · ");
+      var row = h("li", { class: "row" });
+      var main = h("div", { class: "row-main" },
+        h("div", { class: "title", style: "white-space:normal", text: v.text }),
+        v.why ? h("div", { class: "l3", text: v.why }) : null,
+        h("div", { class: "l2" }, src,
+          v.mail ? h("a", { href: v.mail, target: "_blank", rel: "noopener noreferrer", class: "btn text", style: "min-height:0;padding:0 4px", title: "Open mail" }, "✉", h("span", { class: "sr", text: " Open mail (opent in nieuw tabblad)" })) : null),
+        h("div", { class: "vbtns" },
+          h("button", { class: "btn primary", type: "button", text: "Op de lijst", onclick: function () { voorst.error = null; acceptVoorstel(v); } }),
+          h("button", { class: "btn", type: "button", text: "Weg", onclick: function () { voorst.error = null; rejectVoorstel(v); } })));
+      row.append(main);
+      ul.append(row);
+    });
+    if (list.length) box.append(ul);
+    if (voorst.last) {
+      box.append(h("div", { class: "undo" },
+        h("span", { text: (voorst.last.kind === "ja" ? "Op de lijst gezet: " : "Weggelegd: ") + trunc(voorst.last.v.text, 60) }),
+        h("button", { class: "btn", type: "button", text: "Ongedaan maken", onclick: undoVoorstel })));
+    }
   }
   function resubscribeActies() {
     if (!cap.db || acties.dead) { renderActies(); return; }
@@ -2190,7 +2301,7 @@ dialog td { padding: 4px 8px 4px 0; vertical-align: top; }
     acties.q[id] = next;
     return next;
   }
-  function addActie(fields, fromCard) {
+  function addActie(fields, fromCard, docId) {
     if (!cap.db) return Promise.reject({ code: "not_granted" });
     var now = new Date().toISOString();
     var data = {
@@ -2201,7 +2312,7 @@ dialog td { padding: 4px 8px 4px 0; vertical-align: top; }
     };
     if (fields.dueIso) data.dueIso = fields.dueIso;
     var ref;
-    try { ref = actiesCol().doc(); } catch (e) { return Promise.reject({ code: "invalid_argument" }); }
+    try { ref = docId ? actiesCol().doc(docId) : actiesCol().doc(); } catch (e) { return Promise.reject({ code: "invalid_argument" }); }
     acties.pending[ref.id] = { data: data, state: "saving", ref: ref };
     renderActies(); renderNowStrip();
     return queueWrite(ref.id, function () { return ref.set(data); }).then(function () {
@@ -2265,7 +2376,8 @@ dialog td { padding: 4px 8px 4px 0; vertical-align: top; }
       if (!p.prog && r) suggestProg(r.id, p.text);
     }, function () { announce("Actie niet opgeslagen."); });
   }
-  var BRON_ICON = { mail: "✉", teams: "💬", jira: "◆", cowork: "✦", klad: "" };
+  var BRON_ICON = { mail: "✉", teams: "💬", jira: "◆", cowork: "✦", paf: "▤", klad: "" };
+  var BRON_LABEL = { mail: "mail", teams: "Teams", jira: "Jira", cowork: "Cowork", paf: "PAF", klad: "" };
   function actieRow(a) {
     var done = a.status === "done" || a.status === "dropped";
     var row = h("li", { class: "row arow" + (done ? " done" : "") + (a._pending === "error" || (acties.rowErr && acties.rowErr[a.id]) ? " err" : "") });
@@ -2280,8 +2392,13 @@ dialog td { padding: 4px 8px 4px 0; vertical-align: top; }
     if (a.prog) meta.append(h("span", { class: "tag", text: str(a.prog) }));
     if (a.status === "dropped") meta.append(h("span", { class: "pill", text: "n.v.t." }));
     var bu = safeUrl(a.bronUrl);
-    if (bu) meta.append(h("a", { href: bu, target: "_blank", rel: "noopener noreferrer", title: "Bron: " + str(a.bron), class: "btn text", style: "min-height:0;padding:0 4px" }, (BRON_ICON[a.bron] || "↗") + " " + str(a.bron), h("span", { class: "sr", text: " (opent in nieuw tabblad)" })));
-    var main = h("div", { class: "row-main" }, h("div", { class: "title", text: str(a.text) }), meta.firstChild ? meta : null);
+    var bl = a.bron in BRON_LABEL ? BRON_LABEL[a.bron] : str(a.bron);
+    if (bu) meta.append(h("a", { href: bu, target: "_blank", rel: "noopener noreferrer", title: "Bron: " + (bl || "link"), class: "btn text", style: "min-height:0;padding:0 4px" }, (BRON_ICON[a.bron] || "↗") + (bl ? " " + bl : ""), h("span", { class: "sr", text: " (opent in nieuw tabblad)" })));
+    else if (bl) meta.append(h("span", { class: "pill", title: "Bron", text: (BRON_ICON[a.bron] ? BRON_ICON[a.bron] + " " : "") + bl }));
+    var main = h("div", { class: "row-main" }, h("div", { class: "title", text: str(a.text) }),
+      a.why ? h("div", { class: "why", text: str(a.why) }) : null,
+      a.extra ? h("div", { class: "extra", text: str(a.extra) }) : null,
+      meta.firstChild ? meta : null);
     if (a._pending === "error") main.append(h("div", { class: "errmsg" }, "Niet opgeslagen. ", h("button", { class: "btn text", type: "button", text: "Opnieuw", onclick: function () { retryAdd(a.id); } })));
     var menu = h("div", { class: "amenu", hidden: true });
     if (!a._pending) {
@@ -2512,7 +2629,7 @@ dialog td { padding: 4px 8px 4px 0; vertical-align: top; }
     });
     useCap("db").then(function (d) {
       cap.db = d;
-      if (d) subscribeActies();
+      if (d) { subscribeActies(); subscribeVoorstellen(); }
       renderActies(); renderNowStrip();
     });
   }
