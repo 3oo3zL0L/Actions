@@ -1,9 +1,7 @@
 # syntax=docker/dockerfile:1
 # check=error=true
 
-# This Dockerfile is designed for production, not development. Use with Kamal or build'n'run by hand:
-# docker build -t actielijst .
-# docker run -d -p 80:80 -e RAILS_MASTER_KEY=<value from config/master.key> --name actielijst actielijst
+# This Dockerfile is designed for production, not development. On your own computer: docker compose up -d
 
 # For a containerized dev environment, see Dev Containers: https://guides.rubyonrails.org/getting_started_with_devcontainer.html
 

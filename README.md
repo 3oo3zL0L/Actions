@@ -1,8 +1,9 @@
 # Actielijst
 
-De PAF-actielijst uit Cowork, als echte app. Gebouwd zoals DHH het zou doen: Rails 8.1 omakase,
-één SQLite-database, Hotwire in plaats van een JavaScript-framework, geen build-stap, en met Kamal
-op je eigen server. Installeer hem als app op je telefoon via "Zet op beginscherm".
+De PAF-actielijst uit Cowork, als echte app op je eigen computer, alleen voor jou. Gebouwd zoals DHH
+het zou doen: Rails 8.1 omakase, één SQLite-bestand, Hotwire in plaats van een JavaScript-framework,
+geen build-stap. Niets gaat het internet op, behalve de tekst van een actie naar Claude als je een
+API-sleutel hebt ingesteld.
 
 ## Wat hij doet
 
@@ -13,7 +14,7 @@ op je eigen server. Installeer hem als app op je telefoon via "Zet op beginscher
 - **Uit je mail**: voorstellen van de Cowork-ochtendrun. Op de lijst of weg, met ongedaan maken.
 - **Herschrijven in gewone taal**: tik op een actie en typ "deadline naar 1 okt en Santhosh erbij".
 - **Klaar is weg**: afgevinkt blijft vandaag zichtbaar, na twee weken ruimt een nachtelijke job het op.
-- **Live**: verandert er iets op je laptop, dan ververst je telefoon mee (Turbo morphing via Solid Cable).
+- **Live**: open in twee tabbladen, en een wijziging in het ene ververst het andere mee.
 
 Zonder `ANTHROPIC_API_KEY` werkt alles gewoon, alleen komt nieuw werk dan onder Overig.
 
@@ -28,18 +29,47 @@ Zonder `ANTHROPIC_API_KEY` werkt alles gewoon, alleen komt nieuw werk dan onder 
 | `Assistant` | Claude (Messages API, structured outputs) voor indelen, splitsen en herschrijven |
 
 Toestanden zijn resources, geen custom acties: `POST /items/:id/completion`, `DELETE /items/:id/priority`,
-`POST /proposals/:id/acceptance`. Achtergrondwerk loopt via Solid Queue in Puma.
+`POST /proposals/:id/acceptance`. Achtergrondwerk (indelen, splitsen, herschrijven, opruimen) loopt via Solid Queue in Puma.
 
-## Lokaal draaien
+## Installeren (eenmalig)
+
+Je hebt geen Ruby nodig, alleen een programma dat containers draait:
+
+1. Installeer [Docker Desktop](https://www.docker.com/products/docker-desktop/) en zet in de
+   instellingen "Start Docker Desktop when you sign in" aan. Is Docker Desktop niet toegestaan op je
+   werkcomputer, dan werkt [Rancher Desktop](https://rancherdesktop.io) (gratis) precies zo.
+2. Download deze repository (groene knop **Code** → **Download ZIP**) en pak hem uit.
+3. Wil je de slimme functies? Maak in die map een bestand `.env` met daarin
+   `ANTHROPIC_API_KEY=sk-ant-...`
+4. Open een terminal in die map en start hem:
 
 ```sh
-bin/setup          # gems, database, programma's
-bin/dev            # http://localhost:3000, eerste bezoek maakt je account aan
-bin/rails test     # Minitest met fixtures
+docker compose up -d
 ```
 
-Zet `ANTHROPIC_API_KEY` in je omgeving (of in `bin/rails credentials:edit` onder `anthropic.api_key`)
-voor de slimme functies. Model: `claude-opus-5`, te wijzigen met `ASSISTANT_MODEL`.
+De eerste keer duurt dat een paar minuten. Open daarna **http://localhost:3000**. Het eerste bezoek
+maakt je account aan.
+
+## Gebruiken
+
+Gewoon http://localhost:3000 in je browser. De app start vanzelf mee met Docker Desktop, dus na een
+herstart van je computer staat hij er weer. In Chrome of Edge kun je hem via het installeer-icoon in de
+adresbalk als losse app in je Dock of taakbalk zetten. Alleen jouw computer kan erbij.
+
+| Wat | Commando, in de map van de app |
+|---|---|
+| Stoppen | `docker compose stop` |
+| Weer starten | `docker compose start` |
+| Nieuwe versie | nieuwe ZIP uitpakken over de oude, dan `docker compose up -d --build` |
+| Back-up maken | `docker compose exec actielijst sqlite3 storage/production.sqlite3 ".backup storage/backup.sqlite3"` en dan `docker compose cp actielijst:/rails/storage/backup.sqlite3 ./actielijst-backup.sqlite3` |
+
+Je lijst staat in een Docker-volume, niet in de map. Een nieuwe versie of een herstart laat hem staan.
+Alleen `docker compose down -v` wist hem: gebruik die nooit.
+
+## Voor ontwikkelaars
+
+Met Ruby 3.3.6: `bin/setup` en dan `bin/dev` (http://localhost:3000, eigen database in `storage/`).
+`bin/ci` draait alles wat CI ook draait, inclusief de browsertests.
 
 ## Overzetten vanuit Cowork
 
@@ -48,29 +78,21 @@ programma's, `- [ ] actie | wie | deadline` wordt een actie.
 
 ## Koppeling met de Cowork-ochtendrun
 
-Maak een token aan in de console (`bin/rails runner 'puts User.first.api_token'`) en geef de run:
+Vraag je token op (`docker compose exec actielijst bin/rails runner 'puts User.first.api_token'`) en geef de run:
 
 ```sh
 # De lijst lezen, in hetzelfde formaat als todos.md
-curl -H "Authorization: Bearer $TOKEN" https://actielijst.example.com/items.md
+curl -H "Authorization: Bearer $TOKEN" http://localhost:3000/items.md
 
 # Een voorstel uit de mail neerzetten
 curl -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d '{"proposal":{"text":"Status teruggeven op contract","sender":"Sophie","program_name":"Contracten","mail_url":"https://outlook.office365.com/..."}}' \
-  https://actielijst.example.com/proposals.json
+  http://localhost:3000/proposals.json
 
 # Een actie toevoegen
 curl -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{"capture":{"body":"Rogier bellen"}}' https://actielijst.example.com/captures.json
+  -d '{"capture":{"body":"Rogier bellen"}}' http://localhost:3000/captures.json
 ```
 
-Het token opent alleen deze JSON- en markdown-endpoints, nooit de app zelf.
-
-## Deployen
-
-Vul in `config/deploy.yml` het IP-adres van een server en je hostnaam in, dan:
-
-```sh
-bin/kamal setup    # eerste keer
-bin/kamal deploy   # daarna
-```
+Het token opent alleen deze JSON- en markdown-endpoints, nooit de app zelf. De run moet op dezelfde
+computer draaien, terwijl de app aanstaat.

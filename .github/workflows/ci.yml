@@ -122,3 +122,20 @@ jobs:
           name: screenshots
           path: ${{ github.workspace }}/tmp/screenshots
           if-no-files-found: ignore
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Build and start the app the way Thomas does
+        run: docker compose up --detach --build --wait
+
+      - name: Check the app answers
+        run: curl --fail --silent --show-error http://localhost:3000/up
+
+      - name: Show the logs when it does not
+        if: failure()
+        run: docker compose logs
+
