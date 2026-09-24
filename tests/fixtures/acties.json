@@ -1,0 +1,6 @@
+{
+  "acties/seed-001": { "tekst": "Akkoord geven op releaseplanning 26.4", "wie": "Thomas", "deadline": "2026-09-26",
+    "programma": "Platform Core", "bron": "https://outlook.example.com/owa/?itemid=mail-001", "status": "open" },
+  "acties/seed-002": { "tekst": "Benchmark storage-backend doorlezen", "wie": "Thomas", "deadline": null,
+    "programma": "Object Store", "bron": "", "status": "klaar" }
+}
