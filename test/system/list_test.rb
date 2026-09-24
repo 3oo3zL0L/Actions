@@ -71,7 +71,7 @@ class ListTest < ApplicationSystemTestCase
     fill_in "Markdown", with: "## Contracten\n- [ ] Offerte opvragen | Kim | 1 okt"
     click_on "Zet over"
 
-    assert_text "1 acties overgezet."
+    assert_text "1 actie overgezet."
     within(section_for("Contracten")) { assert_text "Offerte opvragen" }
   end
 

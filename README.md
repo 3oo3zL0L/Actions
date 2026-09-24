@@ -1,8 +1,9 @@
 # Actielijst
 
-De PAF-actielijst uit Cowork, als echte app. Gebouwd zoals DHH het zou doen: Rails 8.1 omakase,
-één SQLite-database, Hotwire in plaats van een JavaScript-framework, geen build-stap, en met Kamal
-op je eigen server. Installeer hem als app op je telefoon via "Zet op beginscherm".
+De PAF-actielijst uit Cowork, als echte app op je eigen computer, alleen voor jou. Gebouwd zoals DHH
+het zou doen: Rails 8.1 omakase, één SQLite-bestand, Hotwire in plaats van een JavaScript-framework,
+geen build-stap. Niets gaat het internet op, behalve de tekst van een actie naar Claude als je een
+API-sleutel hebt ingesteld.
 
 ## Wat hij doet
 
@@ -12,8 +13,8 @@ op je eigen server. Installeer hem als app op je telefoon via "Zet op beginscher
 - **Vandaag**: Prioritiseer zet een actie bovenaan, met de reden erbij.
 - **Uit je mail**: voorstellen van de Cowork-ochtendrun. Op de lijst of weg, met ongedaan maken.
 - **Herschrijven in gewone taal**: tik op een actie en typ "deadline naar 1 okt en Santhosh erbij".
-- **Klaar is weg**: afgevinkt blijft vandaag zichtbaar, na twee weken ruimt een nachtelijke job het op.
-- **Live**: verandert er iets op je laptop, dan ververst je telefoon mee (Turbo morphing via Solid Cable).
+- **Klaar is weg**: afgevinkt blijft vandaag zichtbaar, daarna is hij van je lijst verdwenen.
+- **Live**: open in twee tabbladen, en een wijziging in het ene ververst het andere mee.
 
 Zonder `ANTHROPIC_API_KEY` werkt alles gewoon, alleen komt nieuw werk dan onder Overig.
 
@@ -28,18 +29,37 @@ Zonder `ANTHROPIC_API_KEY` werkt alles gewoon, alleen komt nieuw werk dan onder 
 | `Assistant` | Claude (Messages API, structured outputs) voor indelen, splitsen en herschrijven |
 
 Toestanden zijn resources, geen custom acties: `POST /items/:id/completion`, `DELETE /items/:id/priority`,
-`POST /proposals/:id/acceptance`. Achtergrondwerk loopt via Solid Queue in Puma.
+`POST /proposals/:id/acceptance`. Achtergrondwerk (indelen, splitsen, herschrijven) loopt mee in het serverproces.
 
-## Lokaal draaien
+## Opstarten
+
+Eenmalig: installeer Ruby 3.3.6 met je Ruby-installer (rbenv, mise of asdf), dan:
 
 ```sh
-bin/setup          # gems, database, programma's
-bin/dev            # http://localhost:3000, eerste bezoek maakt je account aan
-bin/rails test     # Minitest met fixtures
+bin/setup          # gems en database, start daarna meteen de app
 ```
 
-Zet `ANTHROPIC_API_KEY` in je omgeving (of in `bin/rails credentials:edit` onder `anthropic.api_key`)
-voor de slimme functies. Model: `claude-opus-5`, te wijzigen met `ASSISTANT_MODEL`.
+Daarna elke dag:
+
+```sh
+bin/dev            # open http://localhost:3000
+```
+
+Het eerste bezoek maakt je account aan. In Chrome of Edge kun je hem via het installeer-icoon in de
+adresbalk als losse app in je Dock of taakbalk zetten.
+
+**Slimme functies aan**: start met je sleutel erbij, of zet hem in je shellprofiel.
+
+```sh
+ANTHROPIC_API_KEY=sk-ant-... bin/dev
+```
+
+Model: `claude-opus-5`, te wijzigen met `ASSISTANT_MODEL`.
+
+**Je gegevens** staan in `storage/development.sqlite3`. Kopieer dat bestand als back-up. Draai nooit
+`bin/setup --reset` of `bin/rails db:reset`: dat wist je lijst.
+
+**Tests**: `bin/ci` draait alles wat het team ook draait.
 
 ## Overzetten vanuit Cowork
 
@@ -52,25 +72,17 @@ Maak een token aan in de console (`bin/rails runner 'puts User.first.api_token'`
 
 ```sh
 # De lijst lezen, in hetzelfde formaat als todos.md
-curl -H "Authorization: Bearer $TOKEN" https://actielijst.example.com/items.md
+curl -H "Authorization: Bearer $TOKEN" http://localhost:3000/items.md
 
 # Een voorstel uit de mail neerzetten
 curl -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d '{"proposal":{"text":"Status teruggeven op contract","sender":"Sophie","program_name":"Contracten","mail_url":"https://outlook.office365.com/..."}}' \
-  https://actielijst.example.com/proposals.json
+  http://localhost:3000/proposals.json
 
 # Een actie toevoegen
 curl -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{"capture":{"body":"Rogier bellen"}}' https://actielijst.example.com/captures.json
+  -d '{"capture":{"body":"Rogier bellen"}}' http://localhost:3000/captures.json
 ```
 
-Het token opent alleen deze JSON- en markdown-endpoints, nooit de app zelf.
-
-## Deployen
-
-Vul in `config/deploy.yml` het IP-adres van een server en je hostnaam in, dan:
-
-```sh
-bin/kamal setup    # eerste keer
-bin/kamal deploy   # daarna
-```
+Het token opent alleen deze JSON- en markdown-endpoints, nooit de app zelf. De run moet op dezelfde
+computer draaien, terwijl `bin/dev` aanstaat.
