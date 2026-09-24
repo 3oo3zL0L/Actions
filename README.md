@@ -9,7 +9,8 @@ op je eigen server. Installeer hem als app op je telefoon via "Zet op beginscher
 - **Klad**: typ een actie, Enter en hij staat erop. Meerdere regels worden meerdere acties.
 - **Inspreken**: de microfoonknop luistert in het Nederlands (Chrome, Safari) of wijst de dicteerknop
   van je toetsenbord aan. Claude splitst het dictaat in losse acties en deelt ze in.
-- **Vandaag**: Prioritiseer zet een actie bovenaan, met de reden erbij.
+- **Vandaag**: de ster zet een actie bovenaan, met de reden erbij.
+- **Overzicht**: deadlines relatief ("morgen", "vr", "3 dagen verlopen"), verlopen telt mee in de kop, springlinks per programma. Op de telefoon brengt de plusknop je naar het klad, op de laptop de toets `N`.
 - **Uit je mail**: voorstellen van de Cowork-ochtendrun. Op de lijst of weg, met ongedaan maken.
 - **Herschrijven in gewone taal**: tik op een actie en typ "deadline naar 1 okt en Santhosh erbij".
 - **Klaar is weg**: afgevinkt blijft vandaag zichtbaar, na twee weken ruimt een nachtelijke job het op.

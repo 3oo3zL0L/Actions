@@ -29,10 +29,20 @@
   &:hover { color: var(--on-honey); background: var(--honey-bright); border-color: var(--honey-bright); }
 }
 
+.btn--accept {
+  color: var(--honey);
+  border-color: rgb(232 163 23 / .45);
+  background: var(--honey-soft);
+
+  &:hover { color: var(--on-honey); background: var(--honey); border-color: var(--honey); }
+}
+
 .btn--quiet {
   border-color: transparent;
   color: var(--faint);
 }
+
+.btn--danger:hover { color: var(--alarm); background: var(--alarm-soft); border-color: transparent; }
 
 .link {
   font: inherit;
@@ -43,49 +53,41 @@
   cursor: pointer;
 }
 
-.pill {
-  font: inherit;
-  font-size: 12px;
-  font-weight: 600;
-  white-space: nowrap;
-  border-radius: 999px;
-  padding: 6px 12px;
-  min-height: 32px;
-  border: 1px solid;
+/* Ronde knop met alleen een icoon. Rustig tot je hem nodig hebt. */
+.icon-btn {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--faint);
+  display: grid;
+  place-items: center;
   cursor: pointer;
-  transition: background .12s ease, border-color .12s ease;
+  transition: background .12s ease, color .12s ease, border-color .12s ease, opacity .12s ease;
 
+  .icon { width: 17px; height: 17px; }
+  &:hover { color: var(--ink); background: var(--raised); }
   &:active { transform: translateY(1px); }
 }
 
-.pill--up {
-  color: var(--sage);
-  border-color: var(--sage-line);
-  background: var(--sage-soft);
-
-  &:hover { background: rgb(127 199 150 / .22); border-color: var(--sage); }
-}
-
-.pill--down {
-  color: var(--alarm);
-  border-color: var(--alarm-line);
-  background: var(--alarm-soft);
-
-  &:hover { background: rgb(226 102 74 / .24); border-color: var(--alarm); }
-}
-
-.mail {
-  flex: none;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  border: 1px solid var(--steel-line);
+.icon-btn--mail {
   color: var(--steel);
-  display: grid;
-  place-items: center;
+  border-color: var(--steel-line);
 
-  svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-  &:hover { background: rgb(138 169 201 / .14); border-color: var(--steel); }
+  &:hover { color: var(--steel); background: rgb(138 169 201 / .14); border-color: var(--steel); }
+}
+
+.icon-btn--star:hover { color: var(--honey); background: var(--honey-soft); }
+
+.icon-btn--starred {
+  color: var(--honey);
+
+  .icon { fill: currentColor; }
+  &:hover { color: var(--muted); background: var(--raised); }
+  &:hover .icon { fill: none; }
 }
 
 input[type="text"], input[type="email"], input[type="password"], input[type="url"], input[type="date"], select, textarea {

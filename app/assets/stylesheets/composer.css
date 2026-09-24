@@ -3,34 +3,53 @@
   flex-wrap: wrap;
   align-items: flex-start;
   gap: 8px;
-  margin-top: 18px;
+  margin-top: 20px;
+}
+
+/* Het veld en de microfoon zijn één ding: je typt of je praat, op dezelfde plek. */
+.composer__field {
+  position: relative;
+  flex: 1 1 260px;
+  min-width: 0;
 
   textarea {
-    flex: 1 1 260px;
-    min-width: 0;
-    height: 40px;
-    min-height: 40px;
-    padding: 9px 11px;
+    display: block;
+    height: 46px;
+    min-height: 46px;
+    padding: 12px 52px 12px 14px;
+    font-size: 15px;
     background: var(--panel);
+    border-radius: 12px;
     resize: none;
     overflow: hidden;
   }
 }
 
-.composer__actions { display: flex; align-items: center; gap: 10px; }
+.composer__submit { min-height: 46px; padding-inline: 20px; }
 
 .mic {
-  width: 40px;
-  height: 40px;
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 36px;
+  height: 36px;
   padding: 0;
-  border-radius: 50%;
+  border: none;
+  border-radius: 9px;
   color: var(--honey);
-  border-color: rgb(232 163 23 / .45);
-  background: var(--honey-soft);
+  background: transparent;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: background .12s ease, color .12s ease;
 
-  svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-  &:hover { color: var(--honey); background: rgb(232 163 23 / .22); border-color: var(--honey); }
-  &[aria-pressed="true"] { color: var(--on-honey); background: var(--honey); border-color: var(--honey); }
+  .icon { width: 18px; height: 18px; stroke-width: 2; }
+  &:hover { background: var(--honey-soft); }
+  &[aria-pressed="true"] { color: var(--on-honey); background: var(--honey); animation: listening 1.4s ease-in-out infinite; }
+}
+
+@keyframes listening {
+  50% { box-shadow: 0 0 0 6px var(--honey-soft); }
 }
 
 .tip {
@@ -44,11 +63,26 @@
   b { color: var(--honey); font-weight: 600; }
 }
 
-.hint { flex-basis: 100%; margin: 0; font-size: 12px; color: var(--faint); }
+.hint {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 16px;
+  margin: 0;
+  font-size: 12px;
+  color: var(--faint);
+}
+
+@media (hover: none), (max-width: 560px) {
+  .hint__keys { display: none; }
+}
 
 @media (max-width: 560px) {
-  .composer textarea { flex-basis: 100%; font-size: 16px; height: 44px; min-height: 44px; }
-  .composer__actions { width: 100%; }
-  .composer__actions .btn--primary { flex: 1 1 auto; min-height: 44px; }
-  .mic { width: 44px; height: 44px; }
+  .composer__field textarea { font-size: 16px; }
+  .composer__submit { flex: 1 1 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mic[aria-pressed="true"] { animation: none; }
 }

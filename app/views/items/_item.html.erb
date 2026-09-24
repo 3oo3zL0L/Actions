@@ -1,4 +1,5 @@
-<%= tag.li class: [ "item", { "item--completed": item.completed?, "item--dropped": item.dropped? } ] do %>
+<% show_program = local_assigns.fetch(:show_program, true) %>
+<%= tag.li class: [ "item", { "item--completed": item.completed?, "item--dropped": item.dropped?, "item--late": item.late? } ] do %>
   <%= turbo_frame_tag item do %>
     <div class="row">
       <%= button_to item_completion_path(item), method: item.closed? ? :delete : :post,
@@ -12,30 +13,35 @@
         <span class="text"><%= item.text %></span>
         <%= tag.span item.why, class: "why" if item.why? && item.prioritized? && item.active? %>
         <%= tag.span item.note, class: "note" if item.note? %>
-        <span class="meta">
-          <%= tag.span "indelen…", class: "chip chip--busy" unless item.classified? %>
-          <%= tag.span "herschrijven…", class: "chip chip--busy" if item.rewriting? %>
-          <%= tag.span "n.v.t.", class: "chip" if item.dropped? %>
-          <% if item.due_on %>
-            <%= tag.span class: [ "chip", { "chip--late": item.late? } ] do %>
-              <%= "verlopen " if item.late? %><%= l item.due_on, format: :short %>
-            <% end %>
-          <% end %>
-          <span class="who"><%= item.who %></span>
-          <span><%= item.program.name %></span>
-        </span>
+        <% meta = [ item.due_on, !item.own?, show_program, !item.classified?, item.rewriting?, item.dropped? ] %>
+        <% if meta.any? %>
+          <span class="meta">
+            <%= tag.span "indelen…", class: "chip chip--busy" unless item.classified? %>
+            <%= tag.span "herschrijven…", class: "chip chip--busy" if item.rewriting? %>
+            <%= tag.span "n.v.t.", class: "chip" if item.dropped? %>
+            <%= due_chip(item) if item.due_on %>
+            <%= tag.span item.who, class: "who" unless item.own? %>
+            <%= tag.span item.program.name, class: "program" if show_program %>
+          </span>
+        <% end %>
       <% end %>
 
       <% if item.active? %>
         <div class="row__actions">
-          <%= link_to item.mail_url, class: "mail", target: "_blank", rel: "noopener", title: "Open mail", aria: { label: "Open mail" } do %>
-            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
+          <%= link_to item.mail_url, class: "icon-btn icon-btn--mail", target: "_blank", rel: "noopener", title: "Open mail", aria: { label: "Open mail" } do %>
+            <%= icon :mail %>
           <% end if item.mail_url %>
 
           <% if item.prioritized? %>
-            <%= button_to "Deprioritiseer", item_priority_path(item), method: :delete, class: "pill pill--down", form: { data: { turbo_frame: "_top" } } %>
+            <%= button_to item_priority_path(item), method: :delete, class: "icon-btn icon-btn--starred",
+                  title: "Terug naar de lijst", aria: { label: "Deprioritiseer: #{item.text}" }, form: { data: { turbo_frame: "_top" } } do %>
+              <%= icon :star %>
+            <% end %>
           <% else %>
-            <%= button_to "Prioritiseer", item_priority_path(item), class: "pill pill--up", form: { data: { turbo_frame: "_top" } } %>
+            <%= button_to item_priority_path(item), class: "icon-btn icon-btn--star",
+                  title: "Naar vandaag", aria: { label: "Prioritiseer: #{item.text}" }, form: { data: { turbo_frame: "_top" } } do %>
+              <%= icon :star %>
+            <% end %>
           <% end %>
         </div>
       <% end %>

@@ -23,6 +23,8 @@
   --sage-line: rgb(127 199 150 / .35);
   --steel: #8aa9c9;
   --steel-line: rgb(138 169 201 / .5);
+  --tick: #5b626c;
+  --strike: #3a3f47;
   --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --radius: 12px;
 
@@ -78,6 +80,16 @@ h1 {
   border-bottom: 1px solid var(--line);
 }
 
+.dateline {
+  margin: 0 0 4px;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: .02em;
+  color: var(--faint);
+
+  &::first-letter { text-transform: uppercase; }
+}
+
 .tallies { display: flex; gap: 26px; }
 
 .tally {
@@ -89,6 +101,44 @@ h1 {
 }
 
 .tally--quiet b { color: var(--muted); }
+.tally--late b, .tally--late span { color: var(--alarm); }
+
+kbd {
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 5px;
+  border: 1px solid var(--line-strong);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  color: var(--muted);
+}
+
+.icon { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+/* Op de telefoon zit het klad bovenaan, ver van je duim. Deze knop brengt je er in één tik. */
+.fab {
+  display: none;
+  position: fixed;
+  right: max(16px, env(safe-area-inset-right));
+  bottom: max(20px, env(safe-area-inset-bottom));
+  z-index: 10;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  place-items: center;
+  color: var(--on-honey);
+  background: var(--honey);
+  box-shadow: 0 6px 20px rgb(0 0 0 / .45);
+
+  .icon { width: 24px; height: 24px; stroke-width: 2.4; }
+  &:active { transform: scale(.96); }
+}
+
+@media (max-width: 560px) {
+  .fab { display: grid; }
+  .wrap { padding-bottom: 110px; }
+}
 
 .flash {
   margin: 0 0 16px;

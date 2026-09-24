@@ -1,38 +1,57 @@
 <%= turbo_stream_from :items %>
+<% late = @items.count(&:late?) %>
 
 <header class="masthead">
-  <h1>To do's</h1>
+  <div>
+    <p class="dateline"><%= l Date.current, format: "%A %-d %B" %></p>
+    <h1>To do's</h1>
+  </div>
   <div class="tallies">
     <div class="tally"><b><%= @items.size %></b><span>open</span></div>
+    <%= tag.div class: "tally tally--late" do %><b><%= late %></b><span>verlopen</span><% end if late.positive? %>
     <div class="tally tally--quiet"><b><%= @closed_today.size %></b><span>vandaag weg</span></div>
   </div>
 </header>
 
 <%= render "captures/form" %>
 
+<% if @backlog.many? %>
+  <nav class="jump" aria-label="Naar programma">
+    <% @backlog.each do |program, items| %>
+      <%= link_to "##{dom_id(program)}", class: [ "jump__link", { "jump__link--late": items.any?(&:late?) } ] do %>
+        <%= program.name %> <span><%= items.size %></span>
+      <% end %>
+    <% end %>
+  </nav>
+<% end %>
+
 <section class="card card--today" aria-labelledby="today">
   <div class="section-head">
-    <h2 id="today">Vandaag</h2>
+    <h2 id="today"><%= icon :star %> Vandaag</h2>
     <span class="count"><%= @today.size %></span>
   </div>
   <% if @today.any? %>
     <ul class="items"><%= render partial: "items/item", collection: @today %></ul>
   <% else %>
-    <p class="section-note">Nog niets voor vandaag. Zet een actie hierheen met Prioritiseer.</p>
+    <p class="empty">Nog niets voor vandaag. Tik op de ster bij een actie om hem hierheen te halen.</p>
   <% end %>
 </section>
 
 <%= render "proposals/proposals", proposals: @proposals, last_decision: @last_decision %>
 
 <% @backlog.each do |program, items| %>
-  <section aria-labelledby="<%= dom_id(program) %>">
+  <section class="program" id="<%= dom_id(program) %>" aria-labelledby="<%= dom_id(program, :heading) %>">
     <div class="section-head">
-      <h2 id="<%= dom_id(program) %>"><%= program.name %></h2>
-      <span class="count"><%= items.size %> open</span>
+      <h2 id="<%= dom_id(program, :heading) %>"><%= program.name %></h2>
+      <span class="count"><%= items.size %></span>
     </div>
     <%= tag.p program.note, class: "section-note" if program.note? %>
-    <ul class="items"><%= render partial: "items/item", collection: items %></ul>
+    <ul class="items"><%= render partial: "items/item", collection: items, locals: { show_program: false } %></ul>
   </section>
+<% end %>
+
+<% if @items.none? %>
+  <p class="empty empty--all">Alles is klaar. Niets meer op de lijst.</p>
 <% end %>
 
 <% if @closed_today.any? %>
@@ -41,7 +60,7 @@
       <h2 id="closed">Vandaag afgerond</h2>
       <span class="count"><%= @closed_today.size %></span>
     </div>
-    <p class="section-note">Klaar is weg. Morgen staan ze hier niet meer, vink uit om terug te zetten.</p>
+    <p class="section-note">Morgen zijn ze weg. Vink uit om terug te zetten.</p>
     <ul class="items"><%= render partial: "items/item", collection: @closed_today %></ul>
   </section>
 <% end %>
@@ -52,3 +71,5 @@
   <%= link_to "Importeren", new_import_path %>
   <%= button_to "Uitloggen", session_path, method: :delete, class: "link" %>
 </footer>
+
+<a href="#capture_body" class="fab" aria-label="Nieuwe actie" data-controller="jump" data-action="jump#focus"><%= icon :plus %></a>

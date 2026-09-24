@@ -1,10 +1,12 @@
 <%= turbo_frame_tag @item do %>
   <div class="tweak">
+    <p class="tweak__title"><%= @item.text %></p>
+
     <% if Assistant.enabled? %>
       <%= form_with url: item_rewrite_path(@item), class: "tweak__instruction", data: { turbo_frame: "_top", controller: "composer" } do |form| %>
         <%= form.label :instruction, "Wat verandert er aan deze actie?", class: "visually-hidden" %>
         <%= form.text_area :instruction, rows: 2, required: true, autofocus: true,
-              placeholder: "Wat verandert er? Bijvoorbeeld: deadline naar 1 okt en Santhosh erbij. Enter slaat op.",
+              placeholder: "Wat verandert er? Bijvoorbeeld: deadline naar 1 okt en Santhosh erbij.",
               data: { composer_target: "input", action: "keydown->composer#submitOnEnter input->composer#grow" } %>
         <div class="actions">
           <%= form.button "Herschrijf", class: "btn btn--primary" %>
@@ -34,11 +36,11 @@
       <% end %>
     </details>
 
-    <div class="actions actions--end">
+    <div class="tweak__footer">
       <% if @item.dropped? %>
         <%= button_to "Toch relevant", item_drop_path(@item), method: :delete, class: "btn btn--quiet", form: { data: { turbo_frame: "_top" } } %>
       <% else %>
-        <%= button_to "Niet meer relevant", item_drop_path(@item), class: "btn btn--quiet", form: { data: { turbo_frame: "_top" } } %>
+        <%= button_to "Niet meer relevant", item_drop_path(@item), class: "btn btn--quiet btn--danger", form: { data: { turbo_frame: "_top" } } %>
       <% end %>
     </div>
   </div>
