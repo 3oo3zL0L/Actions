@@ -14,4 +14,11 @@ class ImportsControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to root_path
     assert Program.exists?(name: "OIDC")
   end
+
+  test "one action is singular" do
+    sign_in_as users(:thomas)
+    post import_path, params: { markdown: "## OIDC\n- [ ] Scope bepalen" }
+
+    assert_equal "1 actie overgezet.", flash[:notice]
+  end
 end

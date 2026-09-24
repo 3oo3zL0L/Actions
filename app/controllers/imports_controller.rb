@@ -9,7 +9,7 @@ class ImportsController < ApplicationController
     items = Item.import_markdown(params.expect(:markdown))
 
     respond_to do |format|
-      format.html { redirect_to root_path, notice: "#{items.size} acties overgezet." }
+      format.html { redirect_to root_path, notice: "#{helpers.pluralize(items.size, "actie", plural: "acties")} overgezet." }
       format.json { render json: { items: items.map(&:id) }, status: :created }
     end
   end

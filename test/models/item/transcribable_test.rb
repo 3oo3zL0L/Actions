@@ -31,4 +31,29 @@ class Item::TranscribableTest < ActiveSupport::TestCase
     assert_nil Item.parse_due("voor indienen Q4-plan")
     assert_nil Item.parse_due("-")
   end
+
+  test "round trip keeps the year of a deadline in another year" do
+    item = Item.create!(text: "Volgend jaar", due_on: Date.new(Date.current.year + 1, 1, 15))
+
+    assert_equal item.due_on, Item.import_markdown("## Overig\n#{item.to_markdown}").first.due_on
+  end
+
+  test "round trip survives a pipe in the text" do
+    item = Item.create!(text: "Build | deploy nalopen", who: "Kim")
+
+    assert_equal "Build / deploy nalopen", Item.import_markdown("## Overig\n#{item.to_markdown}").first.text
+  end
+
+  test "the title of the file is not a program" do
+    Item.import_markdown("# To do's\n\n## Contracten\n- [] Iets")
+
+    assert_not Program.exists?(name: "To do's")
+    assert Item.exists?(text: "Iets", program: programs(:contracten))
+  end
+
+  test "import is all or nothing" do
+    assert_no_difference -> { Item.count } do
+      assert_raises(ActiveRecord::RecordInvalid) { Item.import_markdown("## Overig\n- [ ] Goed | - | -\n- [ ] . | - | -") }
+    end
+  end
 end

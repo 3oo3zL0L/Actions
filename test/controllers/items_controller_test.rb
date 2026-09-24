@@ -63,4 +63,14 @@ class ItemsControllerWithoutSessionTest < ActionDispatch::IntegrationTest
     get root_path, headers: { "Authorization" => "Bearer token-for-the-morning-run" }
     assert_redirected_to new_session_path
   end
+
+  test "a manual edit counts as classified" do
+    sign_in_as users(:thomas)
+    item = items(:jprofiler)
+    item.update_column :classified, false
+
+    patch item_path(item), params: { item: { who: "Santhosh" } }
+
+    assert item.reload.classified?
+  end
 end

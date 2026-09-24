@@ -30,4 +30,12 @@ class ItemTest < ActiveSupport::TestCase
       items(:jprofiler).update!(who: "Reinier")
     end
   end
+
+  test "an overlong action is shortened and keeps its full text in the note" do
+    long = "Lang " * 80
+    item = Item.create!(text: long, note: "Van Sophie")
+
+    assert_operator item.text.length, :<=, Item::MAX_TEXT
+    assert_equal "#{long.squish.delete_suffix(".")}\nVan Sophie", item.note
+  end
 end

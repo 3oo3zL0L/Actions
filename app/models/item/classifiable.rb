@@ -12,6 +12,8 @@ module Item::Classifiable
   end
 
   def classify
+    return if classified?
+
     if verdict = Assistant.classify(text)
       update! program: Program.named(verdict["program"]), who: verdict["who"], due_on: verdict["due_on"] || due_on, classified: true
     else

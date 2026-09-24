@@ -20,7 +20,7 @@
           <p class="flash flash--alert"><%= @item.errors.full_messages.to_sentence %></p>
         <% end %>
         <div class="fields">
-          <label class="field field--wide">Actie <%= form.text_field :text, required: true %></label>
+          <label class="field field--wide">Actie <%= form.text_field :text, required: true, maxlength: Item::MAX_TEXT %></label>
           <label class="field">Wie <%= form.text_field :who %></label>
           <label class="field">Deadline <%= form.date_field :due_on %></label>
           <label class="field">Programma <%= form.collection_select :program_id, Program.ordered, :id, :name %></label>

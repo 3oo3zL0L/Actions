@@ -8,6 +8,7 @@ nl:
     formats:
       default: "%d-%m-%Y"
       short: "%-d %b"
+      short_with_year: "%-d %b %Y"
       long: "%-d %B %Y"
   activerecord:
     attributes:

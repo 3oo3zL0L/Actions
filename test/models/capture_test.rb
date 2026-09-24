@@ -34,4 +34,31 @@ class CaptureTest < ActiveSupport::TestCase
       perform_enqueued_jobs only: Capture::ProcessJob
     end
   end
+
+  test "a capture needs at least one action" do
+    assert_not Capture.new(body: " \n ").valid?
+    assert_not Capture.new(body: ".").valid?
+  end
+
+  test "an overlong typed line still lands on the list" do
+    items = Capture.create!(body: "Kort\n#{"lang " * 80}").process
+
+    assert_equal 2, items.size
+  end
+
+  test "spoken: overlong or empty actions from the assistant do not lose the rest" do
+    actions = [
+      { "text" => "a " * 200, "program" => "Overig", "who" => "eigen actie", "due_on" => nil },
+      { "text" => "", "program" => "Overig", "who" => "eigen actie", "due_on" => nil }
+    ]
+
+    with_assistant split: actions do
+      capture = Capture.create!(body: "een lang verhaal", spoken: true)
+
+      assert_difference -> { Item.count }, 1 do
+        perform_enqueued_jobs only: Capture::ProcessJob
+      end
+      assert capture.reload.processed_at?
+    end
+  end
 end

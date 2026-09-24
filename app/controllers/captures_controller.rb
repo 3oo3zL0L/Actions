@@ -2,12 +2,20 @@ class CapturesController < ApplicationController
   allow_token_access
 
   def create
-    capture = Capture.create!(capture_params)
-    items = capture.spoken? ? [] : capture.process
+    capture = Capture.new(capture_params)
 
-    respond_to do |format|
-      format.html { redirect_to root_path, notice: notice_for(capture, items) }
-      format.json { render json: { id: capture.id, items: items.map(&:id) }, status: :created }
+    if capture.save
+      items = capture.spoken? ? [] : capture.process
+
+      respond_to do |format|
+        format.html { redirect_to root_path, notice: notice_for(capture, items) }
+        format.json { render json: { id: capture.id, items: items.map(&:id) }, status: :created }
+      end
+    else
+      respond_to do |format|
+        format.html { redirect_to root_path, alert: "Typ eerst een actie." }
+        format.json { render json: { errors: capture.errors.full_messages }, status: :unprocessable_entity }
+      end
     end
   end
 

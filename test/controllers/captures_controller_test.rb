@@ -30,4 +30,22 @@ class CapturesControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :created
   end
+
+  test "an empty capture is refused kindly" do
+    sign_in_as users(:thomas)
+
+    assert_no_difference -> { Capture.count } do
+      post captures_path, params: { capture: { body: "  " } }
+    end
+
+    assert_redirected_to root_path
+    assert_equal "Typ eerst een actie.", flash[:alert]
+  end
+
+  test "an empty capture with a token is a 422" do
+    post captures_path(format: :json), params: { capture: { body: "" } }, as: :json,
+      headers: { "Authorization" => "Bearer token-for-the-morning-run" }
+
+    assert_response :unprocessable_entity
+  end
 end

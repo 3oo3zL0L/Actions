@@ -41,4 +41,15 @@ class Item::ClassifiableTest < ActiveSupport::TestCase
       assert item.reload.classified?
     end
   end
+
+  test "a manual edit before classification is not overwritten" do
+    with_assistant classify: { "program" => "Contracten", "who" => "eigen actie", "due_on" => nil } do
+      item = Item.create!(text: "Kim bellen")
+      item.update!(who: "Kim", classified: true)
+      perform_enqueued_jobs only: Item::ClassifyJob
+
+      assert_equal "Kim", item.reload.who
+      assert_equal programs(:overig), item.program
+    end
+  end
 end

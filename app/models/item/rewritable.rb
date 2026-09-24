@@ -12,7 +12,7 @@ module Item::Rewritable
 
     if revision = Assistant.rewrite(self, pending_instruction)
       update! text: revision["text"], who: revision["who"], due_on: revision["due_on"], note: revision["note"].presence,
-        program: Program.named(revision["program"]), pending_instruction: nil
+        program: Program.named(revision["program"]), pending_instruction: nil, classified: true
     else
       update! note: [ note, pending_instruction ].compact_blank.join("\n"), pending_instruction: nil
     end
