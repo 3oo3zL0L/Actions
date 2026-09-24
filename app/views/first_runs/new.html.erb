@@ -1,0 +1,14 @@
+<% content_for :title, "Welkom" %>
+
+<div class="gate">
+  <h1>To do's</h1>
+  <p class="section-note">Eerste keer hier. Maak het enige account op deze installatie aan.</p>
+  <%= form_with model: @user, url: first_run_path, class: "gate__form" do |form| %>
+    <% if @user.errors.any? %>
+      <p class="flash flash--alert"><%= @user.errors.full_messages.to_sentence %></p>
+    <% end %>
+    <%= form.email_field :email_address, required: true, autofocus: true, autocomplete: "username", placeholder: "E-mailadres" %>
+    <%= form.password_field :password, required: true, autocomplete: "new-password", placeholder: "Wachtwoord", maxlength: 72 %>
+    <%= form.button "Beginnen", class: "btn btn--primary" %>
+  <% end %>
+</div>

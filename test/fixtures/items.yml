@@ -1,0 +1,26 @@
+jprofiler:
+  program: contracten
+  text: JProfiler-licentie verlengen
+  who: Kim
+  due_on: <%= 1.week.from_now.to_date %>
+
+snapshot:
+  program: overig
+  text: Snapshot invullen
+  due_on: <%= 2.weeks.ago.to_date %>
+
+index_advisor:
+  program: platform_core
+  text: Twee losse afspraken maken voor Index Advisor
+  prioritized_at: <%= 1.hour.ago %>
+  why: Staat vandaag om 10:30 in de standup
+
+done:
+  program: overig
+  text: Targets doorkijken
+  completed_at: <%= 1.hour.ago %>
+
+ancient:
+  program: overig
+  text: Oude actie
+  completed_at: <%= 3.weeks.ago %>

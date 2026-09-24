@@ -1,0 +1,36 @@
+<% if proposals.any? || last_decision %>
+  <section class="card" aria-labelledby="proposals">
+    <div class="section-head">
+      <h2 id="proposals">Uit je mail</h2>
+      <span class="count"><%= pluralize proposals.size, "voorstel", plural: "voorstellen" %></span>
+    </div>
+    <p class="section-note">
+      <%= proposals.any? ? "Hier wordt iets van jou verwacht, denk ik. Op de lijst zet hem meteen bij het juiste programma." : "Alles beantwoord." %>
+    </p>
+
+    <% proposals.each do |proposal| %>
+      <div class="proposal" id="<%= dom_id(proposal) %>">
+        <div>
+          <div class="proposal__text"><%= proposal.text %></div>
+          <div class="proposal__source"><%= proposal.source_line %></div>
+        </div>
+        <div class="proposal__choice">
+          <%= link_to proposal.mail_url, class: "mail", target: "_blank", rel: "noopener", aria: { label: "Open mail" } do %>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
+          <% end if proposal.mail_url.present? %>
+          <%= button_to "Op de lijst", proposal_acceptance_path(proposal), class: "btn" %>
+          <%= button_to "Weg", proposal_dismissal_path(proposal), class: "btn btn--quiet" %>
+        </div>
+      </div>
+    <% end %>
+
+    <% if last_decision %>
+      <p class="undo">
+        <span><%= last_decision.text %> <%= last_decision.accepted? ? "staat nu op de lijst." : "is weg." %></span>
+        <%= button_to "Ongedaan maken",
+              last_decision.accepted? ? proposal_acceptance_path(last_decision) : proposal_dismissal_path(last_decision),
+              method: :delete, class: "btn btn--quiet" %>
+      </p>
+    <% end %>
+  </section>
+<% end %>

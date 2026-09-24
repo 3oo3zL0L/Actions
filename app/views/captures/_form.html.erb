@@ -1,0 +1,17 @@
+<%= form_with model: Capture.new, class: "composer", data: { controller: "composer dictation", action: "turbo:submit-end->composer#reset turbo:submit-end->dictation#reset" } do |form| %>
+  <%= form.label :body, "Nieuwe actie", class: "visually-hidden" %>
+  <%= form.text_area :body, rows: 1, required: true, placeholder: "Klad: typ een actie, één per regel",
+        data: { composer_target: "input", dictation_target: "input", action: "keydown->composer#submitOnEnter input->composer#grow" } %>
+  <%= form.hidden_field :spoken, value: false, data: { dictation_target: "spoken" } %>
+  <div class="composer__actions">
+    <button type="button" class="btn mic" aria-pressed="false" aria-label="Inspreken" title="Inspreken"
+            data-dictation-target="button" data-action="dictation#toggle">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></svg>
+    </button>
+    <%= form.button "Op de lijst", class: "btn btn--primary" %>
+  </div>
+  <p class="tip" data-dictation-target="tip" hidden></p>
+  <p class="hint">
+    <%= Assistant.enabled? ? "Programma wordt zelf bepaald. Ingesproken tekst wordt opgesplitst in losse acties." : "Nieuwe acties komen onder Overig." %>
+  </p>
+<% end %>
