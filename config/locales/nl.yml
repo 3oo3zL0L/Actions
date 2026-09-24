@@ -1,0 +1,30 @@
+nl:
+  date:
+    abbr_day_names: [zo, ma, di, wo, do, vr, za]
+    abbr_month_names: [~, jan, feb, mrt, apr, mei, jun, jul, aug, sep, okt, nov, dec]
+    day_names: [zondag, maandag, dinsdag, woensdag, donderdag, vrijdag, zaterdag]
+    month_names: [~, januari, februari, maart, april, mei, juni, juli, augustus, september, oktober, november, december]
+    order: [day, month, year]
+    formats:
+      default: "%d-%m-%Y"
+      short: "%-d %b"
+      long: "%-d %B %Y"
+  activerecord:
+    attributes:
+      item:
+        text: Actie
+        who: Wie
+        due_on: Deadline
+        mail_url: Link naar mail
+      user:
+        email_address: E-mailadres
+        password: Wachtwoord
+  errors:
+    format: "%{attribute} %{message}"
+    messages:
+      blank: moet ingevuld zijn
+      invalid: is ongeldig
+      taken: is al in gebruik
+      too_long: is te lang
+      restrict_dependent_destroy:
+        has_many: "kan niet weg zolang er nog %{record} zijn"

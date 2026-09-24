@@ -1,0 +1,45 @@
+<%= turbo_frame_tag @item do %>
+  <div class="tweak">
+    <% if Assistant.enabled? %>
+      <%= form_with url: item_rewrite_path(@item), class: "tweak__instruction", data: { turbo_frame: "_top", controller: "composer" } do |form| %>
+        <%= form.label :instruction, "Wat verandert er aan deze actie?", class: "visually-hidden" %>
+        <%= form.text_area :instruction, rows: 2, required: true, autofocus: true,
+              placeholder: "Wat verandert er? Bijvoorbeeld: deadline naar 1 okt en Santhosh erbij. Enter slaat op.",
+              data: { composer_target: "input", action: "keydown->composer#submitOnEnter input->composer#grow" } %>
+        <div class="actions">
+          <%= form.button "Herschrijf", class: "btn btn--primary" %>
+          <%= link_to "Laat maar", item_path(@item), class: "btn btn--quiet" %>
+        </div>
+      <% end %>
+    <% end %>
+
+    <details class="tweak__details" <%= "open" unless Assistant.enabled? %>>
+      <summary>Zelf aanpassen</summary>
+      <%= form_with model: @item, data: { turbo_frame: "_top" } do |form| %>
+        <% if @item.errors.any? %>
+          <p class="flash flash--alert"><%= @item.errors.full_messages.to_sentence %></p>
+        <% end %>
+        <div class="fields">
+          <label class="field field--wide">Actie <%= form.text_field :text, required: true %></label>
+          <label class="field">Wie <%= form.text_field :who %></label>
+          <label class="field">Deadline <%= form.date_field :due_on %></label>
+          <label class="field">Programma <%= form.collection_select :program_id, Program.ordered, :id, :name %></label>
+          <label class="field field--wide">Toelichting <%= form.text_area :note, rows: 2 %></label>
+          <label class="field field--wide">Link naar mail <%= form.url_field :mail_url, placeholder: "https://outlook.office365.com/..." %></label>
+        </div>
+        <div class="actions">
+          <%= form.button "Bewaar", class: "btn btn--primary" %>
+          <%= link_to "Laat maar", item_path(@item), class: "btn btn--quiet" %>
+        </div>
+      <% end %>
+    </details>
+
+    <div class="actions actions--end">
+      <% if @item.dropped? %>
+        <%= button_to "Toch relevant", item_drop_path(@item), method: :delete, class: "btn btn--quiet", form: { data: { turbo_frame: "_top" } } %>
+      <% else %>
+        <%= button_to "Niet meer relevant", item_drop_path(@item), class: "btn btn--quiet", form: { data: { turbo_frame: "_top" } } %>
+      <% end %>
+    </div>
+  </div>
+<% end %>

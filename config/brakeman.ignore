@@ -1,0 +1,49 @@
+{
+  "ignored_warnings": [
+    {
+      "warning_type": "Cross-Site Scripting",
+      "warning_code": 4,
+      "fingerprint": "500c81db88cf294dd9c5f195d80b7c3895ea1d17d33ec93a898ee474f2894446",
+      "check_name": "LinkToHref",
+      "message": "Potentially unsafe model attribute in `link_to` href",
+      "file": "app/views/items/_item.html.erb",
+      "line": 31,
+      "link": "https://brakemanscanner.org/docs/warning_types/link_to_href",
+      "code": "link_to(Item.find(params[:id]).mail_url, :class => \"mail\", :target => \"_blank\", :rel => \"noopener\", :title => \"Open mail\", :aria => ({ :label => \"Open mail\" }))",
+      "render_path": [
+        {
+          "type": "controller",
+          "class": "ItemsController",
+          "method": "show",
+          "line": 22,
+          "file": "app/controllers/items_controller.rb",
+          "rendered": {
+            "name": "items/show",
+            "file": "app/views/items/show.html.erb"
+          }
+        },
+        {
+          "type": "template",
+          "name": "items/show",
+          "line": 1,
+          "file": "app/views/items/show.html.erb",
+          "rendered": {
+            "name": "items/_item",
+            "file": "app/views/items/_item.html.erb"
+          }
+        }
+      ],
+      "location": {
+        "type": "template",
+        "template": "items/_item"
+      },
+      "user_input": "Item.find(params[:id]).mail_url",
+      "confidence": "Weak",
+      "cwe_id": [
+        79
+      ],
+      "note": "mail_url is validated to be an https:// URL in Item."
+    }
+  ],
+  "brakeman_version": "8.0.6"
+}

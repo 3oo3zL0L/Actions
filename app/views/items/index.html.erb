@@ -1,0 +1,54 @@
+<%= turbo_stream_from :items %>
+
+<header class="masthead">
+  <h1>To do's</h1>
+  <div class="tallies">
+    <div class="tally"><b><%= @items.size %></b><span>open</span></div>
+    <div class="tally tally--quiet"><b><%= @closed_today.size %></b><span>vandaag weg</span></div>
+  </div>
+</header>
+
+<%= render "captures/form" %>
+
+<section class="card card--today" aria-labelledby="today">
+  <div class="section-head">
+    <h2 id="today">Vandaag</h2>
+    <span class="count"><%= @today.size %></span>
+  </div>
+  <% if @today.any? %>
+    <ul class="items"><%= render partial: "items/item", collection: @today %></ul>
+  <% else %>
+    <p class="section-note">Nog niets voor vandaag. Zet een actie hierheen met Prioritiseer.</p>
+  <% end %>
+</section>
+
+<%= render "proposals/proposals", proposals: @proposals, last_decision: @last_decision %>
+
+<% @backlog.each do |program, items| %>
+  <section aria-labelledby="<%= dom_id(program) %>">
+    <div class="section-head">
+      <h2 id="<%= dom_id(program) %>"><%= program.name %></h2>
+      <span class="count"><%= items.size %> open</span>
+    </div>
+    <%= tag.p program.note, class: "section-note" if program.note? %>
+    <ul class="items"><%= render partial: "items/item", collection: items %></ul>
+  </section>
+<% end %>
+
+<% if @closed_today.any? %>
+  <section class="closed" aria-labelledby="closed">
+    <div class="section-head">
+      <h2 id="closed">Vandaag afgerond</h2>
+      <span class="count"><%= @closed_today.size %></span>
+    </div>
+    <p class="section-note">Klaar is weg. Morgen staan ze hier niet meer, vink uit om terug te zetten.</p>
+    <ul class="items"><%= render partial: "items/item", collection: @closed_today %></ul>
+  </section>
+<% end %>
+
+<footer class="footer">
+  <span><%= pluralize @items.size, "actie", plural: "acties" %> open</span>
+  <%= link_to "Als markdown", items_path(format: :md) %>
+  <%= link_to "Importeren", new_import_path %>
+  <%= button_to "Uitloggen", session_path, method: :delete, class: "link" %>
+</footer>

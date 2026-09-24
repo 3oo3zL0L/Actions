@@ -1,0 +1,10 @@
+<% content_for :title, "Inloggen" %>
+
+<div class="gate">
+  <h1>To do's</h1>
+  <%= form_with url: session_path, class: "gate__form" do |form| %>
+    <%= form.email_field :email_address, required: true, autofocus: true, autocomplete: "username", placeholder: "E-mailadres", value: params[:email_address] %>
+    <%= form.password_field :password, required: true, autocomplete: "current-password", placeholder: "Wachtwoord", maxlength: 72 %>
+    <%= form.button "Inloggen", class: "btn btn--primary" %>
+  <% end %>
+</div>
