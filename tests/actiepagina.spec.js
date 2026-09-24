@@ -16,6 +16,8 @@ const H = {
 };
 const CLAUDE_INPUT = /claude|vraag/i;
 const ACTIE_INPUT = /actie/i;
+const PROGRAMMAS = ["UI/UX", "Platform Core", "CI Acceleration", "OIDC", "Object Store", "Jakarta migratie",
+  "Platform Stability", "Contracten", "Overig"];
 const PAF_URL = "https://claude.ai/artifact/Ar6sRYzLNFu5dzdLw1Y4gw";
 const CONFIRM_BTN = /^uitvoeren$/i;
 const DRAFT_CONFIRM_BTN = /uitvoeren|maak concept|concept (maken|aanmaken|opslaan)|opslaan als concept/i;
@@ -358,16 +360,22 @@ test.describe("Acties", () => {
       .toBe(1);
     const docs = Object.values(await dbDump(page, "acties/"));
     const doc = docs.find((d) => JSON.stringify(d).includes("Offerte runners opvragen"));
+    // PAF-compatibel model (BRIEF.md, Besluit klant 24 sep).
+    expect(doc.text).toBe("Offerte runners opvragen bij leverancier");
     expect(doc.status).toBe("open");
+    expect(typeof doc.createdAt === "string" || typeof doc.createdAt === "number", "createdAt ontbreekt").toBe(true);
+    if ("prog" in doc && doc.prog) expect(PROGRAMMAS).toContain(doc.prog);
     await expect(page.getByText("Offerte runners opvragen bij leverancier").first()).toBeVisible();
     await expect(input).toHaveValue("");
   });
 
-  test("actie afvinken zet status op klaar", async ({ page, open }) => {
+  test("actie afvinken zet status op done", async ({ page, open }) => {
     await open(buildMock());
     const item = itemWith(page, "Akkoord geven op releaseplanning 26.4");
     await item.getByRole("checkbox").first().click();
-    await expect.poll(async () => (await dbDump(page, "acties/seed-001"))["acties/seed-001"]?.status).toBe("klaar");
+    await expect.poll(async () => (await dbDump(page, "acties/seed-001"))["acties/seed-001"]?.status).toBe("done");
+    const doc = (await dbDump(page, "acties/seed-001"))["acties/seed-001"];
+    expect(doc.text, "bestaande velden gewist bij afvinken").toBe("Akkoord geven op releaseplanning 26.4");
   });
 });
 

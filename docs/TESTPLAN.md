@@ -44,7 +44,7 @@ npx playwright show-report                  # HTML-rapport
 | Inbox | alle mailblokken (niet alleen `payload`), ongelezen eerst, meldingen ingeklapt en uit te klappen, Teams van vandaag en gisteren, Antwoord-concept pas na bevestiging via `outlook_create_reply_draft` met de aangepaste tekst |
 | Werk | Jira- en Confluence-links met `target=_blank` (+ `rel=noopener`), JQL met `currentUser()`, cloudId gezet, lege Jira-fallback |
 | Fouten | `needs_reauth` op Jira: herstelactie, rest werkt, geen automatische retry; retryable fout max 1x herhaald; `tool_error` agenda; M365 niet gekoppeld |
-| Acties | PAF-link exact, db-acties zichtbaar, Enter voegt toe (`acties/*`, `status: "open"`, veld leeg), afvinken wordt `status: "klaar"` |
+| Acties | PAF-link exact, db-acties zichtbaar, Enter voegt toe (`acties/*`, PAF-model: `text`, `status: "open"`, `createdAt`; veld leeg), afvinken wordt `status: "done"` |
 | Claude | streaming zichtbaar vóór het einde, page-tools meegegeven, snelknoppen, schrijfvoorstel: bevestigkaart, pas na `Uitvoeren` de schrijftool, `Annuleren` roept niets aan |
 | Layout/a11y | geen horizontale scroll op 375px, donker thema via `prefers-color-scheme` en `data-theme`, `/` en Ctrl+K focussen Claude, `/` niet in een invoerveld, zichtbare focus, "bijgewerkt hh:mm" + ververs, geen console-errors |
 
@@ -57,7 +57,7 @@ npx playwright show-report                  # HTML-rapport
 | `teams_send_chat_message` en `addCommentToJiraIssue` versturen direct | onomkeerbaar | alleen na Uitvoeren, waarschuwingstekst (UX 3.3), handmatig controleren |
 | De mock wijkt af van de echte runtime (timing, consent, cache-replay met `cache.storedAt`) | groene tests, rood in productie | handmatige ronde in claude.ai vóór publicatie |
 | Microcopy verandert | tests falen zonder dat het gedrag kapot is | regexen centraal bovenin de spec |
-| db-veldnamen (`tekst`, `status: open/klaar`) | bestaande data onleesbaar na wijziging | vastgelegd in de test, DEV en PO stemmen af |
+| db-model PAF-compatibel (`text`, `status: open/done/dropped`, BRIEF.md besluit klant) | bestaande data onleesbaar na wijziging | vastgelegd in de test, DEV en PO stemmen af |
 | Parallelle testruns op dezelfde poort | `ERR_CONNECTION_REFUSED` | `ACTIEPAGINA_PORT` per run |
 
 ## Handmatige checks in de echte claude.ai-viewer (niet gedekt door de mock)

@@ -52,7 +52,7 @@ Atlassian cloudId: `f5ee9bed-0e04-48ea-aa28-5c3ecd088de8` (site planon.atlassian
    read-tools aanroepen (agenda, mail, teams, jira, confluence zoeken) zodat Claude zelf context ophaalt.
    Schrijfacties (concept maken, Teams-bericht, Jira-commentaar) stelt Claude alleen **voor**; de pagina toont
    een bevestigkaart, Thomas klikt "Uitvoeren". Snelknoppen: "Wat moet ik vandaag?", "Vat mijn inbox samen",
-   "Wat is er gebeurd in Teams?".
+   "Wat speelt er in Teams?".
 
 ## Niet-functioneel
 - Eerste render < 1s zonder data; secties laden onafhankelijk, elk met skeleton, fout en lege staat.
