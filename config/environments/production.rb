@@ -1,6 +1,13 @@
 require "active_support/core_ext/integer/time"
 
 Rails.application.configure do
+  # Op je eigen computer, zonder master key: een eigen geheim naast de database, in het volume.
+  unless ENV["SECRET_KEY_BASE"] || ENV["SECRET_KEY_BASE_DUMMY"] || ENV["RAILS_MASTER_KEY"]
+    config.secret_key_base = Rails.root.join("storage/secret_key_base").then do |file|
+      file.exist? ? file.read.strip : SecureRandom.hex(64).tap { |secret| file.write(secret, perm: 0o600) }
+    end
+  end
+
   # Settings specified here will take precedence over those in config/application.rb.
 
   # Code is not reloaded between requests.

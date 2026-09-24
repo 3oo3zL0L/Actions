@@ -1,0 +1,21 @@
+# De Actielijst op je eigen computer, zonder Ruby: docker compose up -d en open http://localhost:3000
+services:
+  actielijst:
+    build: .
+    image: actielijst
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:80"
+    environment:
+      SOLID_QUEUE_IN_PUMA: "true"
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ASSISTANT_MODEL: ${ASSISTANT_MODEL:-claude-opus-5}
+    volumes:
+      - actielijst:/rails/storage
+    healthcheck:
+      test: [ "CMD", "curl", "--fail", "--silent", "http://localhost/up" ]
+      interval: 30s
+      start_period: 20s
+
+volumes:
+  actielijst:
