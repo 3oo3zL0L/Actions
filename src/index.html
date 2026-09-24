@@ -759,7 +759,7 @@ dialog td { padding: 4px 8px 4px 0; vertical-align: top; }
     if (d.btn === "consent" && onRetry) btns.append(h("button", { class: "btn", type: "button", onclick: onRetry, text: "Toestemming vragen" }));
     if (d.link && DIRECT[key]) add(btns, extLink(DIRECT[key], DIRECT_LABEL[key], "btn"));
     if (btns.firstChild) box.append(btns);
-    if (e && e.code) box.append(h("details", null, h("summary", { text: "Details" }), h("span", { class: "mono", text: str(e.code) })));
+    if (e && e.code) box.append(h("details", null, h("summary", { text: "Details" }), h("span", { class: "mono", text: str(e.code) + (e.message ? ": " + trunc(e.message, 300) : "") })));
     return box;
   }
   function naBlock(text) { return h("div", { class: "alert na" }, h("p", { text: text || NA_TEXT })); }
@@ -785,10 +785,10 @@ dialog td { padding: 4px 8px 4px 0; vertical-align: top; }
   // ---------- Bronnen (mcp) ----------
   function getJql() { return lsGet(LS.jql) || DEFAULT_JQL; }
   var SOURCES = {
-    cal: { server: M365, tool: "outlook_calendar_search", input: function () { return { query: "*", afterDateTime: "today", beforeDateTime: "tomorrow", limit: 50 }; }, every: 300000 },
-    mail: { server: M365, tool: "outlook_email_search", input: function () { return { order: "newest", limit: 30 }; }, every: 180000 },
-    teams: { server: M365, tool: "chat_message_search", input: function () { return { query: "*", afterDateTime: "yesterday", limit: 30 }; }, every: 180000 },
-    chats: { server: M365, tool: "teams_list_chats", input: function () { return { limit: 50 }; }, every: 600000, silent: true },
+    cal: { server: M365, tool: "outlook_calendar_search", input: function () { return { query: "*", afterDateTime: "today", beforeDateTime: "tomorrow", limit: 25 }; }, every: 300000 },
+    mail: { server: M365, tool: "outlook_email_search", input: function () { return { order: "newest", limit: 25 }; }, every: 180000 },
+    teams: { server: M365, tool: "chat_message_search", input: function () { return { query: "*", afterDateTime: "yesterday", limit: 25 }; }, every: 180000 },
+    chats: { server: M365, tool: "teams_list_chats", input: function () { return { limit: 25 }; }, every: 600000, silent: true },
     jira: { server: ATL, tool: "searchJiraIssuesUsingJql", input: function () { return { cloudId: CLOUD_ID, jql: getJql(), maxResults: 30, fields: JIRA_FIELDS }; }, every: 600000, first: true },
     conf: { server: ATL, tool: "searchConfluenceUsingCql", input: function () { return { cloudId: CLOUD_ID, cql: DEFAULT_CQL, limit: 15 }; }, every: 600000, first: true }
   };
@@ -1769,7 +1769,7 @@ dialog td { padding: 4px 8px 4px 0; vertical-align: top; }
       { name: "agenda", description: "Afspraken uit Thomas' Outlook-agenda. Zonder argumenten: vandaag. Geeft onderwerp, tijden, locatie, organisator, deelnemers, samenvatting.",
         inputSchema: { type: "object", properties: { vanaf: { type: "string", description: "Begin: 'today', 'tomorrow' of ISO-datum" }, tot: { type: "string", description: "Eind: 'tomorrow' of ISO-datum" }, zoek: { type: "string", description: "Zoekterm, standaard *" } } },
         execute: function (inp, c) {
-          return mcpRead(M365, "outlook_calendar_search", { query: str(inp && inp.zoek) || "*", afterDateTime: str(inp && inp.vanaf) || "today", beforeDateTime: str(inp && inp.tot) || "tomorrow", limit: 50 }, c.signal).then(function (l) { tl("Agenda bekeken (" + l.length + ")"); return calCompact(l); });
+          return mcpRead(M365, "outlook_calendar_search", { query: str(inp && inp.zoek) || "*", afterDateTime: str(inp && inp.vanaf) || "today", beforeDateTime: str(inp && inp.tot) || "tomorrow", limit: 25 }, c.signal).then(function (l) { tl("Agenda bekeken (" + l.length + ")"); return calCompact(l); });
         } },
       { name: "mail_zoeken", description: "Zoek in Thomas' Outlook-mail, nieuwste eerst. Geeft id (nodig voor stel_actie_voor), afzender, onderwerp, tijd, gelezen, samenvatting.",
         inputSchema: { type: "object", properties: { zoek: { type: "string", description: "Zoekterm; leeg = recente mail" }, aantal: { type: "number", description: "Max aantal, standaard 20" } } },
@@ -1782,7 +1782,7 @@ dialog td { padding: 4px 8px 4px 0; vertical-align: top; }
       { name: "teams_zoeken", description: "Zoek Teams-chatberichten. Geeft chatId (nodig voor stel_actie_voor), chatnaam, afzender, tijd, tekst.",
         inputSchema: { type: "object", properties: { zoek: { type: "string", description: "Zoekterm, standaard *" }, sinds: { type: "string", description: "'yesterday', 'today' of ISO-datum; standaard yesterday" } } },
         execute: function (inp, c) {
-          return mcpRead(M365, "chat_message_search", { query: str(inp && inp.zoek) || "*", afterDateTime: str(inp && inp.sinds) || "yesterday", limit: 30 }, c.signal).then(function (l) { tl("Teams doorzocht (" + l.length + ")"); return teamsCompact(l); });
+          return mcpRead(M365, "chat_message_search", { query: str(inp && inp.zoek) || "*", afterDateTime: str(inp && inp.sinds) || "yesterday", limit: 25 }, c.signal).then(function (l) { tl("Teams doorzocht (" + l.length + ")"); return teamsCompact(l); });
         } },
       { name: "jira_zoeken", description: "Zoek Jira-issues met JQL. Zonder jql: issues waar Thomas bij betrokken is. Geeft key, samenvatting, status, prioriteit, project, assignee.",
         inputSchema: { type: "object", properties: { jql: { type: "string" } } },

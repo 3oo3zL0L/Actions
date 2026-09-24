@@ -133,6 +133,14 @@
       }
       if (!connected.includes(server))
         throw mcpErr("server_not_connected", `No connector named ${server}`, { server });
+      // Schema-grenzen van de echte connectors (M365 max 25, Jira max 100, Confluence max 250).
+      const MAX = { outlook_calendar_search: 25, outlook_email_search: 25, chat_message_search: 25, teams_list_chats: 25 };
+      const lim = input && (input.limit != null ? input.limit : input.maxResults);
+      const max = MAX[tool] || (tool === "searchJiraIssuesUsingJql" ? 100 : tool === "searchConfluenceUsingCql" ? 250 : null);
+      if (max && lim != null && lim > max) {
+        violation(`${tool}: limit ${lim} > max ${max}`);
+        throw mcpErr("tool_error", `Input validation error: limit must be <= ${max}`, { server });
+      }
       let fx = c.tools && c.tools[server] && c.tools[server][tool];
       if (fx && Array.isArray(fx.sequence)) {
         const n = countPrior(server, tool);
