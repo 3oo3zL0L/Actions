@@ -3,19 +3,19 @@
     {
       "warning_type": "Cross-Site Scripting",
       "warning_code": 4,
-      "fingerprint": "500c81db88cf294dd9c5f195d80b7c3895ea1d17d33ec93a898ee474f2894446",
+      "fingerprint": "16b6070b1a547305df7ecc36ba66265dedeb7263aea45c817b5dcafc832b01a0",
       "check_name": "LinkToHref",
       "message": "Potentially unsafe model attribute in `link_to` href",
       "file": "app/views/items/_item.html.erb",
-      "line": 31,
+      "line": 44,
       "link": "https://brakemanscanner.org/docs/warning_types/link_to_href",
-      "code": "link_to(Item.find(params[:id]).mail_url, :class => \"mail\", :target => \"_blank\", :rel => \"noopener\", :title => \"Open mail\", :aria => ({ :label => \"Open mail\" }))",
+      "code": "link_to(Item.find(params[:id]).mail_url, :class => \"act act--icon\", :target => \"_blank\", :rel => \"noopener\", :title => \"Open mail\", :aria => ({ :label => \"Open mail\" }))",
       "render_path": [
         {
           "type": "controller",
           "class": "ItemsController",
           "method": "show",
-          "line": 22,
+          "line": 23,
           "file": "app/controllers/items_controller.rb",
           "rendered": {
             "name": "items/show",

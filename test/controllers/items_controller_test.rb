@@ -14,6 +14,17 @@ class ItemsControllerTest < ActionDispatch::IntegrationTest
     assert_select ".proposal", text: /Bitbucket/
   end
 
+  test "every open action and proposal can be handed to Claude" do
+    get root_path
+
+    assert_select "dialog#ask_claude[data-turbo-permanent]"
+    assert_select ".item .act--claude[data-ask-claude-kind-param=item]", count: Item.active.count
+    assert_select ".item--completed .act--claude", count: 0
+    assert_select ".proposal .act--claude[data-ask-claude-kind-param=proposal]" do |buttons|
+      assert_includes buttons.first["data-ask-claude-brief-param"], "Van: Sander"
+    end
+  end
+
   test "index as markdown for the morning run" do
     get items_path(format: :md), headers: { "Authorization" => "Bearer token-for-the-morning-run" }
 

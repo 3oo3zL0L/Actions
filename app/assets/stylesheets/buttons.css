@@ -1,23 +1,25 @@
 .btn {
   font: inherit;
-  font-size: 13px;
+  font-size: 13.5px;
   font-weight: 600;
   letter-spacing: -.01em;
   color: var(--muted);
   background: transparent;
   border: 1px solid var(--line);
   border-radius: 999px;
-  padding: 9px 16px;
+  padding: 8px 16px;
   min-height: 38px;
   cursor: pointer;
   text-decoration: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: background .12s ease, color .12s ease, border-color .12s ease;
+  gap: 7px;
+  white-space: nowrap;
+  transition: background .12s ease, color .12s ease, border-color .12s ease, transform .08s ease;
 
   &:hover { color: var(--ink); background: var(--raised); border-color: var(--line-strong); }
-  &:active { transform: translateY(1px); }
+  &:active { transform: scale(.97); }
   &:disabled { opacity: .45; cursor: not-allowed; }
 }
 
@@ -29,9 +31,33 @@
   &:hover { color: var(--on-honey); background: var(--honey-bright); border-color: var(--honey-bright); }
 }
 
+.btn--claude {
+  color: var(--on-clay);
+  background: var(--clay-strong);
+  border-color: var(--clay-strong);
+
+  &:hover { color: var(--on-clay); background: #e38866; border-color: #e38866; }
+}
+
 .btn--quiet {
   border-color: transparent;
   color: var(--faint);
+}
+
+.icon-btn {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+
+  .icon { width: 18px; height: 18px; }
+  &:hover { background: var(--raised); color: var(--ink); }
 }
 
 .link {
@@ -43,50 +69,45 @@
   cursor: pointer;
 }
 
-.pill {
+/* Kleine knoppen naast een actie. Met label waar ruimte is, alleen icoon waar dat genoeg zegt. */
+.act {
   font: inherit;
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 600;
   white-space: nowrap;
-  border-radius: 999px;
-  padding: 6px 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   min-height: 32px;
-  border: 1px solid;
+  padding: 0 11px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--muted);
+  text-decoration: none;
   cursor: pointer;
-  transition: background .12s ease, border-color .12s ease;
+  transition: background .12s ease, border-color .12s ease, color .12s ease, transform .08s ease;
 
-  &:active { transform: translateY(1px); }
+  .icon { width: 14px; height: 14px; }
+  &:hover { color: var(--ink); border-color: var(--line-strong); background: var(--raised); }
+  &:active { transform: scale(.96); }
 }
 
-.pill--up {
-  color: var(--sage);
-  border-color: var(--sage-line);
-  background: var(--sage-soft);
+.act--icon { width: 32px; padding: 0; justify-content: center; }
 
-  &:hover { background: rgb(127 199 150 / .22); border-color: var(--sage); }
+.act--claude {
+  color: var(--clay);
+  border-color: var(--clay-line);
+  background: var(--clay-soft);
+
+  .icon { stroke-width: 2.2; }
+  &:hover { color: var(--on-clay); background: var(--clay-strong); border-color: var(--clay-strong); }
 }
 
-.pill--down {
-  color: var(--alarm);
-  border-color: var(--alarm-line);
-  background: var(--alarm-soft);
+.act--compact { width: 32px; padding: 0; justify-content: center; .act__label { display: none; } }
 
-  &:hover { background: rgb(226 102 74 / .24); border-color: var(--alarm); }
-}
-
-.mail {
-  flex: none;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  border: 1px solid var(--steel-line);
-  color: var(--steel);
-  display: grid;
-  place-items: center;
-
-  svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-  &:hover { background: rgb(138 169 201 / .14); border-color: var(--steel); }
-}
+.act--today:hover { color: var(--sage); border-color: var(--sage-line); background: var(--sage-soft); }
+.act--later:hover { color: var(--alarm); border-color: var(--alarm-line); background: var(--alarm-soft); }
 
 input[type="text"], input[type="email"], input[type="password"], input[type="url"], input[type="date"], select, textarea {
   width: 100%;
@@ -95,8 +116,9 @@ input[type="text"], input[type="email"], input[type="password"], input[type="url
   color: var(--ink);
   background: var(--ground);
   border: 1px solid var(--line-strong);
-  border-radius: 9px;
+  border-radius: 10px;
   padding: 10px 12px;
+  transition: border-color .12s ease, box-shadow .12s ease;
 
   &::placeholder { color: var(--faint); }
   &:focus { border-color: var(--honey); outline: none; box-shadow: 0 0 0 3px var(--honey-soft); }

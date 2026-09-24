@@ -1,54 +1,96 @@
 <%= turbo_stream_from :items %>
 
-<header class="masthead">
-  <h1>To do's</h1>
-  <div class="tallies">
-    <div class="tally"><b><%= @items.size %></b><span>open</span></div>
-    <div class="tally tally--quiet"><b><%= @closed_today.size %></b><span>vandaag weg</span></div>
-  </div>
-</header>
+<div class="app" data-controller="ask-claude" data-ask-claude-intents-value="<%= ApplicationHelper::CLAUDE_INTENTS.to_json %>">
+  <header class="masthead">
+    <div class="masthead__top">
+      <p class="dateline"><%= l(Date.current, format: "%A %-d %B").capitalize %></p>
+      <details class="menu" data-controller="menu" data-action="click@document->menu#closeOutside keydown.esc@document->menu#close">
+        <summary class="icon-btn" aria-label="Meer"><%= icon :more %></summary>
+        <div class="menu__panel">
+          <%= link_to "Importeren", new_import_path, class: "menu__item" %>
+          <%= link_to "Als markdown", items_path(format: :md), class: "menu__item" %>
+          <%= button_to "Uitloggen", session_path, method: :delete, class: "menu__item" %>
+        </div>
+      </details>
+    </div>
 
-<%= render "captures/form" %>
+    <h1><%= greeting %>.</h1>
+    <p class="summary">
+      <% if @today.any? %>
+        <b><%= pluralize @today.size, "actie", plural: "acties" %></b> voor vandaag<%= "," if @late.any? %>
+      <% else %>
+        Nog niets gekozen voor vandaag<%= "," if @late.any? %>
+      <% end %>
+      <% if @late.any? %>
+        <%= link_to "#{@late.size} verlopen", "##{dom_id(@late.first)}", class: "summary__late" %>
+      <% end %>
+      <span class="summary__rest">· <%= @items.size %> open · <%= @closed_today.size %> weg vandaag</span>
+    </p>
 
-<section class="card card--today" aria-labelledby="today">
-  <div class="section-head">
-    <h2 id="today">Vandaag</h2>
-    <span class="count"><%= @today.size %></span>
-  </div>
-  <% if @today.any? %>
-    <ul class="items"><%= render partial: "items/item", collection: @today %></ul>
-  <% else %>
-    <p class="section-note">Nog niets voor vandaag. Zet een actie hierheen met Prioritiseer.</p>
+    <% if (total = @today.size + @closed_today.size).positive? %>
+      <div class="progress" role="progressbar" aria-label="Vandaag afgerond" aria-valuemin="0" aria-valuemax="<%= total %>" aria-valuenow="<%= @closed_today.size %>">
+        <span style="--done: <%= (@closed_today.size * 100.0 / total).round %>%"></span>
+      </div>
+    <% end %>
+  </header>
+
+  <%= render "captures/form" %>
+
+  <% if @backlog.many? %>
+    <nav class="jump" aria-label="Spring naar">
+      <%= link_to "#today", class: "jump__link jump__link--today" do %>Vandaag <b><%= @today.size %></b><% end %>
+      <%= link_to "#proposals", class: "jump__link" do %>Uit je mail <b><%= @proposals.size %></b><% end if @proposals.any? %>
+      <% @backlog.each do |program, items| %>
+        <%= link_to "##{dom_id(program)}", class: "jump__link" do %><%= program.name %> <b><%= items.size %></b><% end %>
+      <% end %>
+    </nav>
   <% end %>
-</section>
 
-<%= render "proposals/proposals", proposals: @proposals, last_decision: @last_decision %>
-
-<% @backlog.each do |program, items| %>
-  <section aria-labelledby="<%= dom_id(program) %>">
+  <section class="card card--today" aria-labelledby="today">
     <div class="section-head">
-      <h2 id="<%= dom_id(program) %>"><%= program.name %></h2>
-      <span class="count"><%= items.size %> open</span>
+      <h2 id="today">Vandaag</h2>
+      <span class="count"><%= @today.size %></span>
     </div>
-    <%= tag.p program.note, class: "section-note" if program.note? %>
-    <ul class="items"><%= render partial: "items/item", collection: items %></ul>
+    <% if @today.any? %>
+      <ul class="items"><%= render partial: "items/item", collection: @today, locals: { show_program: true } %></ul>
+    <% else %>
+      <div class="empty">
+        <p class="empty__title">Wat moet er vandaag echt gebeuren?</p>
+        <p class="empty__note">Tik bij een actie op <span class="kbd-like"><%= icon :up %> Vandaag</span> en hij komt hier bovenaan.</p>
+      </div>
+    <% end %>
   </section>
-<% end %>
 
-<% if @closed_today.any? %>
-  <section class="closed" aria-labelledby="closed">
-    <div class="section-head">
-      <h2 id="closed">Vandaag afgerond</h2>
-      <span class="count"><%= @closed_today.size %></span>
+  <%= render "proposals/proposals", proposals: @proposals, last_decision: @last_decision %>
+
+  <% @backlog.each do |program, items| %>
+    <section class="program" aria-labelledby="<%= dom_id(program) %>">
+      <div class="section-head">
+        <h2 id="<%= dom_id(program) %>"><%= program.name %></h2>
+        <span class="count"><%= items.size %> open</span>
+      </div>
+      <%= tag.p program.note, class: "section-note" if program.note? %>
+      <ul class="items"><%= render partial: "items/item", collection: items, locals: { show_program: false } %></ul>
+    </section>
+  <% end %>
+
+  <% if @items.none? %>
+    <div class="empty empty--big">
+      <p class="empty__title">Alles is weg.</p>
+      <p class="empty__note">Typ of spreek hierboven een nieuwe actie in, of <%= link_to "importeer je lijst", new_import_path %>.</p>
     </div>
-    <p class="section-note">Klaar is weg. Morgen staan ze hier niet meer, vink uit om terug te zetten.</p>
-    <ul class="items"><%= render partial: "items/item", collection: @closed_today %></ul>
-  </section>
-<% end %>
+  <% end %>
 
-<footer class="footer">
-  <span><%= pluralize @items.size, "actie", plural: "acties" %> open</span>
-  <%= link_to "Als markdown", items_path(format: :md) %>
-  <%= link_to "Importeren", new_import_path %>
-  <%= button_to "Uitloggen", session_path, method: :delete, class: "link" %>
-</footer>
+  <% if @closed_today.any? %>
+    <section class="closed" aria-labelledby="closed">
+      <div class="section-head">
+        <h2 id="closed">Vandaag afgerond</h2>
+        <span class="count"><%= @closed_today.size %></span>
+      </div>
+      <p class="section-note">Klaar is weg. Morgen staan ze hier niet meer. Vink uit om terug te zetten.</p>
+      <ul class="items"><%= render partial: "items/item", collection: @closed_today, locals: { show_program: true } %></ul>
+    </section>
+  <% end %>
+
+  <%= render "items/ask_claude" %>
+</div>

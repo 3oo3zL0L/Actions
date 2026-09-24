@@ -10,6 +10,7 @@ class ItemsController < ApplicationController
         @today = Item.active.prioritized.includes(:program)
         @backlog = @items.unprioritized.group_by(&:program).sort_by { |program, _| [ program.position, program.name ] }
         @closed_today = Item.closed_today.includes(:program).order(:updated_at)
+        @late = @items.select(&:late?)
         @proposals = Proposal.pending
         @last_decision = Proposal.last_decision
       end

@@ -1,17 +1,26 @@
-<%= form_with model: Capture.new, class: "composer", data: { controller: "composer dictation", action: "turbo:submit-end->composer#reset turbo:submit-end->dictation#reset" } do |form| %>
+<%= form_with model: Capture.new, class: "composer",
+      data: { controller: "composer dictation hotkey",
+              action: "turbo:submit-end->composer#reset turbo:submit-end->dictation#reset keydown@document->hotkey#focus" } do |form| %>
   <%= form.label :body, "Nieuwe actie", class: "visually-hidden" %>
-  <%= form.text_area :body, rows: 1, required: true, placeholder: "Klad: typ een actie, één per regel",
-        data: { composer_target: "input", dictation_target: "input", action: "keydown->composer#submitOnEnter input->composer#grow" } %>
+  <div class="composer__field">
+    <%= form.text_area :body, rows: 1, required: true, placeholder: "Nieuwe actie…",
+          data: { composer_target: "input", dictation_target: "input", hotkey_target: "input",
+                  action: "keydown->composer#submitOnEnter input->composer#grow" } %>
+    <kbd class="composer__kbd" aria-hidden="true">/</kbd>
+  </div>
   <%= form.hidden_field :spoken, value: false, data: { dictation_target: "spoken" } %>
   <div class="composer__actions">
     <button type="button" class="btn mic" aria-pressed="false" aria-label="Inspreken" title="Inspreken"
             data-dictation-target="button" data-action="dictation#toggle">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></svg>
+      <%= icon :mic %>
     </button>
-    <%= form.button "Op de lijst", class: "btn btn--primary" %>
+    <%= form.button class: "btn btn--primary composer__submit" do %>
+      <span>Op de lijst</span><%= icon :enter %>
+    <% end %>
   </div>
   <p class="tip" data-dictation-target="tip" hidden></p>
   <p class="hint">
-    <%= Assistant.enabled? ? "Programma wordt zelf bepaald. Ingesproken tekst wordt opgesplitst in losse acties." : "Nieuwe acties komen onder Overig." %>
+    Eén actie per regel, Shift+Enter voor een nieuwe regel.
+    <%= Assistant.enabled? ? "Claude kiest het programma en splitst ingesproken tekst op." : "Nieuwe acties komen onder Overig." %>
   </p>
 <% end %>

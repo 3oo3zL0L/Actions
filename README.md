@@ -13,6 +13,12 @@ op je eigen server. Installeer hem als app op je telefoon via "Zet op beginscher
 - **Uit je mail**: voorstellen van de Cowork-ochtendrun. Op de lijst of weg, met ongedaan maken.
 - **Herschrijven in gewone taal**: tik op een actie en typ "deadline naar 1 okt en Santhosh erbij".
 - **Klaar is weg**: afgevinkt blijft vandaag zichtbaar, na twee weken ruimt een nachtelijke job het op.
+- **Vraag Claude**: elke actie en elk mailvoorstel heeft een Claude-knop. Kies wat Claude moet doen
+  (volgende stap, bericht opstellen, uitzoeken, opknippen), pas de prompt aan en trap hem af in Cowork,
+  Chat of Code. De actie gaat als briefing mee. Op de laptop via `claude://`, op de telefoon via de
+  links van claude.ai; de prompt staat altijd ook op je klembord.
+- **Sneltoetsen**: `/` of `n` om een actie te typen, Cmd/Ctrl+Enter om Claude af te trappen.
+- **Licht en donker**: volgt je telefoon of laptop.
 - **Live**: verandert er iets op je laptop, dan ververst je telefoon mee (Turbo morphing via Solid Cable).
 
 Zonder `ANTHROPIC_API_KEY` werkt alles gewoon, alleen komt nieuw werk dan onder Overig.
@@ -25,6 +31,7 @@ Zonder `ANTHROPIC_API_KEY` werkt alles gewoon, alleen komt nieuw werk dan onder 
 | `Program` | de kopjes: UI/UX, Platform Core, CI Acceleration, OIDC, Object Store, Jakarta migratie, Platform Stability, Contracten, Overig |
 | `Proposal` | een voorstel uit de mail, `Decidable` |
 | `Capture` | wat je in het klad typt of inspreekt, zodat ruwe tekst nooit verloren gaat |
+| `Item::Briefable` | de briefing die met Vraag Claude meegaat |
 | `Assistant` | Claude (Messages API, structured outputs) voor indelen, splitsen en herschrijven |
 
 Toestanden zijn resources, geen custom acties: `POST /items/:id/completion`, `DELETE /items/:id/priority`,

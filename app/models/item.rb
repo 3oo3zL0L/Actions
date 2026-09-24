@@ -1,5 +1,5 @@
 class Item < ApplicationRecord
-  include Classifiable, Closeable, Prioritizable, Rewritable, Transcribable
+  include Briefable, Classifiable, Closeable, Prioritizable, Rewritable, Transcribable
 
   OWN = "eigen actie"
 

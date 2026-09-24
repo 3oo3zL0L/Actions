@@ -7,7 +7,8 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="application-name" content="Actielijst">
     <meta name="mobile-web-app-capable" content="yes">
-    <meta name="theme-color" content="#101113">
+    <meta name="theme-color" content="#0e0f11" media="(prefers-color-scheme: dark)">
+    <meta name="theme-color" content="#f6f5f2" media="(prefers-color-scheme: light)">
     <%= csrf_meta_tags %>
     <%= csp_meta_tag %>
 
@@ -25,9 +26,12 @@
 
   <body>
     <div class="wrap">
-      <%= tag.p notice, class: "flash", role: "status" if notice %>
-      <%= tag.p alert, class: "flash flash--alert", role: "alert" if alert %>
       <%= yield %>
+    </div>
+
+    <div class="toasts" aria-live="polite">
+      <%= tag.p notice, class: "toast", role: "status", data: { controller: "toast" } if notice %>
+      <%= tag.p alert, class: "toast toast--alert", role: "alert", data: { controller: "toast" } if alert %>
     </div>
   </body>
 </html>

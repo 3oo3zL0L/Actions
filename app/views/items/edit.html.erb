@@ -2,9 +2,9 @@
   <div class="tweak">
     <% if Assistant.enabled? %>
       <%= form_with url: item_rewrite_path(@item), class: "tweak__instruction", data: { turbo_frame: "_top", controller: "composer" } do |form| %>
-        <%= form.label :instruction, "Wat verandert er aan deze actie?", class: "visually-hidden" %>
+        <%= form.label :instruction, class: "tweak__label" do %><%= icon :sparkle %> Wat verandert er aan deze actie?<% end %>
         <%= form.text_area :instruction, rows: 2, required: true, autofocus: true,
-              placeholder: "Wat verandert er? Bijvoorbeeld: deadline naar 1 okt en Santhosh erbij. Enter slaat op.",
+              placeholder: "Bijvoorbeeld: deadline naar 1 okt en Santhosh erbij",
               data: { composer_target: "input", action: "keydown->composer#submitOnEnter input->composer#grow" } %>
         <div class="actions">
           <%= form.button "Herschrijf", class: "btn btn--primary" %>
@@ -35,6 +35,7 @@
     </details>
 
     <div class="actions actions--end">
+      <%= ask_claude_button @item if @item.active? %>
       <% if @item.dropped? %>
         <%= button_to "Toch relevant", item_drop_path(@item), method: :delete, class: "btn btn--quiet", form: { data: { turbo_frame: "_top" } } %>
       <% else %>

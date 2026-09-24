@@ -1,0 +1,140 @@
+/* Vraag Claude: een paneel in het midden op de laptop, een sheet van onderen op de telefoon. */
+.sheet {
+  width: min(560px, calc(100vw - 32px));
+  max-height: min(760px, calc(100dvh - 48px));
+  padding: 0;
+  border: 0;
+  border-radius: 18px;
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: var(--shadow-pop);
+  overflow: auto;
+  overscroll-behavior: contain;
+
+  &[open] { animation: sheet-in .22s var(--ease); }
+  &::backdrop { background: rgb(0 0 0 / .5); backdrop-filter: blur(3px); animation: fade .2s ease; }
+}
+
+.sheet__inner { display: grid; gap: 18px; padding: 20px; }
+
+.sheet__head { display: flex; align-items: flex-start; gap: 12px; }
+
+.sheet__badge {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  background: var(--clay-soft);
+  color: var(--clay);
+
+  .icon { width: 20px; height: 20px; stroke-width: 2.2; }
+}
+
+.sheet__heading { flex: 1; min-width: 0; }
+.sheet__eyebrow { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--clay); }
+.sheet__title { margin: 2px 0 0; font-size: 17px; font-weight: 600; line-height: 1.35; letter-spacing: -.01em; text-wrap: pretty; }
+
+.sheet__group {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+
+  legend { padding: 0; margin-bottom: 8px; }
+  textarea { font-size: 14px; line-height: 1.5; resize: vertical; min-height: 150px; }
+}
+
+.sheet__group legend, .sheet__label { font-size: 13px; font-weight: 600; color: var(--muted); }
+.sheet__aside { font-weight: 400; color: var(--faint); }
+
+.segmented { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.segment {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 7px 13px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background .12s ease, color .12s ease, border-color .12s ease;
+
+  &:hover { color: var(--ink); border-color: var(--line-strong); }
+
+  &[aria-checked="true"] { color: var(--clay); background: var(--clay-soft); border-color: var(--clay-line); font-weight: 600; }
+}
+
+.destinations { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+
+.destination {
+  position: relative;
+  display: block;
+  cursor: pointer;
+
+  input { position: absolute; opacity: 0; pointer-events: none; }
+
+  > span {
+    display: grid;
+    gap: 2px;
+    height: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    transition: border-color .12s ease, background .12s ease;
+  }
+
+  b { font-size: 14px; font-weight: 600; }
+  small { font-size: 12px; line-height: 1.35; color: var(--faint); }
+
+  &:hover > span { border-color: var(--line-strong); }
+  input:checked + span { border-color: var(--clay-strong); background: var(--clay-soft); box-shadow: 0 0 0 1px var(--clay-strong) inset; }
+  input:focus-visible + span { outline: 2px solid var(--honey); outline-offset: 2px; }
+}
+
+.sheet__fallback {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--honey-soft);
+  font-size: 13px;
+
+  a { display: inline-flex; align-items: center; gap: 4px; font-weight: 600; color: var(--honey-ink); }
+  .icon { width: 12px; height: 12px; }
+}
+
+.sheet__foot {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  padding-top: 4px;
+
+  .btn--claude { min-height: 42px; padding-inline: 18px; }
+}
+
+@media (max-width: 560px) {
+  .sheet {
+    width: 100vw;
+    max-width: none;
+    max-height: 92dvh;
+    margin: auto 0 0;
+    border-radius: 20px 20px 0 0;
+
+    &[open] { animation: sheet-up .26s var(--ease); }
+  }
+
+  .sheet__inner { padding: 18px 16px max(18px, env(safe-area-inset-bottom)); }
+  .sheet__group textarea { font-size: 16px; min-height: 120px; }
+  .sheet__inner::before { content: ""; justify-self: center; width: 36px; height: 4px; margin: -6px 0 -6px; border-radius: 99px; background: var(--line-strong); }
+  .sheet__foot { .btn { flex: 1; min-height: 48px; } }
+}
+
+@keyframes sheet-in { from { opacity: 0; transform: translateY(8px) scale(.98); } }
+@keyframes sheet-up { from { transform: translateY(100%); } }
+@keyframes fade { from { opacity: 0; } }

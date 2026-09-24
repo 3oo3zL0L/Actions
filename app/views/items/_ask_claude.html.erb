@@ -1,0 +1,57 @@
+<%# Eén dialoog voor de hele pagina. Blijft staan als de lijst live ververst. %>
+<dialog id="ask_claude" class="sheet" data-turbo-permanent aria-labelledby="ask_claude_title"
+        data-ask-claude-target="dialog"
+        data-action="click->ask-claude#closeOnBackdrop close->ask-claude#reset">
+  <form method="dialog" class="sheet__inner" data-action="submit->ask-claude#launch">
+    <header class="sheet__head">
+      <span class="sheet__badge"><%= icon :sparkle %></span>
+      <div class="sheet__heading">
+        <p class="sheet__eyebrow">Vraag Claude</p>
+        <h2 id="ask_claude_title" class="sheet__title" data-ask-claude-target="title"></h2>
+      </div>
+      <button type="button" class="icon-btn" aria-label="Sluiten" data-action="ask-claude#close"><%= icon :close %></button>
+    </header>
+
+    <fieldset class="sheet__group">
+      <legend>Wat moet Claude doen?</legend>
+      <div class="segmented" role="radiogroup" data-ask-claude-target="intents"></div>
+    </fieldset>
+
+    <label class="sheet__group">
+      <span class="sheet__label">Prompt <span class="sheet__aside">pas gerust aan</span></span>
+      <textarea rows="8" data-ask-claude-target="prompt" data-action="keydown.meta+enter->ask-claude#launch keydown.ctrl+enter->ask-claude#launch"></textarea>
+    </label>
+
+    <fieldset class="sheet__group">
+      <legend>Waar?</legend>
+      <div class="destinations">
+        <label class="destination" data-desktop-only>
+          <input type="radio" name="destination" value="cowork" data-ask-claude-target="destination" data-action="ask-claude#chooseDestination" checked>
+          <span><b>Cowork</b><small>Desktop-app, met je mail en bestanden</small></span>
+        </label>
+        <label class="destination">
+          <input type="radio" name="destination" value="chat" data-ask-claude-target="destination" data-action="ask-claude#chooseDestination">
+          <span><b>Chat</b><small data-ask-claude-target="chatNote">Nieuw gesprek in de desktop-app</small></span>
+        </label>
+        <label class="destination">
+          <input type="radio" name="destination" value="code" data-ask-claude-target="destination" data-action="ask-claude#chooseDestination">
+          <span><b>Code</b><small>Cloudsessie, ook op je telefoon</small></span>
+        </label>
+      </div>
+    </fieldset>
+
+    <p class="sheet__fallback" data-ask-claude-target="fallback" hidden>
+      Niets gebeurd? De prompt staat op je klembord.
+      <a href="https://claude.ai/new" target="_blank" rel="noopener">Open claude.ai <%= icon :external %></a> en plak hem daar.
+    </p>
+
+    <footer class="sheet__foot">
+      <button type="button" class="btn btn--quiet" data-action="ask-claude#copy" data-ask-claude-target="copyButton">
+        <%= icon :copy %><span>Kopieer</span>
+      </button>
+      <button type="submit" class="btn btn--claude" data-ask-claude-target="launchButton">
+        <%= icon :sparkle %><span data-ask-claude-target="launchLabel">Open in Cowork</span>
+      </button>
+    </footer>
+  </form>
+</dialog>

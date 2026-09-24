@@ -9,6 +9,16 @@ class Proposal < ApplicationRecord
 
   after_commit -> { broadcast_refresh_later_to :items }
 
+  def brief
+    [
+      "Verzoek: #{text}",
+      ("Van: #{sender}" if sender.present?),
+      ("Onderwerp: #{subject}" if subject.present?),
+      ("Programma: #{program_name}" if program_name.present?),
+      ("Mail: #{mail_url}" if mail_url.present?)
+    ].compact.join("\n")
+  end
+
   def source_line
     [ sender, subject, program_name ].compact_blank.join(" · ")
   end
