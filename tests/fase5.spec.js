@@ -1,7 +1,8 @@
 // Ronde 5: gedockt Claude-paneel (niets bedekt), mail "Afhandelen", "Vraag Claude" opent direct het paneel met context.
 const { test: base, expect } = require("@playwright/test");
 const { buildMock, data } = require("./fixtures");
-const { openPage, mockLog, mcpCalls, dbDump, itemWith, goTo, nav, detail, actionBar, openItem, openClaude } = require("./helpers");
+const { openPage, mockLog, mcpCalls, dbDump, itemWith, goTo, nav, detail, actionBar, openItem, openClaude, inboxFilter } = require("./helpers");
+const lijst = (page) => page.locator("#lijst");
 
 const SEND_TOOLS = /send_mail|send_draft|forward_mail|outlook_send/;
 const test = base.extend({
@@ -77,14 +78,14 @@ test.describe("Mail afhandelen", () => {
   test("verbergt direct, bewaart in inbox_verborgen, zet categorie en telt niet mee als ongelezen", async ({ page, open }) => {
     await open(buildMock());
     await goTo(page, "Inbox");
-    const mailTab = page.getByRole("tab", { name: /mail/i });
+    const mailTab = inboxFilter(page).getByRole("button", { name: /^Mail/ }); // B2: filterknop met aantal ongelezen
     await expect(mailTab).toHaveText(/Mail\s*2/);
     // B1: selecteren, dan Afhandelen in de actiebalk; de melding staat in de feedbackbalk.
     await openItem(page, "Budget CI-runners Q4");
     await actionBar(page).getByRole("button", { name: /afhandelen/i }).click();
-    await expect(page.getByText("Budget CI-runners Q4")).toHaveCount(0);
+    await expect(lijst(page).getByText("Budget CI-runners Q4")).toHaveCount(0);
     await expect(mailTab).toHaveText(/Mail\s*1/);
-    const bar = page.getByRole("status").filter({ hasText: "Mail afgehandeld" }).filter({ has: page.getByRole("button", { name: "Ongedaan maken" }) });
+    const bar = page.getByRole("status").filter({ hasText: "Budget CI-runners Q4 afgehandeld" }).filter({ has: page.getByRole("button", { name: "Ongedaan maken" }) });
     await expect(bar).toBeVisible();
     await expect(bar).not.toContainText(/gelezen/i); // er is geen tool om op gelezen te zetten
 
@@ -111,7 +112,7 @@ test.describe("Mail afhandelen", () => {
     await page.getByRole("button", { name: "Ongedaan maken" }).click();
     await expect(page.getByText("Budget CI-runners Q4").first()).toBeVisible();
     await expect.poll(async () => Object.keys(await dbDump(page, "inbox_verborgen/")).length).toBe(0);
-    await expect(page.getByRole("tab", { name: /mail/i })).toHaveText(/Mail\s*2/);
+    await expect(inboxFilter(page).getByRole("button", { name: /^Mail/ })).toHaveText(/Mail\s*2/);
   });
 
   test("categorie-fout: mail blijft verborgen met een kleine melding", async ({ page, open }) => {
@@ -120,7 +121,7 @@ test.describe("Mail afhandelen", () => {
     await openItem(page, "Budget CI-runners Q4");
     await actionBar(page).getByRole("button", { name: /afhandelen/i }).click();
     await expect(page.getByText("Verborgen, maar categorie in Outlook zetten lukte niet")).toBeVisible();
-    await expect(page.getByText("Budget CI-runners Q4")).toHaveCount(0);
+    await expect(lijst(page).getByText("Budget CI-runners Q4")).toHaveCount(0);
     expect(Object.keys(await dbDump(page, "inbox_verborgen/"))).toHaveLength(1);
   });
 
@@ -130,8 +131,8 @@ test.describe("Mail afhandelen", () => {
     await open(buildMock({ db: { docs: { ...acties, "inbox_verborgen/m-mail-003": { messageId: "mail-003", onderwerp: "Budget CI-runners Q4", van: "Ruben Smit", at: "2026-09-25T08:00:00.000Z" } } } }));
     await goTo(page, "Inbox");
     await expect(page.getByText("Planning release 26.4").first()).toBeVisible();
-    await expect(page.getByText("Budget CI-runners Q4")).toHaveCount(0);
-    await expect(page.getByRole("tab", { name: /mail/i })).toHaveText(/Mail\s*1/);
+    await expect(lijst(page).getByText("Budget CI-runners Q4")).toHaveCount(0);
+    await expect(inboxFilter(page).getByRole("button", { name: /^Mail/ })).toHaveText(/Mail\s*1/);
   });
 });
 

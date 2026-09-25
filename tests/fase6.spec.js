@@ -134,7 +134,7 @@ test.describe("Claude geeft antwoord", () => {
 
 // =========================================================================================
 test.describe("Model", () => {
-  test("chat, Bereid voor en Antwoord-concept vragen modelTier complex; kop toont het gebruikte tier", async ({ page, open }) => {
+  test("chat, Bereid voor en Laat Claude schrijven (Beantwoord) vragen modelTier complex; kop toont het gebruikte tier", async ({ page, open }) => {
     await open(buildMock({ sample: { rules: [
       { match: "runner", text: "Hi Ruben,\n\nAkkoord.\n\nKR\nThomas", tierApplied: "default" },
       { match: "Architectuuroverleg", text: "Voorbereiding klaar." },
@@ -148,7 +148,8 @@ test.describe("Model", () => {
     await page.getByRole("button", { name: "Sluit Claude-paneel" }).click();
     await goTo(page, "Inbox");
     await openItem(page, "Budget CI-runners Q4");
-    await actionBar(page).getByRole("button", { name: "Antwoord-concept" }).click();
+    await actionBar(page).getByRole("button", { name: "Beantwoord" }).click(); // B2: inline antwoordveld
+    await page.getByRole("region", { name: "Detail" }).getByRole("button", { name: "Laat Claude schrijven" }).click();
     await expect.poll(async () => page.evaluate(() => [...document.querySelectorAll("textarea")].some((t) => /KR\nThomas$/.test(t.value))), { timeout: 8000 }).toBe(true);
     await expect(page.locator("#chatTier")).toHaveText("· standaard"); // plan gaf een ander tier terug
 

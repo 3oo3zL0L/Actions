@@ -3,7 +3,7 @@
 // Test gedrag via rollen en teksten (docs/PLAN-FASE2.md, definition of done).
 const { test: base, expect } = require("@playwright/test");
 const { buildMock } = require("./fixtures");
-const { openPage, mockLog, dbDump, itemWith, ENTRY_NAMES, nav, entryButton, goTo, detail, actionBar, feedbackBar, openItem, openClaude } = require("./helpers");
+const { openPage, mockLog, dbDump, itemWith, ENTRY_NAMES, nav, entryButton, goTo, detail, actionBar, feedbackBar, openItem, openClaude, inboxFilter } = require("./helpers");
 
 const SEND_TOOLS = /send_mail|send_draft|forward_mail|outlook_send/;
 const test = base.extend({
@@ -80,22 +80,26 @@ test.describe("Selectie en detail", () => {
     await goTo(page, "Inbox");
     await expect(page.getByText("Notulen architectuurboard").first()).toBeVisible();
     const list = page.locator("#lijst");
+    // B2: mail en Teams in één lijst; de lijst is langer, dus een rij die na het scrollen in beeld staat.
     await list.evaluate((el) => { el.scrollTop = 120; });
     const before = await list.evaluate((el) => el.scrollTop);
     expect(before, "lijst scrolt niet in deze test").toBeGreaterThan(0);
-    const row = itemWith(page, "Notulen architectuurboard");
+    const row = itemWith(page, "Budget CI-runners Q4");
+    await expect(row).toBeInViewport({ ratio: 1 });
     const yBefore = (await row.boundingBox()).y;
     await row.click({ position: { x: 60, y: 14 } });
-    await expect(detail(page).getByRole("heading", { name: "Notulen architectuurboard" })).toBeVisible();
+    await expect(detail(page).getByRole("heading", { name: "Budget CI-runners Q4" })).toBeVisible();
     expect(await list.evaluate((el) => el.scrollTop), "lijst sprong").toBe(before);
     expect(Math.round((await row.boundingBox()).y)).toBe(Math.round(yBefore));
     await expect(selectedRow(page)).toHaveCount(1);
     await expect(row.locator('button[aria-current="true"]')).toBeVisible();
 
-    // Actiebalk: primaire actie · Afhandelen · Maak actie · Vraag Claude · Open in Outlook ↗, geen grijze knoppen.
+    // Actiebalk: primaire actie · Afhandelen · Maak actie · Vraag Claude · Open in Outlook ↗, plus "Meer ▾" van de schil
+    // met de acties zonder eigen knop (slot "more", met hun toets); geen grijze knoppen.
     const bar = actionBar(page);
-    const labels = await bar.locator("button, a").evaluateAll((els) => els.map((e) => e.textContent.replace(/\s*↗.*$/, "").trim()));
-    expect(labels).toEqual(["Antwoord-concept", "Afhandelen", "Maak actie", "Vraag Claude", "Open in Outlook"]);
+    const labels = await bar.locator(":scope > [data-slot]").evaluateAll((els) => els.map((e) => e.childNodes[0].textContent.trim()));
+    expect(labels).toEqual(["Beantwoord", "Afhandelen", "Maak actie", "Vraag Claude", "Open in Outlook"]);
+    await expect(bar.getByRole("button", { name: "Meer acties" })).toBeVisible();
     expect(await bar.locator("button:disabled").count(), "grijze knop in de actiebalk").toBe(0);
     await expect(bar.getByRole("button", { name: "Afhandelen" })).toHaveAttribute("title", /\(e\)$/);
     await expect(bar.getByRole("button", { name: "Vraag Claude" })).toHaveAttribute("title", /\(c\)$/);
@@ -121,18 +125,16 @@ test.describe("Selectie en detail", () => {
     await openItem(page, "Budget CI-runners Q4");
     await page.keyboard.press("j");
     await expect(detail(page).getByRole("heading", { level: 2 })).toHaveText("Vraag over OIDC-scope voor partnerportaal");
-    await page.keyboard.press("ArrowDown");
-    await expect(detail(page).getByRole("heading", { level: 2 })).toHaveText("Planning release 26.4");
+    await page.keyboard.press("ArrowDown"); // B2: één lijst, nieuwste eerst; daarna komt het Teams-bericht van Ruben
+    await expect(detail(page).getByRole("heading", { level: 2 })).toHaveText("Ruben Smit");
+    await expect(detail(page)).toContainText("Nightly build was gisteren weer groen");
     await page.keyboard.press("k");
     await expect(detail(page).getByRole("heading", { level: 2 })).toHaveText("Vraag over OIDC-scope voor partnerportaal");
     await page.keyboard.press("ArrowUp");
     await expect(detail(page).getByRole("heading", { level: 2 })).toHaveText("Budget CI-runners Q4");
     // In een invoerveld: j is gewoon een letter.
-    await actionBar(page).getByRole("button", { name: "Antwoord-concept" }).click();
+    await actionBar(page).getByRole("button", { name: "Beantwoord" }).click();
     const ta = detail(page).getByRole("textbox", { name: "Tekst" });
-    // Wacht tot Claude klaar is met het concept, anders overschrijft de laatste stap wat hier getypt wordt.
-    await expect(ta).toHaveValue(/\S/);
-    await expect(detail(page).getByText("Claude schrijft…")).toHaveCount(0);
     await ta.fill("");
     await ta.pressSequentially("jk");
     await expect(ta).toHaveValue(/jk$/);
@@ -164,16 +166,16 @@ test.describe("Selectie en detail", () => {
 
 // =========================================================================================
 test.describe("Feedbackbalk", () => {
-  test("afhandelen met toets e toont '✓ Mail afgehandeld · Ongedaan maken'; z maakt ongedaan", async ({ page, open }) => {
+  test("afhandelen met toets e toont '✓ <onderwerp> afgehandeld · Ongedaan maken'; z maakt ongedaan", async ({ page, open }) => {
     await open(buildMock());
     await goTo(page, "Inbox");
     await openItem(page, "Budget CI-runners Q4");
     await page.keyboard.press("e");
     const bar = feedbackBar(page);
     await expect(bar).toBeVisible();
-    await expect(bar).toContainText("✓ Mail afgehandeld");
+    await expect(bar).toContainText("✓ Budget CI-runners Q4 afgehandeld"); // PO: de balk noemt het item
     await expect(bar.getByRole("button", { name: "Ongedaan maken" })).toHaveAttribute("title", "Ongedaan maken (z)");
-    await expect(page.getByText("Budget CI-runners Q4")).toHaveCount(0);
+    await expect(page.locator("#lijst").getByText("Budget CI-runners Q4")).toHaveCount(0);
     // Het detail gaat door naar de volgende mail.
     await expect(detail(page).getByRole("heading", { level: 2 })).toHaveText("Vraag over OIDC-scope voor partnerportaal");
     await expect.poll(async () => Object.keys(await dbDump(page, "inbox_verborgen/")).length).toBe(1);
@@ -181,7 +183,7 @@ test.describe("Feedbackbalk", () => {
     await page.keyboard.press("z");
     await expect(itemWith(page, "Budget CI-runners Q4")).toBeVisible();
     await expect.poll(async () => Object.keys(await dbDump(page, "inbox_verborgen/")).length).toBe(0);
-    await expect(bar).toContainText("Mail terug in de lijst");
+    await expect(bar).toContainText("Budget CI-runners Q4 terug in de lijst");
     await expect(bar.getByRole("button", { name: "Ongedaan maken" })).toHaveCount(0);
   });
 
@@ -247,10 +249,10 @@ test.describe("Voorkeuren", () => {
     await expect(page.getByRole("heading", { name: /^Werk/ })).toBeVisible();
   });
 
-  test("Inbox-filter (tab) wordt als voorkeur bewaard", async ({ page, open }) => {
+  test("Inbox-filter wordt als voorkeur bewaard", async ({ page, open }) => {
     await open(buildMock());
     await goTo(page, "Inbox");
-    await page.getByRole("tab", { name: /teams/i }).click();
+    await inboxFilter(page).getByRole("button", { name: /^Teams/ }).click(); // B2: filterknop in plaats van tab
     await expect.poll(async () => ((await dbDump(page, "prefs/thomas"))["prefs/thomas"] || {}).inboxFilter).toBe("teams");
   });
 });

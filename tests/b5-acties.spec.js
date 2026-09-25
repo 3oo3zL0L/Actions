@@ -71,7 +71,8 @@ test.describe("Detail en actiebalk", () => {
     await openItem(page, SEED);
     expect(await barLabels(page)).toEqual(["Vink af", "Haal van vandaag", "Vraag Claude", "Open bron", "Laten vervallen"]);
     for (const [name, key] of [["Vink af", "e"], ["Haal van vandaag", "v"], ["Vraag Claude", "c"], ["Laten vervallen", "x"]]) {
-      await expect(actionBar(page).getByRole("button", { name })).toHaveAttribute("title", new RegExp("\\(" + key + "\\)$"));
+      // Past een extra knop niet, dan staat hij in "Meer ▾" (menuitem); de tooltip noemt de toets in beide gevallen.
+      await expect(actionBar(page).locator("[data-slot]").filter({ hasText: name })).toHaveAttribute("title", new RegExp("\\(" + key + "\\)$"));
     }
     const bron = actionBar(page).getByRole("link", { name: /Open bron/ });
     await expect(bron).toHaveAttribute("href", "https://outlook.example.com/owa/?ItemID=mail-001");
@@ -218,22 +219,34 @@ test.describe("Nieuwe actie", () => {
     expect((await mockLog(page)).db.filter((w) => w.op === "set" && w.path.startsWith("acties/")).length).toBe(before);
   });
 
-  test("Maak actie vanuit een mail: formulier met onderwerp en bron; Enter bewaart met bronlink", async ({ page, open }) => {
+  // PO-regel (B2): Maak actie vanuit de Inbox blijft in de Inbox en bewaart direct; "Bekijk" in de balk opent de actie.
+  test("Maak actie vanuit een mail: blijft in de Inbox, bewaart met bronlink; Bekijk opent de actie met Open bron", async ({ page, open }) => {
     await open(buildMock());
     await goTo(page, "Inbox");
     await openItem(page, "Budget CI-runners Q4");
     await actionBar(page).getByRole("button", { name: "Maak actie" }).click();
-    await expect(entryButton(page, "Acties")).toHaveAttribute("aria-current", "page");
-    const form = detail(page).getByRole("region", { name: "Nieuwe actie" });
-    await expect(form).toContainText("Bron: mail van Ruben Smit");
-    const text = form.getByRole("textbox", { name: "Nieuwe actie" });
-    await expect(text).toHaveValue("Budget CI-runners Q4");
-    await expect(text).toBeFocused();
-    await text.press("Enter");
+    await expect(entryButton(page, "Inbox")).toHaveAttribute("aria-current", "page");
     await expect.poll(async () => Object.values(await dbDump(page, "acties/")).some((d) => d.text === "Budget CI-runners Q4")).toBe(true);
     const saved = Object.values(await dbDump(page, "acties/")).find((d) => d.text === "Budget CI-runners Q4");
     expect(saved).toMatchObject({ bron: "mail", bronUrl: "https://outlook.example.com/owa/?ItemID=mail-003", van: "Ruben Smit", onderwerp: "Budget CI-runners Q4" });
+    await page.locator("#feedback").getByRole("button", { name: "Bekijk" }).click();
+    await expect(entryButton(page, "Acties")).toHaveAttribute("aria-current", "page");
     await expect(actionBar(page).getByRole("link", { name: /Open bron/ })).toHaveAttribute("href", "https://outlook.example.com/owa/?ItemID=mail-003");
+  });
+
+  test("Maak actie vanuit Werk: formulier met onderwerp en bron; Enter bewaart met bronlink", async ({ page, open }) => {
+    await open(buildMock());
+    await goTo(page, "Werk");
+    await openItem(page, "Pipeline faalt op integratietests na upgrade");
+    await actionBar(page).getByRole("button", { name: "Maak actie" }).click();
+    await expect(entryButton(page, "Acties")).toHaveAttribute("aria-current", "page");
+    const form = detail(page).getByRole("region", { name: "Nieuwe actie" });
+    await expect(form).toContainText("Bron:");
+    const text = form.getByRole("textbox", { name: "Nieuwe actie" });
+    await expect(text).toHaveValue(/Pipeline faalt op integratietests na upgrade/);
+    await expect(text).toBeFocused();
+    await text.press("Enter");
+    await expect.poll(async () => Object.values(await dbDump(page, "acties/")).some((d) => /Pipeline faalt/.test(d.text) && d.bron === "jira")).toBe(true);
   });
 });
 

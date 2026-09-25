@@ -163,6 +163,22 @@ Oordeel per criterium: voldoet / bijna / voldoet niet, met concrete verbetering.
   zodat een db-write die nog onderweg was geen verse keuze overschrijft.
 - B1: alleen de actieve ingang heeft rijen in de DOM; bij wisselen roept de schil render() van de ingang aan.
 
+- B2: rijen tonen nieuwste eerst (niet meer ongelezen eerst); VIP-groep "Bovenaan" erboven. Vergaderingen met meer
+  dan 15 deelnemers tellen niet mee voor VIP (anders maakt een all-hands iedereen VIP).
+- B2: extra acties (Allen beantwoorden l, Doorsturen f, Zet <naam> bovenaan b, Volg kanaal s) hebben slot "more":
+  geen eigen knop, wel toets, command bar en "Meer ▾" van de schil. De schil toont "Meer ▾" altijd zodra er
+  more-acties zijn en zet ze daar met hun toets in het label ("Doorsturen (f)"), zodat wie alleen klikt ze vindt.
+  Inbox-toetsen t (filter) en v (afgehandeld) gelden alleen in de Inbox en wijken voor een itemactie met die toets.
+- B2: verzenduitstel met een eigen timer per mail, los van de feedbackbalk: een nieuwe melding annuleert of versnelt
+  niets; een wachtende mail is ook te annuleren via de kaart "Wordt zo verzonden" in het detail van die mail.
+  Sluiten van het tabblad tijdens het wachten vraagt eerst bevestiging (beforeunload).
+- B2: Maak actie vanuit Inbox voegt de actie direct toe (programma geraden uit de tekst, anders Overig plus Claude-
+  voorstel) en blijft in de Inbox; de feedbackbalk heeft "Bekijk" die de nieuwe actie selecteert.
+- B2: adresboek bewaart per persoon ook "gezien" (datum), nodig om bij meer dan 300 de oudste te verwijderen.
+- B2: V (en de knop Afgehandeld) toont afgehandelde berichten onderaan, met Terugzetten (e).
+- B3: kanalen staan als ingeklapte groep "Teams-kanalen (n)" onderaan de Inbox, als gewone selecteerbare rijen;
+  Volgen/Niet meer volgen (s) zit in de actiebalk van het kanaaldetail (geen vinkjes in de rij, PO-regel: geen knoppen
+  in rijen). Kanaalnamen komen uit teams_list_channels (Channel.ReadBasic.All is toegekend), één keer per team.
 - B6: actiebalk Jira = Reageer · Maak actie · Vraag Claude · Open in Jira + één extra (Status, s). Toewijzen (t) en
   Nieuw Jira-issue (i, op mail, Teams en actie) hebben geen knop (slot "more" in de schil): toets en command bar,
   zodat de balk op 1280px op één regel past.

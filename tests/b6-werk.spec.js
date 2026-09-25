@@ -22,7 +22,8 @@ async function openIssue(page, text) {
   await openItem(page, text);
   await expect(detail(page).getByRole("heading", { name: "Beschrijving" })).toBeVisible();
 }
-const barLabels = (page) => actionBar(page).locator("button, a").evaluateAll((els) => els.map((e) => e.textContent.replace(/\s*↗.*$/, "").trim()));
+// Knoppen van de balk zelf (de schil kan extra's in "Meer ▾" zetten; die houden data-slot).
+const barLabels = (page) => actionBar(page).locator("[data-slot]").evaluateAll((els) => els.map((e) => e.childNodes[0].textContent.trim()));
 
 // =========================================================================================
 test.describe("Jira-detail", () => {
@@ -43,6 +44,10 @@ test.describe("Jira-detail", () => {
     await expect(d.getByRole("heading", { name: "Commentaar (2)" })).toBeVisible();
     // Actiebalk: max 5 vaste knoppen + 1 extra; Toewijzen zit achter de toets t en de command bar.
     expect(await barLabels(page)).toEqual(["Reageer", "Maak actie", "Vraag Claude", "Open in Jira", "Status"]);
+    // Acties zonder knop (slot "more") staan in "Meer ▾" met hun toets, zodat wie alleen klikt ze ook vindt.
+    await actionBar(page).getByRole("button", { name: "Meer acties" }).click();
+    await expect(actionBar(page).getByRole("menuitem", { name: "Toewijzen (t)" })).toBeVisible();
+    await page.keyboard.press("Escape");
     await expect(actionBar(page).getByRole("button", { name: "Reageer" })).toHaveAttribute("title", /\(r\)$/);
     await expect(actionBar(page).getByRole("button", { name: "Status" })).toHaveAttribute("title", /\(s\)$/);
     const text = await d.innerText();

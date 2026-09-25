@@ -35,7 +35,7 @@ const lees = (tool, input = {}, server = "Microsoft 365") => ({ tool: "^lees$", 
 // =========================================================================================
 test.describe("Claude voert uit", () => {
   test("(a) 'stuur Lotte een Teams-bericht': lees chats + voer_uit teams_send_chat_message, geen kaart, ✓-regel met link", async ({ page, open }) => {
-    await open(buildMock({ sample: { rules: [{ match: "Teams-bericht dat ik later ben", text: "Verzonden aan Lotte.",
+    await open(buildMock({ teamsSendBlocked: false, sample: { rules: [{ match: "Teams-bericht dat ik later ben", text: "Verzonden aan Lotte.",
       toolCalls: [lees("teams_list_chats", { limit: 50 }), voer("teams_send_chat_message", { chatId: LOTTE_CHAT, body: "Ik ben iets later." })] }] } }));
     await askBar(page, "Stuur Lotte een Teams-bericht dat ik later ben");
     await expect.poll(async () => (await directCalls(page, "teams_send_chat_message")).length, { timeout: 8000 }).toBe(1);
@@ -126,7 +126,7 @@ test.describe("Claude voert uit", () => {
 
   test("(f) schrijfbudget: na 5 schrijfacties weigert voer_uit tot Thomas opnieuw vraagt", async ({ page, open }) => {
     const six = Array.from({ length: 6 }, (_, i) => voer("teams_send_chat_message", { chatId: LOTTE_CHAT, body: "Bericht " + (i + 1) }));
-    await open(buildMock({ sample: { rules: [{ match: "zes berichten", text: "Klaar.", toolCalls: six }] } }));
+    await open(buildMock({ teamsSendBlocked: false, sample: { rules: [{ match: "zes berichten", text: "Klaar.", toolCalls: six }] } }));
     await askBar(page, "Stuur Lotte zes berichten");
     await expect(page.getByText("Klaar.").first()).toBeVisible({ timeout: 8000 });
     expect(await directCalls(page, "teams_send_chat_message")).toHaveLength(5);
@@ -137,7 +137,7 @@ test.describe("Claude voert uit", () => {
   });
 
   test("Stop breekt de taak af; al uitgevoerde acties blijven en worden gemeld", async ({ page, open }) => {
-    await open(buildMock({ sample: { rules: [{ match: "later ben", holdLast: true, chunks: ["Bezig ", "met ", "de rest."],
+    await open(buildMock({ teamsSendBlocked: false, sample: { rules: [{ match: "later ben", holdLast: true, chunks: ["Bezig ", "met ", "de rest."],
       toolCalls: [voer("teams_send_chat_message", { chatId: LOTTE_CHAT, body: "Ik ben later." }, "aan Lotte Visser")] }] } }));
     await askBar(page, "Laat Lotte weten dat ik later ben");
     await expect.poll(async () => (await directCalls(page, "teams_send_chat_message")).length, { timeout: 8000 }).toBe(1);
@@ -146,7 +146,7 @@ test.describe("Claude voert uit", () => {
   });
 
   test("events claude_actie_<tool> en claude_actie_fout_<tool> worden gelogd", async ({ page, open }) => {
-    await open(buildMock({ sample: { rules: [{ match: "twee dingen", text: "Gedaan.",
+    await open(buildMock({ teamsSendBlocked: false, sample: { rules: [{ match: "twee dingen", text: "Gedaan.",
       toolCalls: [voer("teams_send_chat_message", { chatId: LOTTE_CHAT, body: "Hoi" }), voer("outlook_create_event", { subject: "x" })] }] },
       tools: { "Microsoft 365": { outlook_create_event: { error: { code: "tool_error", message: "start is required" } } } } }));
     await askBar(page, "Doe twee dingen");

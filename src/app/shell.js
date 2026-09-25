@@ -113,7 +113,8 @@ var Shell = (function () {
   }
 
   function selTitle(text, srExtra) {
-    return h("button", { class: "stretch title sel", type: "button" }, text, srExtra ? h("span", { class: "sr", text: srExtra }) : null);
+    // aria-label i.p.v. een sr-span: een absoluut gepositioneerde span gaf een losse spatie in de naam ("Naam , mail").
+    return h("button", { class: "stretch title sel", type: "button", "aria-label": srExtra ? str(text) + srExtra : null }, text);
   }
 
   function row(li, t, key, item) {
@@ -306,6 +307,7 @@ var Shell = (function () {
     } };
   }
   // Actiebalk op één regel (mobiel: twee): extra knoppen die niet passen gaan vanaf achteren in "Meer".
+  // Acties met slot "more" (geen eigen knop) staan altijd in "Meer", met hun toets erbij: zo vindt wie alleen klikt ze ook.
   var moreOpen = false;
   function fitBar() {
     var bar = $("abar");
@@ -315,13 +317,18 @@ var Shell = (function () {
     var first = bar.firstElementChild; if (!first) return;
     var lineH = first.offsetHeight, maxRows = isPhone() ? 2 : 1;
     var fits = function () { return bar.scrollHeight - parseFloat(getComputedStyle(bar).paddingTop) - parseFloat(getComputedStyle(bar).paddingBottom) <= lineH * maxRows + 6 * (maxRows - 1) + 2; };
-    if (fits()) return;
+    var moreActs = curActions.filter(function (a) { return a.slot === "more" && a.run && !a.el; });
+    if (fits() && !moreActs.length) return;
     var menu = h("div", { class: "abar-menu", role: "menu", "aria-label": "Meer acties", hidden: !moreOpen });
     var btn = h("button", { class: "btn", type: "button", "aria-haspopup": "menu", "aria-expanded": moreOpen ? "true" : "false", "aria-label": "Meer acties", title: "Meer acties" }, "Meer", h("span", { "aria-hidden": "true", text: " ▾" }));
     var wrap = h("div", { class: "abar-more" }, btn, menu);
     btn.addEventListener("click", function () { moreOpen = menu.hidden; menu.hidden = !moreOpen; btn.setAttribute("aria-expanded", moreOpen ? "true" : "false"); if (moreOpen) { var f = menu.querySelector("button, a"); if (f) f.focus(); } });
     menu.addEventListener("keydown", function (e) { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); moreOpen = false; menu.hidden = true; btn.setAttribute("aria-expanded", "false"); btn.focus(); } });
     bar.append(wrap);
+    moreActs.forEach(function (a) {
+      menu.append(h("button", { class: "btn", type: "button", role: "menuitem", title: (a.title || a.label) + (a.key ? " (" + a.key + ")" : ""), "aria-keyshortcuts": a.key || null,
+        text: a.label + (a.key ? " (" + a.key + ")" : ""), onclick: function () { closeMore(); runAction(a); } }));
+    });
     var extras = Array.prototype.filter.call(bar.children, function (x) { return x.getAttribute && x.getAttribute("data-slot") === "extra"; });
     while (extras.length && !fits()) { var x = extras.pop(); x.setAttribute("role", "menuitem"); menu.insertBefore(x, menu.firstChild); }
     if (!menu.firstChild) wrap.remove();

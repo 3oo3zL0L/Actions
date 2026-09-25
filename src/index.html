@@ -71,12 +71,13 @@
         <button class="icon-btn refresh" type="button" data-refresh="inbox" aria-label="Ververs Inbox" title="Ververs Inbox"><span class="spin" aria-hidden="true">⟳</span></button>
       </div>
       <div class="card-body" id="body-inbox">
-        <div class="tabs" role="tablist" aria-label="Inbox">
-          <button role="tab" type="button" id="tab-mail" aria-selected="true" aria-controls="panel-mail" tabindex="0">Mail<span class="tcount" id="tc-mail"></span></button>
-          <button role="tab" type="button" id="tab-teams" aria-selected="false" aria-controls="panel-teams" tabindex="-1">Teams<span class="tcount" id="tc-teams"></span></button>
+        <div class="ifilter" role="group" aria-label="Filter inbox">
+          <button type="button" class="ifbtn" data-filter="alles" aria-pressed="true" title="Mail en Teams samen (t wisselt)">Alles</button>
+          <button type="button" class="ifbtn" data-filter="mail" aria-pressed="false" title="Alleen mail (t wisselt)">Mail<span class="tcount" id="tc-mail"></span></button>
+          <button type="button" class="ifbtn" data-filter="teams" aria-pressed="false" title="Alleen Teams (t wisselt)">Teams<span class="tcount" id="tc-teams"></span></button>
+          <button type="button" class="ifbtn ifhandled" id="showHandled" aria-pressed="false" title="Toon ook wat je al afhandelde (v)" aria-keyshortcuts="v">Afgehandeld</button>
         </div>
-        <div role="tabpanel" id="panel-mail" aria-labelledby="tab-mail" tabindex="-1"></div>
-        <div role="tabpanel" id="panel-teams" aria-labelledby="tab-teams" tabindex="-1" hidden></div>
+        <div id="inbox-list"></div>
       </div>
     </section>
 
@@ -194,6 +195,9 @@
     <tr><td><span class="kbd">o</span></td><td>Open in Outlook, Teams, Jira of Confluence</td></tr>
     <tr><td><span class="kbd">n</span></td><td>Nieuwe actie</td></tr>
     <tr><td><span class="kbd">p</span></td><td>Plan een vergadering</td></tr>
+    <tr><td><span class="kbd">l</span> <span class="kbd">f</span> <span class="kbd">b</span></td><td>Mail: allen beantwoorden, doorsturen, afzender bovenaan (ook in Meer)</td></tr>
+    <tr><td><span class="kbd">s</span></td><td>Teams-kanaal volgen of niet meer volgen</td></tr>
+    <tr><td><span class="kbd">t</span> <span class="kbd">v</span></td><td>Inbox: filter Alles, Mail of Teams wisselen; ook afgehandelde berichten tonen</td></tr>
     <tr><td><span class="kbd">z</span></td><td>Ongedaan maken</td></tr>
     <tr><td><span class="kbd">Esc</span></td><td>Sluit invulveld, paneel of Zoek of vraag</td></tr>
     <tr><td><span class="kbd">Shift R</span></td><td>Alles verversen</td></tr>

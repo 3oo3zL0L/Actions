@@ -98,7 +98,7 @@ function renderSource(k, changed) {
     lastPageAlert = pc; renderPageAlert();
     renderToday(); renderMail(); renderTeams(); renderJira(); renderConf();
   }
-  if (k === "cal") { renderToday(); renderNowStrip(); }
+  if (k === "cal") { renderToday(); renderNowStrip(); renderInbox(); } // Inbox: wie je vandaag spreekt staat bovenaan
   else if (k === "mail") { renderMail(); renderNowStrip(); if (changed && S.mail.status === "ok") announce("Inbox bijgewerkt, " + mailSplit().unread + " ongelezen"); }
   else if (k === "teams") renderTeams();
   else if (k === "chats") { if (S.teams.hasData) renderTeams(); }

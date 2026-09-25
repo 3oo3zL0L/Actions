@@ -30,9 +30,7 @@ onPrefs(function (p) {
 $("refreshAll").addEventListener("click", function () { logEvent("ververs_alles"); refreshAll(); });
 var REFRESH_NAME = { today: "agenda", vandaag: "vandaag", inbox: "inbox", work: "werk", acties: "acties" };
 document.querySelectorAll("[data-refresh]").forEach(function (b) { b.addEventListener("click", function () { var g = b.getAttribute("data-refresh"); logEvent("ververs_" + (REFRESH_NAME[g] || g)); refreshGroup(g); }); });
-var selectInboxTab = setupTabs("inbox", ["mail", "teams"], LS.tabInbox);
-setupTabs("werk", ["jira", "conf"], LS.tabWork);
-onPrefs(function (p) { if ((p.inboxFilter === "mail" || p.inboxFilter === "teams") && p.inboxFilter !== activeTab.inbox) selectInboxTab(p.inboxFilter); });
+setupTabs("werk", ["jira", "conf"], LS.tabWork); // Inbox: één lijst met filterknoppen (inbox.js)
 $("jqlToggle").addEventListener("click", function () {
   var f = $("jqlForm"), open = f.hidden;
   f.hidden = !open; $("jqlToggle").setAttribute("aria-expanded", open ? "true" : "false");

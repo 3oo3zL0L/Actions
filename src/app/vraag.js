@@ -2,7 +2,7 @@
 "use strict";
 
 // ---------- Vraag Claude per item ----------
-var ASK_NOUN = { mail: "deze mail", teams: "dit Teams-bericht", actie: "deze actie", jira: "dit Jira-issue",
+var ASK_NOUN = { mail: "deze mail", teams: "dit Teams-bericht", kanaal: "dit Teams-kanaal", actie: "deze actie", jira: "dit Jira-issue",
   conf: "deze Confluence-pagina", event: "deze afspraak", voorstel: "dit voorstel",
   vandaag: "mijn agenda van vandaag", inbox: "mijn inbox", acties: "mijn acties", item: "dit item" };
 var SECTION_TITLE = { vandaag: "Vandaag (agenda)", inbox: "Inbox (mail en Teams)", acties: "Acties (open acties)" };
@@ -12,6 +12,7 @@ function itemTitle(type, it) {
   if (type === "mail") return str(it.subject) || "(geen onderwerp)";
   if (type === "teams") return trunc(it.summary || it.body, 60) || "Teams-bericht";
   if (type === "jira") return str(it.key) + " " + str(it.fields && it.fields.summary);
+  if (type === "kanaal") return "Teams-kanaal " + str(it.name);
   if (type === "item") return str(it.title);
   if (type === "conf") return str(it.title) || "Confluence-pagina";
   return str(it.text);
@@ -27,6 +28,10 @@ function itemContext(type, it, body) {
   } else if (type === "teams") {
     L.push("Teams-bericht", "chatId: " + str(it.chatId), "uri: " + str(it.uri), "Chat: " + (chatName(it.chatId) || "onbekend"), "Van: " + teamsFrom(it),
       "Tijd: " + str(it.createdDateTime), (body && body.full ? "Volledige inhoud:" : "Tekst:"), body ? body.text : trunc(it.summary || it.body, 3000));
+    var ch = channelOf(it); // kanaalbericht: ids voor teams_reply_channel_message
+    if (ch) L.push("Kanaal: " + channelName(ch), "teamId: " + ch.teamId, "channelId: " + ch.channelId, "messageId: " + ch.messageId);
+  } else if (type === "kanaal") {
+    L.push("Teams-kanaal", "Naam: " + str(it.name), "teamId: " + str(it.teamId), "channelId: " + str(it.channelId), "Gevolgd: " + (it.followed ? "ja" : "nee"));
   } else if (type === "jira") {
     var f = it.fields || {};
     L.push("Jira-issue", "issueKey: " + str(it.key), "Samenvatting: " + str(f.summary), "Status: " + str(f.status && f.status.name),
@@ -52,6 +57,7 @@ function itemContextShort(type, it) {
   if (type === "mail") L.push("Mail van " + nameFromAddr(it.sender || it.from) + ", onderwerp: " + str(it.subject), trunc(it.summary, 900));
   else if (type === "teams") L.push("Teams-bericht van " + teamsFrom(it) + (chatName(it.chatId) ? " in chat " + chatName(it.chatId) : ""), trunc(it.summary || it.body, 900));
   else if (type === "jira") { var f = it.fields || {}; L.push("Jira-issue " + str(it.key) + ": " + str(f.summary) + " (status " + str(f.status && f.status.name) + ")"); }
+  else if (type === "kanaal") L.push("Teams-kanaal " + str(it.name));
   else if (type === "conf") L.push("Confluence-pagina: " + str(it.title) + (it.webUrl ? " " + str(it.webUrl) : ""));
   else if (type === "voorstel") L.push("Voorstel: " + str(it.text));
   else L.push("Actie: " + str(it.text) + (it.prog ? " (" + it.prog + ")" : "") + (it.due ? ", deadline " + it.due : ""), it.why ? "Waarom: " + trunc(it.why, 300) : "", it.extra ? "Notities: " + trunc(it.extra, 300) : "");

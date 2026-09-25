@@ -41,10 +41,10 @@ test.describe("Openen, rollen en toetsenbord", () => {
     expect(n).toBeGreaterThan(3);
     expect(n).toBeLessThanOrEqual(7);
     // Leeg: eerst alle acties van het geselecteerde item, met hun toets.
-    await expect(options(page).first()).toContainText("Antwoord-concept");
+    await expect(options(page).first()).toContainText("Beantwoord"); // B2: Beantwoord vervangt Antwoord-concept
     await expect(options(page).first()).toContainText("r");
     await expect(page.getByRole("option", { name: /Afhandelen.*e$/ })).toBeVisible();
-    await expect(page.getByRole("option", { name: /Nieuw Jira-issue.*i$/ })).toBeVisible(); // ook acties zonder knop (slot more)
+    await expect(page.getByRole("option", { name: /Allen beantwoorden.*l$/ })).toBeVisible(); // ook acties zonder knop (slot more); max 7 suggesties
     await expect(options(page).last()).toHaveAccessibleName(/^Vraag Claude/);
     // Pijltjes en aria-activedescendant.
     const first = await box.getAttribute("aria-activedescendant");
@@ -154,14 +154,14 @@ test.describe("Uitvoeren", () => {
     await goTo(page, "Inbox");
     await openItem(page, "Budget CI-runners Q4");
     await openBar(page, "beantwoord");
-    await expect(activeOption(page)).toHaveAccessibleName(/Antwoord-concept Mail: Budget CI-runners Q4 r$/);
+    await expect(activeOption(page)).toHaveAccessibleName(/Beantwoord Mail: Budget CI-runners Q4 r$/);
     await page.keyboard.press("Enter");
     await expect(detail(page).getByRole("textbox", { name: "Tekst" })).toBeVisible();
     await detail(page).getByRole("button", { name: "Annuleren" }).click();
     await openBar(page, "afhandelen");
     await expect(activeOption(page)).toHaveAccessibleName(/Afhandelen Mail: Budget CI-runners Q4 e$/);
     await page.keyboard.press("Enter");
-    await expect(feedbackBar(page)).toContainText("Mail afgehandeld");
+    await expect(feedbackBar(page)).toContainText("Budget CI-runners Q4 afgehandeld"); // PO: de balk noemt het item
   });
 
   test("'jira' op een mail: Nieuw Jira-issue staat boven Ga naar Werk", async ({ page, open }) => {

@@ -34,6 +34,7 @@
 .abar .btn { padding: 4px 8px; }
 .abar .btn[data-slot="extra"] { background: transparent; }
 .abar-more { position: relative; }
+.abar-more > .btn { padding-left: 6px; padding-right: 6px; } /* compact, zodat vijf vaste knoppen plus Meer op 1280px op één regel passen */
 .abar-menu { position: absolute; right: 0; top: calc(100% + 4px); z-index: 5; min-width: 200px; display: flex; flex-direction: column; gap: 2px; padding: 6px;
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); box-shadow: var(--shadow-2); }
 .abar-menu[hidden] { display: none; }

@@ -116,6 +116,7 @@ function fetchMe() {
     var name = str(o.displayName || o.givenName || o.name).trim();
     me.email = str(o.mail || o.email || o.userPrincipalName).toLowerCase();
     if (name) { me.name = (o.givenName ? str(o.givenName) : name.split(/[\s,]+/)[0]).trim(); renderHeader(); }
+    if (me.email) renderInbox(); // eigen Teams-berichten en Thomas zelf uit de Inbox en het adresboek
   }, function () { /* begroeting zonder naam */ });
 }
 function renderHeader() {
