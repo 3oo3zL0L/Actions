@@ -564,6 +564,21 @@ test.describe("Teams-bericht", () => {
     await expect.poll(async () => page.evaluate(() => window.__copied.at(-1))).toBe("Top, tot straks");
   });
 
+  test("lukt kopiëren niet, dan zegt de balk dat eerlijk en staat de tekst geselecteerd klaar", async ({ page, open }) => {
+    await page.addInitScript(() => { document.execCommand = () => false; });
+    await open(inboxMock({ db: { docs: { "prefs/thomas": { teamsSendBlocked: { since: new Date(Date.now() - 86400000).toISOString() } } } } }));
+    await page.evaluate(() => { Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: () => Promise.reject(new Error("geen recht")) } }); });
+    await inbox(page);
+    await openItem(page, "Heeft iemand de benchmarkcijfers", "Mark Bakker");
+    await actionBar(page).getByRole("button", { name: "Kopieer en open in Teams" }).click();
+    await composerText(page).fill("Ik zoek ze op.");
+    await composerText(page).press("Control+Enter");
+    await expect(feedbackBar(page)).toContainText("⚠ Kopiëren lukte niet. Kopieer je tekst zelf en plak hem in Teams");
+    const ta = detail(page).getByRole("textbox", { name: "Je tekst" });
+    await expect(ta).toBeFocused();
+    await expect(ta).toHaveValue("Ik zoek ze op.");
+  });
+
   test("groepschat zonder Teams-recht: klembord en het bericht openen via zijn webUrl", async ({ page, open }) => {
     await open(inboxMock({ db: { docs: { "prefs/thomas": { teamsSendBlocked: { since: new Date(Date.now() - 86400000).toISOString() } } } } }));
     await inbox(page);

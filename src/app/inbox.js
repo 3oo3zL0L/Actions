@@ -1022,14 +1022,21 @@ function copyToClipboard(text) {
 // Kopieer de tekst en open het bericht in Teams (1-op-1: chat met vooringevulde tekst).
 function copyAndOpen(t, body, afterBlock) {
   var url = teamsOpenUrl(t, body);
-  copyToClipboard(body);
+  var copied = copyToClipboard(body);
   try { window.open(url, "_blank", "noopener"); } catch (e) { /* de link staat ook in de balk */ }
   logEvent("teams_kopieer_open");
-  feedback({ text: "Tekst gekopieerd. Plak hem in Teams", link: url, linkLabel: "Open Teams", note: afterBlock ? TEAMS_BLOCKED_TEXT : "" });
+  var fh = feedback({ text: "Tekst gekopieerd. Plak hem in Teams", link: url, linkLabel: "Open Teams", note: afterBlock ? TEAMS_BLOCKED_TEXT : "" });
+  copied.then(function (ok) {
+    if (ok !== false) return;
+    fh.update({ icon: "⚠", text: "Kopiëren lukte niet. Kopieer je tekst zelf en plak hem in Teams" });
+    var cur = inlineCards["teams:" + t.id], ta = cur && cur.querySelector("textarea.copy-fallback");
+    if (ta) { ta.hidden = false; ta.focus(); ta.select(); }
+  });
   return url;
 }
 function copiedCard(key, t, body, url) {
   var card = statusCard("ok", [h("span", { text: "✓ Tekst gekopieerd. Plak hem in Teams. " }),
+    h("textarea", { class: "copy-fallback", "aria-label": "Je tekst", readonly: true, hidden: true }, body),
     h("button", { class: "btn text", type: "button", text: "Kopieer opnieuw", title: "Kopieer de tekst nog een keer", onclick: function () { copyToClipboard(body); announce("Tekst gekopieerd"); } }),
     extLink(url, "Open Teams", "btn text")]);
   mountCard(key, card);

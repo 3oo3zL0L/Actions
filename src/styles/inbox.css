@@ -37,3 +37,5 @@
 .more-card { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg); }
 .attach p { margin: 0; font-size: var(--fs-sm); color: var(--text-2); }
 @media (max-width: 560px) { .composer .rcp-box input { min-height: 44px; } }
+.ccard .copy-fallback { display: block; width: 100%; margin: 6px 0; min-height: 4.5em; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface); padding: 6px; }
+.ccard .copy-fallback[hidden] { display: none; }
