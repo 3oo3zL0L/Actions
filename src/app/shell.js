@@ -56,6 +56,8 @@
  *    ingang vult zowel de navigatie (nc-<id>) als de kop van de lijst (cnt-<id>). Feedback: feedback({text, undo, undoLabel, countdown,
  *    onCountdownDone, link, linkLabel, note}); toets z = laatste Ongedaan maken. Voorkeuren: getPref/setPref
  *    (app/prefs.js). Het Claude-paneel (#chat) vervangt de detailkolom: openPanel()/closePanel() in claude.js.
+ *    Kiest Thomas een andere rij terwijl het paneel open is, dan blijft het open en wisselt de contextkaart naar het
+ *    nieuwe item via de ask-actie van dat type (panelFollow() in vraag.js); Esc of ✕ sluit en toont het detail.
  *
  * 5. Extra acties op het type van een andere module (B6/B7), zonder die module te wijzigen:
  *      Shell.extraActions("mail", function (m) { return { slot: "extra", label: "Nieuw Jira-issue", key: "i", run: … }; });
@@ -196,7 +198,8 @@ var Shell = (function () {
     if (li) pick(li, { auto: true });
   }
 
-  // Selecteer een rij. opts.user: door Thomas (klik/j/k): sluit het Claude-paneel en opent op mobiel het detail.
+  // Selecteer een rij. opts.user: door Thomas (klik/j/k): opent op mobiel het detail; staat het Claude-paneel open,
+  // dan blijft het open en volgt de contextkaart de nieuwe selectie (panelFollow in vraag.js).
   function pick(li, opts) {
     opts = opts || {};
     var s = li._sel; if (!s) return;
@@ -210,7 +213,7 @@ var Shell = (function () {
     if (!same || opts.user) renderDetail();
     checkFocus();
     if (opts.user) {
-      if (!$("chat").hidden) closePanel(true);
+      if (!$("chat").hidden) panelFollow(); // B8: paneel blijft open, de contextkaart volgt de selectie
       if (opts.focus) { var b = li.querySelector(".sel"); if (b) b.focus({ preventScroll: true }); }
       if (opts.scroll) li.scrollIntoView({ block: "nearest" });
       if (opts.open && isPhone()) showScreen("detail");

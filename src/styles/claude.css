@@ -69,6 +69,10 @@
 .step.write .st-text { color: var(--c-text); }
 .step.write.ok .st-text { font-weight: 600; }
 .step .st-link { color: var(--c-link); text-decoration: none; padding: 0 2px; }
+.step.paste { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-height: 28px; padding: 2px 6px 2px 2px; }
+.step.paste .st-icon { color: var(--c-accent); }
+.step.paste .paste-link { font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
+.step.paste .btn { background: var(--c-input); border-color: var(--c-input-line); color: var(--c-text); min-height: 28px; padding: 2px 10px; font-size: 12px; }
 .tool .tool-d { margin: 2px 0 4px 18px; padding-left: 10px; border-left: 1px solid var(--c-line); font-size: 12px; white-space: pre-wrap; }
 .thinking { display: flex; align-items: center; gap: 8px; color: var(--c-muted); font-size: 14px; }
 .thinking svg { width: 18px; height: 18px; display: block; }

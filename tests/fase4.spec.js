@@ -198,7 +198,8 @@ test.describe("Vraag Claude per item", () => {
     expect(call.toolNames).toContain("voer_uit");
     // B2: het detail laadt de volledige inhoud ook (eerst het automatisch geselecteerde item); de mail-uri moet erbij zijn.
     expect((await mcpCalls(page, "read_resource")).map((c) => c.input)).toContainEqual({ uri: "mail:///messages/mail-003" });
-    await expect(ctxCard(page)).toBeHidden(); // context is gebruikt
+    // B8: de kaart blijft staan (hij volgt de selectie); een vervolgvraag stuurt de itemdata niet opnieuw.
+    await expect(ctxCard(page)).toContainText("Over: Budget CI-runners Q4");
   });
 
   test("Teams- en actierij: contextkaart, ✕ haalt context weg, events worden gelogd", async ({ page, open }) => {
