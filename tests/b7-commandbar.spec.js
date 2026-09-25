@@ -71,6 +71,7 @@ test.describe("Openen, rollen en toetsenbord", () => {
     await open(buildMock());
     await ready(page);
     await goTo(page, "Acties");
+    await page.getByRole("button", { name: "Nieuwe actie" }).click(); // B5: formulier bovenaan het detail
     const add = page.getByRole("textbox", { name: "Nieuwe actie" });
     await add.fill("");
     await add.pressSequentially("a/b 2 jk e?");
@@ -210,16 +211,12 @@ test.describe("Uitvoeren", () => {
     await expect(form).toBeVisible();
     await expect(form.getByRole("combobox", { name: "Project" })).toHaveValue("CIACC");
     await form.getByRole("textbox", { name: "Samenvatting" }).press("Escape");
-    // Plan een vergadering: alleen als de functie er is (groep B), dan roept de bar hem aan.
-    await openBar(page, "plan een vergadering");
-    await expect(page.getByRole("option", { name: /^Doen Plan een vergadering/ })).toHaveCount(0);
-    await expect(activeOption(page)).toHaveAccessibleName(/^Vraag Claude: plan een vergadering/);
-    await page.keyboard.press("Escape");
-    await page.evaluate(() => { window.planMeeting = () => { window.__planned = (window.__planned || 0) + 1; }; });
+    // Plan een vergadering (groep B levert planMeeting): de bar noemt toets p en opent de planner in Agenda.
     await openBar(page, "vergadering");
-    await expect(activeOption(page)).toHaveAccessibleName(/Plan een vergadering/);
+    await expect(activeOption(page)).toHaveAccessibleName(/Plan een vergadering p$/);
     await page.keyboard.press("Enter");
-    expect(await page.evaluate(() => window.__planned)).toBe(1);
+    await expect(entryButton(page, "Agenda")).toHaveAttribute("aria-current", "page");
+    await expect(detail(page).getByRole("region", { name: "Plan een vergadering" })).toBeVisible();
   });
 });
 

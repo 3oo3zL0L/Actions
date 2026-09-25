@@ -83,12 +83,12 @@ function buildAgendaMock(overrides = {}) {
   const tools = {
     "Microsoft 365": {
       outlook_calendar_search: { items: cal, pagination: { moreResults: false } },
-      read_resource: { byUri: {
-        "calendar:///events/evt-003": fullEvent(ref, evt003),
-        "calendar:///events/evt-101": fullEvent(ref, EXTRA[0], { invite: true }),
-        "calendar:///events/evt-201": fullEvent(ref, EXTRA[1]),
-        "calendar:///events/evt-202": fullEvent(ref, EXTRA[2], { invite: true }),
-      } },
+      read_resource: { byInput: [
+        { when: { uri: "calendar:///events/evt-003" }, ...fullEvent(ref, evt003) },
+        { when: { uri: "calendar:///events/evt-101" }, ...fullEvent(ref, EXTRA[0], { invite: true }) },
+        { when: { uri: "calendar:///events/evt-201" }, ...fullEvent(ref, EXTRA[1]) },
+        { when: { uri: "calendar:///events/evt-202" }, ...fullEvent(ref, EXTRA[2], { invite: true }) },
+      ] },
     },
   };
   const merged = { ...tools["Microsoft 365"], ...((overrides.tools || {})["Microsoft 365"] || {}) };

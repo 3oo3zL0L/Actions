@@ -233,7 +233,8 @@
   // ==== B4 Agenda (additief, begin) =====================================================================
   // Echte vormen en invoergrenzen van outlook_find_available_time, outlook_respond_to_event en
   // outlook_create_event (schema's van de Microsoft 365-connector), plus read_resource per uri.
-  //   Fixture read_resource: { byUri: { "<uri>": Fixture }, fallback?: Fixture }
+  //   Fixture per invoer (zelfde vorm als groep A): { byInput: [{ when: { uri: "…" }, ...Fixture }], otherwise?: Fixture }.
+  //   Na de merge van groep A doet hun fixtureByInput() dit al vóór deze regel; deze regel is dan een no-op.
   //   Zonder fixture: find_available_time geeft vrije sloten op werkdagen (09:30, 11:00, 14:00, 16:00,
   //   wandklok "W. Europe Standard Time") binnen [afterDateTime, beforeDateTime); respond geeft een tekstblok;
   //   create_event geeft {id, webLink, onlineMeeting?}. Ongeldige invoer zonder fixture = contractschending.
@@ -364,7 +365,10 @@
       if (!fx && c.werk && server === "Atlassian Rovo" && WERK_TOOLS.has(tool)) fx = werkFixture(tool, input); // B6 Werk
       if (fx && c.werk && tool === "searchJiraIssuesUsingJql" && fx.payload) fx = werkSearch(fx); // B6: zoeken volgt de werk-staat
       // ---- B4 Agenda (additief): read_resource per uri, invoercontrole en standaardvormen agenda-tools ----
-      if (fx && fx.byUri) fx = fx.byUri[input && input.uri] || fx.fallback || null;
+      if (fx && Array.isArray(fx.byInput)) {
+        const hit = fx.byInput.find((e) => Object.entries(e.when || {}).every(([k, v]) => input && JSON.stringify(input[k]) === JSON.stringify(v)));
+        if (hit) { const { when, ...rest } = hit; fx = rest; } else fx = fx.otherwise || null;
+      }
       if (!fx && server === "Microsoft 365") {
         const bad = agendaInputError(tool, input);
         if (bad) { violation(`${tool}: ${bad}`); throw mcpErr("tool_error", "Input validation error: " + bad, { server }); }

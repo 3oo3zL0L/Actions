@@ -350,11 +350,11 @@ test.describe("Review B1", () => {
     const add = page.getByRole("textbox", { name: "Nieuwe actie" });
     await expect(add).toBeFocused();
     await page.keyboard.press("Escape");
-    await expect(add).not.toBeFocused();
+    await expect(add).toHaveCount(0); // B5: Esc sluit het formulier Nieuwe actie
     await expect(selectedRow(page)).toBeFocused();
     await page.keyboard.press("2");
     await page.keyboard.press("j");
-    await expect(page.locator("#addInput")).toHaveValue("");
+    await expect(page.getByRole("textbox", { name: "Nieuwe actie" })).toHaveCount(0); // 2 en j waren geen tekst
     await expect(entryButton(page, "Inbox")).toHaveAttribute("aria-current", "page");
     await expect(detail(page).getByRole("heading", { level: 2 })).toHaveText("Vraag over OIDC-scope voor partnerportaal");
   });
@@ -414,6 +414,9 @@ test.describe("Review B1", () => {
     await goTo(page, "Acties");
     await openItem(page, "Akkoord geven op releaseplanning 26.4");
     await oneLine();
+    // B5: de actiebalk van een actie heeft 5 knoppen en past bij 1280px; bij een smallere detailkolom gaat de extra
+    // actie (Laten vervallen) onder Meer en houdt zijn toets.
+    await page.setViewportSize({ width: 900, height: 860 });
     const more = actionBar(page).getByRole("button", { name: "Meer acties" });
     await expect(more).toBeVisible();
     await more.click();

@@ -4,7 +4,8 @@
 
 // ---------- Paneel bovenaan de detailkolom (formulier zonder item) ----------
 // openPane(ingang, el, opener): toont el bovenaan het detail zolang die ingang actief is, ook als de selectie
-// wisselt. closePane(ingang, stil). Esc in het paneel sluit het; losse sneltoetsen gaan niet naar het item eronder.
+// wisselt. closePane(ingang, stil). Esc in het paneel sluit het en zet de focus op de geselecteerde rij (✕ zet hem
+// terug op de knop die het opende); losse sneltoetsen gaan niet naar het item eronder.
 // Gebruikt door Plan een vergadering (agenda) en Nieuwe actie (acties).
 var panes = {};
 function typingIn(t) { return !!(t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)); }
@@ -13,7 +14,12 @@ function openPane(entry, el, opener) {
   el.classList.add("dpane");
   el._opener = opener || document.activeElement;
   el.addEventListener("keydown", function (e) {
-    if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closePane(entry); return; }
+    if (e.key === "Escape") {
+      e.preventDefault(); e.stopPropagation();
+      closePane(entry, true);
+      if (Shell.isPhone()) Shell.back(); else Shell.leaveField(null);
+      return;
+    }
     // Losse toetsen (e, r, j, 1..) horen bij het item eronder: in het paneel doen ze niets (behalve eigen toetsen).
     if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey && !typingIn(e.target)) { e.stopPropagation(); if (el._keys) el._keys(e); }
   });
@@ -230,6 +236,8 @@ function eventWhen(e) {
 Shell.type("event", {
   label: "Afspraak",
   title: function (e) { return str(e.it.subject) || "(geen onderwerp)"; },
+  // Context voor Vraag Claude (standaardactie van de schil): ids voor voer_uit, namen en de volledige tekst als die er is.
+  context: function (e) { return eventContext(e); },
   inline: function (e) { return "event:" + str(e.it.id); },
   detail: function (e, body) {
     var it = e.it;
@@ -269,13 +277,25 @@ Shell.type("event", {
       acts.push({ slot: "primary", label: "Deelnemen", key: "d", title: "Deelnemen aan de Teams-vergadering", href: joinUrl(e) });
     }
     if (cap.db && !isInvite(e)) acts.push({ slot: "make", label: "Maak actie", key: "a", title: "Actie maken voor na deze afspraak", run: function (x) { eventActie(x); } });
-    acts.push(Shell.act.ask("event", e));
-    acts.push(Shell.act.open(it.webLink, "Outlook"));
+    acts.push(Shell.act.open(it.webLink, "Outlook")); // Vraag Claude (c) voegt de schil toe, met context() hieronder
     if (!isInvite(e) && !e.cancelled && e.start && cap.sample) acts.push({ slot: "extra", label: "Bereid voor", key: "b", title: "Laat Claude deze afspraak voorbereiden", run: function (x, btn) { prepareMeeting(x.it, x, btn); } });
     return acts;
   }
 });
 
+function eventContext(e) {
+  var it = e.it, f = agFull[str(it.uri)], d = (f && f.data) || {};
+  var who = function (p) { var n = planPerson(p); return n ? n.name + " <" + n.email + ">" : evPersonName(p); };
+  var ppl = (Array.isArray(d.attendees) && d.attendees.length ? d.attendees : Array.isArray(it.attendees) ? it.attendees : []).map(who).filter(Boolean);
+  var txt = isPlain(d.body) ? (str(d.body.contentType).toLowerCase() === "text" ? str(d.body.content) : evHtmlText(d.body.content)) : "";
+  return [
+    "Afspraak", "eventId: " + str(it.id), "uri: " + str(it.uri), "Onderwerp: " + str(it.subject), "Tijd: " + eventWhen(e),
+    "Waar: " + (str(d.location && d.location.displayName) || str(it.location)), "Organisator: " + who(d.organizer || it.organizer),
+    ppl.length ? "Deelnemers: " + ppl.slice(0, 20).join(", ") : "",
+    isInvite(e) ? "Uitnodiging: nog niet beantwoord (beantwoorden met outlook_respond_to_event)" : RESP_BADGE[respState(e)] ? "Antwoord: " + RESP_BADGE[respState(e)] : "",
+    txt ? "Volledige tekst (data):\n" + trunc(txt, 3000) : it.summary ? "Beschrijving: " + trunc(it.summary, 3000) : ""
+  ].filter(Boolean).join("\n");
+}
 // Berichtveld onder de actiebalk: optioneel bericht aan de organisator bij Accepteer, Voorlopig of Afwijzen.
 function respondBox(e) {
   var it = e.it, id = "resp-" + str(it.id).replace(/[^A-Za-z0-9_-]/g, "").slice(-40);
@@ -361,7 +381,8 @@ function eventActie(e) {
     onderwerp: subj, why: "Na " + subj };
   logEvent("maak_actie", "agenda");
   addActie(f).then(function (r) {
-    feedback({ text: "Actie toegevoegd bij " + f.prog + ": " + trunc(f.text, 50), undoLabel: "Bekijk", undo: function () { showActie(r.id); } });
+    feedback({ text: "Actie toegevoegd bij " + f.prog + ": " + trunc(f.text, 50), undo: function () { deleteActie(findActie(r.id) || { id: r.id }); },
+      action: { label: "Bekijk", title: "Naar de actie in Acties", run: function () { showActie(r.id); } } });
     if (!prog && r) suggestProg(r.id, f.text);
   }, function () { feedback({ icon: "⚠", text: "Actie niet opgeslagen. Probeer het opnieuw." }); });
 }

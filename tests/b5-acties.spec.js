@@ -214,7 +214,7 @@ test.describe("Nieuwe actie", () => {
     await form.getByRole("textbox", { name: "Nieuwe actie" }).fill("Dit bewaar ik niet");
     await page.keyboard.press("Escape");
     await expect(form).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Nieuwe actie" })).toBeFocused();
+    await expect(page.locator('#lijst button[aria-current="true"]')).toBeFocused(); // Esc: focus naar de geselecteerde rij
     expect((await mockLog(page)).db.filter((w) => w.op === "set" && w.path.startsWith("acties/")).length).toBe(before);
   });
 
@@ -246,7 +246,7 @@ test.describe("Voorstellen en Vandaag", () => {
     await expect(rij.getByRole("button")).toHaveCount(1);
     await expect(rij.getByRole("link")).toHaveCount(0);
     await openItem(page, "Reageren op budgetvoorstel CI-runners");
-    expect(await barLabels(page)).toEqual(["Op de lijst", "Weg", "Open bron"]);
+    expect(await barLabels(page)).toEqual(["Op de lijst", "Weg", "Vraag Claude", "Open bron"]); // Vraag Claude: standaard van de schil
     await expect(actionBar(page).getByRole("button", { name: "Op de lijst" })).toHaveAttribute("title", /\(a\)$/);
     await page.keyboard.press("e");
     await expect.poll(async () => (await dbDump(page, "voorstellen/v1"))["voorstellen/v1"].status).toBe("nee");

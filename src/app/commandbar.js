@@ -71,11 +71,9 @@ function cmdGeneral(itemActs) {
   var has = function (label) { return itemActs.some(function (x) { return x.label === label; }); };
   var out = [];
   out.push({ kind: "gen", tag: "Doen", label: "Nieuwe actie", key: "n", words: ["actie toevoegen", "taak", "todo", "to-do"], run: function () {
-    if (typeof window.newAction === "function") { window.newAction(); return; }
-    var inp = $("addInput"); if (inp.disabled) return;
-    Shell.go("acties", { user: true }); inp.focus();
+    newActie(); // B5: formulier bovenaan het detail van Acties, focus in het tekstveld
   } });
-  if (typeof window.planMeeting === "function") out.push({ kind: "gen", tag: "Doen", label: "Plan een vergadering", key: "", words: ["vergadering", "meeting", "inplannen", "afspraak plannen", "overleg"], run: function () { window.planMeeting(); } });
+  if (typeof window.planMeeting === "function") out.push({ kind: "gen", tag: "Doen", label: "Plan een vergadering", key: "p", words: ["vergadering", "meeting", "inplannen", "afspraak plannen", "overleg"], run: function () { window.planMeeting(); } });
   if (cap.mcp && typeof newJiraIssueFromSelection === "function" && !has("Nieuw Jira-issue")) out.push({ kind: "gen", tag: "Doen", label: "Nieuw Jira-issue", key: "", words: ["jira issue", "ticket", "bug", "story"], run: function () { newJiraIssueFromSelection(); } });
   out.push({ kind: "gen", tag: "Doen", label: "Ververs alles", key: "Shift R", words: ["verversen", "vernieuwen", "refresh", "herladen", "opnieuw laden"], run: function () { logEvent("ververs_alles"); refreshAll(); } });
   var next = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length];

@@ -187,9 +187,13 @@ test.describe("Gewone afspraak", () => {
     const doc = docs.find((x) => x.bron === "agenda");
     expect(doc).toMatchObject({ text: "Opvolgen: Architectuuroverleg Object Store", why: "Na Architectuuroverleg Object Store", prog: "Object Store",
       bron: "agenda", bronUrl: "https://outlook.example.com/owa/?itemid=evt-003", status: "open" });
+    // z blijft Ongedaan maken; Bekijk is een eigen knop die naar de actie gaat.
+    await expect(feedbackBar(page).getByRole("button", { name: "Ongedaan maken" })).toHaveAttribute("title", "Ongedaan maken (z)");
     await feedbackBar(page).getByRole("button", { name: "Bekijk" }).click();
     await expect(entryButton(page, "Acties")).toHaveAttribute("aria-current", "page");
     await expect(detail(page).getByRole("heading", { level: 2 })).toHaveText("Opvolgen: Architectuuroverleg Object Store");
+    await page.locator("body").press("z");
+    await expect.poll(async () => Object.values(await dbDump(page, "acties/")).some((x) => x.bron === "agenda")).toBe(false);
   });
 });
 
@@ -328,6 +332,6 @@ test.describe("Plan een vergadering", () => {
     await expect(planner(page).getByRole("button", { name: "Haal Mark Bakker weg" })).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(planner(page)).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Plan een vergadering" })).toBeFocused();
+    await expect(page.locator('#lijst button[aria-current="true"]')).toBeFocused(); // Esc: focus naar de geselecteerde rij
   });
 });

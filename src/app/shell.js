@@ -451,7 +451,8 @@ var Shell = (function () {
 })();
 
 // ---------- Feedbackbalk: één balk onderaan voor alles ----------
-// feedback({text, undo?: fn, undoLabel?, countdown?: seconden, onCountdownDone?: fn, link?, linkLabel?, note?})
+// feedback({text, undo?: fn, undoLabel?, countdown?: seconden, onCountdownDone?: fn, link?, linkLabel?, note?,
+//           action?: {label, title?, run}})  action: een tweede knop in de app zelf (bv. "Bekijk": naar het nieuwe item).
 // Toont "✓ <text> · <undoLabel> (Ns) · Bekijk ↗". Geeft {update(opts), close()} terug. Toets z = undo.
 // Met countdown is undo een annuleer-knop: onCountdownDone loopt na N seconden (bv. mail echt versturen),
 // of direct als er een nieuwe melding komt of de balk gesloten wordt (een uitstel wordt nooit stil geannuleerd).
@@ -463,7 +464,8 @@ function feedback(o) {
   clearTimeout(fb.timer); clearInterval(fb.tick);
   var cur = { text: o.text, undo: o.undo || null, undoLabel: o.undoLabel || (o.countdown ? "Annuleer" : "Ongedaan maken"),
     countdown: o.countdown || 0, left: o.countdown || 0, onCountdownDone: o.onCountdownDone || null, link: safeUrl(o.link), linkLabel: o.linkLabel || "Bekijk",
-    note: o.note || "", settled: false, icon: o.icon == null ? "✓" : o.icon, btn: null };
+    note: o.note || "", settled: false, icon: o.icon == null ? "✓" : o.icon, btn: null,
+    action: o.action && typeof o.action.run === "function" ? o.action : null };
   fb.cur = cur;
   function label() { return cur.undoLabel + (cur.countdown && !cur.settled ? " (" + cur.left + "s)" : ""); }
   function paint() {
@@ -477,6 +479,8 @@ function feedback(o) {
       box.append(h("span", { class: "fb-sep", "aria-hidden": "true", text: "·" }), cur.btn);
     }
     if (cur.link) box.append(h("span", { class: "fb-sep", "aria-hidden": "true", text: "·" }), extLink(cur.link, cur.linkLabel, "btn text"));
+    if (cur.action) box.append(h("span", { class: "fb-sep", "aria-hidden": "true", text: "·" }),
+      h("button", { class: "btn text", type: "button", title: cur.action.title || cur.action.label, text: cur.action.label, onclick: function () { var a = cur.action; try { a.run(); } catch (e) { /* */ } } }));
     box.append(h("button", { class: "icon-btn fb-close", type: "button", "aria-label": "Melding sluiten", title: "Sluiten", text: "✕", onclick: close }));
     if (cur.note) box.append(h("span", { class: "fb-note", text: cur.note }));
     if (hadFocus && cur.btn) cur.btn.focus();
