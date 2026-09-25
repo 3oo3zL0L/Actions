@@ -440,7 +440,7 @@ function plannerEl(pre) {
     clear(chips);
     people.forEach(function (p, i) {
       chips.append(h("span", { class: "chip" }, h("span", { text: p.name, title: p.email }),
-        h("button", { class: "chip-x", type: "button", "aria-label": "Haal " + p.name + " weg", title: "Weghalen", text: "✕",
+        h("button", { class: "chip-x", type: "button", "aria-label": "Haal " + p.name + " weg", title: "Weghalen (Backspace in het lege veld haalt de laatste weg)", text: "✕",
           onclick: function () { people.splice(i, 1); paintChips(); resetSlots(); who.focus(); } })));
     });
     chips.append(who);
@@ -471,6 +471,7 @@ function plannerEl(pre) {
       if (my !== st.seq) return;
       st.sugg = list.filter(function (p) { return p.email !== me.email && !people.some(function (x) { return x.email === p.email; }); }).slice(0, 6);
       st.active = st.sugg.length ? 0 : -1;
+      st.sugQ = q;
       paintSug();
     });
   }
@@ -480,9 +481,19 @@ function plannerEl(pre) {
     if (ev.key === "ArrowDown" && st.sugg.length) { ev.preventDefault(); st.active = (st.active + 1) % st.sugg.length; paintSug(); }
     else if (ev.key === "ArrowUp" && st.sugg.length) { ev.preventDefault(); st.active = (st.active - 1 + st.sugg.length) % st.sugg.length; paintSug(); }
     else if ((ev.key === "Enter" || ev.key === "," || ev.key === ";" || ev.key === "Tab") && who.value.trim()) {
-      var pick = !sug.hidden && st.active >= 0 ? st.sugg[st.active] : planPerson(who.value);
+      // Suggesties zijn er (voor precies deze tekst): kies de actieve. Anders een volledig adres, of (snel getypt,
+      // suggesties nog onderweg) de eerste treffer voor de getypte naam.
+      var q = who.value.trim();
+      var pick = !sug.hidden && st.sugQ === q && st.active >= 0 ? st.sugg[st.active] : planPerson(q);
       if (pick) { ev.preventDefault(); addPerson(pick); }
-      else if (ev.key !== "Tab") { ev.preventDefault(); showMsg("Kies iemand uit de suggesties of typ een volledig e-mailadres."); }
+      else if (ev.key !== "Tab") {
+        ev.preventDefault();
+        planSearch(q).then(function (list) {
+          if (who.value.trim() !== q) return;
+          var hit = list.filter(function (p) { return p.email !== me.email && !people.some(function (x) { return x.email === p.email; }); })[0];
+          if (hit) addPerson(hit); else showMsg("Kies iemand uit de suggesties of typ een volledig e-mailadres.");
+        });
+      }
     } else if (ev.key === "Enter" && !who.value.trim()) { ev.preventDefault(); subj.focus(); }
     else if (ev.key === "Backspace" && !who.value && people.length) { people.pop(); paintChips(); resetSlots(); }
     else if (ev.key === "Escape" && !sug.hidden) { ev.preventDefault(); ev.stopPropagation(); closeSug(); }
@@ -530,7 +541,7 @@ function plannerEl(pre) {
   function paintSlots(r, data) {
     clear(result);
     var span = dayLabel(r.days[0]) + " t/m " + dayLabel(r.days[r.days.length - 1]);
-    var more = h("button", { class: "btn", type: "button", id: "pl-more", title: "Zoek in de " + PLAN_DAYS + " werkdagen daarna", text: "Andere dagen",
+    var more = h("button", { class: "btn", type: "button", id: "pl-more", title: "Zoek in de " + PLAN_DAYS + " werkdagen daarna (a)", "aria-keyshortcuts": "a", text: "Andere dagen",
       onclick: function () { findTime(st.week + 1); } });
     var unk = (Array.isArray(data.unavailableParticipants) ? data.unavailableParticipants : []).map(function (x) { var n = planPerson(x); return n ? n.name : str(x); }).filter(Boolean);
     if (!st.slots.length) {
@@ -598,10 +609,11 @@ function plannerEl(pre) {
     });
   }
   el._close = function () { if (genCtl) try { genCtl.abort(); } catch (e) { /* */ } };
-  // In de planner: 1, 2, 3 kiezen een moment (tooltip noemt de toets).
+  // In de planner: 1, 2, 3 kiezen een moment, a zoekt andere dagen (tooltips noemen de toets).
   el._keys = function (ev) {
     var n = +ev.key;
     if (n >= 1 && n <= st.slots.length && !ev.shiftKey) { ev.preventDefault(); createAt(st.slots[n - 1]); return true; }
+    if (ev.key === "a" && el.querySelector("#pl-more") && !st.busy) { ev.preventDefault(); findTime(st.week + 1); return true; }
     return false;
   };
   paintChips();

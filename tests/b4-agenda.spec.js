@@ -272,7 +272,10 @@ test.describe("Plan een vergadering", () => {
     await expect(p.getByRole("button", { name: "Haal Ruben Smit weg" })).toBeVisible();
     await p.getByRole("button", { name: "Zoek tijd" }).click();
     await expect(p).toContainText("Geen tijd gevonden waarop iedereen kan");
-    await p.getByRole("button", { name: "Andere dagen" }).click();
+    const more = p.getByRole("button", { name: "Andere dagen" });
+    await expect(more).toBeFocused();
+    await expect(more).toHaveAttribute("title", /\(a\)$/);
+    await page.keyboard.press("a");
     await expect(p.getByRole("group", { name: "Vrije momenten" }).getByRole("button")).toHaveCount(3);
     const calls = await mcpCalls(page, "outlook_find_available_time");
     expect(calls).toHaveLength(2);
@@ -319,6 +322,10 @@ test.describe("Plan een vergadering", () => {
     await who.press("Enter");
     await expect(planner(page).getByRole("button", { name: "Haal Sophie de Wit weg" })).toBeVisible();
     await expect(who).toBeFocused();
+    // Snel getypt: naam + Enter voordat de suggesties er zijn kiest toch de eerste treffer.
+    await who.fill("ma");
+    await who.press("Enter");
+    await expect(planner(page).getByRole("button", { name: "Haal Mark Bakker weg" })).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(planner(page)).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Plan een vergadering" })).toBeFocused();
