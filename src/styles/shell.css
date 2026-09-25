@@ -2,9 +2,9 @@
 /* Layout: drie zones. Links de ingangen, midden de lijst, rechts het detail (of het Claude-paneel).
    Elke kolom scrolt zelf; de pagina zelf scrolt niet op desktop. Mobiel (<= 700px): tabbalk onderaan,
    lijst en detail zijn twee schermen. */
-:root { --nav-w: 184px; --tab-h: 60px; }
+:root { --nav-w: 168px; --tab-h: 60px; --fb-h: 0px; }
 .app { display: grid; height: 100vh; height: 100dvh; min-height: 0;
-  grid-template-columns: var(--nav-w) minmax(300px, 1fr) minmax(360px, 1.15fr);
+  grid-template-columns: var(--nav-w) minmax(300px, 1fr) minmax(360px, 1.4fr);
   grid-template-rows: minmax(0, 1fr) auto;
   grid-template-areas: "nav list detail" "nav fb fb"; }
 .nav { grid-area: nav; overflow-y: auto; padding: var(--sp-4) var(--sp-2); border-right: 1px solid var(--border); background: var(--surface); display: flex; flex-direction: column; gap: var(--sp-3); min-width: 0; }
@@ -28,9 +28,17 @@
 .detail-top { display: none; }
 .detail-body { display: flex; flex-direction: column; gap: var(--sp-3); order: 3; }
 .abar { order: 1; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; position: sticky; top: calc(-1 * var(--sp-4)); z-index: 2;
-  margin: calc(-1 * var(--sp-4)) calc(-1 * var(--sp-5)) 0; padding: var(--sp-3) var(--sp-5); background: var(--surface); border-bottom: 1px solid var(--border); }
+  margin: calc(-1 * var(--sp-4)) calc(-1 * var(--sp-5)) 0; padding: var(--sp-3) var(--sp-4); background: var(--surface); border-bottom: 1px solid var(--border); }
+/* Compact: 5 vaste knoppen + 1 extra op één regel bij 1280px; de rest via "Meer". */
+.abar { gap: 4px; }
+.abar .btn { padding: 4px 8px; }
 .abar .btn[data-slot="extra"] { background: transparent; }
-.abar .btn[data-slot="extra"]:first-of-type { margin-left: 4px; }
+.abar-more { position: relative; }
+.abar-menu { position: absolute; right: 0; top: calc(100% + 4px); z-index: 5; min-width: 200px; display: flex; flex-direction: column; gap: 2px; padding: 6px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); box-shadow: var(--shadow-2); }
+.abar-menu[hidden] { display: none; }
+.abar-menu .btn { justify-content: flex-start; border-color: transparent; width: 100%; }
+.lbl-m { display: none; }
 .detail-inline { order: 2; }
 .detail-inline:empty { display: none; }
 .detail-inline .ccard { margin: 0; }
@@ -81,7 +89,8 @@ button.stretch:focus-visible::after { outline: 2px solid var(--focus); outline-o
   .detail { padding: var(--sp-3) var(--sp-4) var(--sp-4); }
   .abar { margin: calc(-1 * var(--sp-3)) calc(-1 * var(--sp-4)) 0; padding: var(--sp-3) var(--sp-4); top: calc(-1 * var(--sp-3)); }
 }
-/* Mobiel: tabbalk onderaan, lijst en detail als twee schermen, actiebalk onder de inhoud (duimbereik). */
+/* Mobiel: tabbalk onderaan, lijst en detail als twee schermen. De actiebalk plakt onderaan het detail boven de
+   tabbalk (duimbereik). De feedbackbalk zweeft boven de tabbalk; --fb-h houdt ruimte vrij zodat hij niets bedekt. */
 @media (max-width: 700px) {
   .app { display: block; height: auto; }
   .nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; flex-direction: row; padding: 0 0 env(safe-area-inset-bottom); height: calc(var(--tab-h) + env(safe-area-inset-bottom));
@@ -94,21 +103,28 @@ button.stretch:focus-visible::after { outline: 2px solid var(--focus); outline-o
   .nav-ic { font-size: 18px; width: auto; }
   .nav-lbl { flex: none; }
   .nav-count { position: absolute; top: 4px; left: calc(50% + 6px); min-width: 18px; padding: 0 5px; }
-  .list-col { overflow: visible; padding: var(--sp-3) var(--sp-4) calc(var(--tab-h) + 16px + env(safe-area-inset-bottom)); }
+  .list-col { overflow: visible; padding: var(--sp-3) var(--sp-4) calc(var(--tab-h) + 16px + var(--fb-h) + env(safe-area-inset-bottom)); }
   .detail-col { display: none; border-left: 0; }
   body.m-detail .list-col { display: none; }
-  body.m-detail .detail-col { display: flex; min-height: calc(100vh - var(--tab-h)); min-height: calc(100dvh - var(--tab-h)); padding-bottom: calc(var(--tab-h) + env(safe-area-inset-bottom)); }
-  .detail { overflow: visible; padding: var(--sp-3) var(--sp-4) var(--sp-5); }
+  body.m-detail .detail-col { display: flex; min-height: 100vh; min-height: 100dvh; padding-bottom: calc(var(--tab-h) + var(--fb-h) + env(safe-area-inset-bottom)); }
+  .detail { overflow: visible; padding: var(--sp-3) var(--sp-4) 0; }
   .detail-top { display: block; order: 0; margin: 0 0 -4px -6px; }
   .detail-body { order: 1; }
-  .abar { order: 2; position: static; margin: 0; padding: var(--sp-3) 0 0; border-bottom: 0; border-top: 1px solid var(--border); background: transparent; }
-  :root[data-theme="forest"] .abar { background: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .detail-inline { order: 2; }
+  .abar { order: 3; margin: auto calc(-1 * var(--sp-4)) 0; padding: var(--sp-2) var(--sp-4); position: sticky; top: auto;
+    bottom: calc(var(--tab-h) + var(--fb-h) + env(safe-area-inset-bottom)); border-bottom: 0; border-top: 1px solid var(--border); background: var(--surface); }
+  :root[data-theme="forest"] .abar { background: rgb(24 25 28 / .98); }
   .abar .btn { min-height: 44px; flex: 1 1 auto; }
-  .detail-inline { order: 3; }
+  .abar-more { flex: 1 1 auto; display: flex; }
+  .abar-more > .btn { flex: 1 1 auto; }
+  .abar-menu { top: auto; bottom: calc(100% + 4px); }
   .detail-title { font-size: var(--fs-lg); }
-  body.m-detail .detail-col .chat { height: calc(100vh - var(--tab-h) - env(safe-area-inset-bottom)); height: calc(100dvh - var(--tab-h) - env(safe-area-inset-bottom)); flex: none; }
+  body.m-detail .detail-col .chat { height: calc(100vh - var(--tab-h) - var(--fb-h) - env(safe-area-inset-bottom)); height: calc(100dvh - var(--tab-h) - var(--fb-h) - env(safe-area-inset-bottom)); flex: none; }
   .feedback { position: fixed; left: 8px; right: 8px; bottom: calc(var(--tab-h) + 8px + env(safe-area-inset-bottom)); z-index: 35; border-radius: var(--r-md); box-shadow: var(--shadow-2); }
-  .head-tools .lbl { display: none; }
+  /* Kop: Vraag Claude en Thema met zichtbaar label; verversen gaat per ingang (⟳ in de kop), sneltoetsen zijn voor desktop. */
+  #refreshAll, #helpBtn { display: none; }
+  #themeBtn { width: auto; padding: 0 12px; gap: 6px; font-size: var(--fs-sm); color: var(--text); }
+  .lbl-m { display: inline; }
 }
 
 /* Header */

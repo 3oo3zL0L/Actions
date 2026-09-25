@@ -129,6 +129,7 @@ test.describe("Selectie en detail", () => {
     // In een invoerveld: j is gewoon een letter.
     await actionBar(page).getByRole("button", { name: "Antwoord-concept" }).click();
     const ta = detail(page).getByRole("textbox", { name: "Tekst" });
+    await expect(ta).toHaveValue(/Mock-antwoord/, { timeout: 8000 }); // Claude schreef het concept
     await ta.fill("");
     await ta.pressSequentially("jk");
     await expect(ta).toHaveValue(/jk$/);
@@ -334,3 +335,148 @@ test.describe("Claude-paneel bedekt niets", () => {
     });
   }
 });
+
+// =========================================================================================
+// UX-review B1: fixes op schilniveau.
+test.describe("Review B1", () => {
+  test("Esc in een tekstveld verlaat het veld en geeft de focus aan de geselecteerde rij; daarna werken 2 en j", async ({ page, open }) => {
+    await open(buildMock());
+    await goTo(page, "Inbox");
+    await openItem(page, "Budget CI-runners Q4");
+    await page.keyboard.press("n"); // naar Acties, focus in Nieuwe actie
+    const add = page.getByRole("textbox", { name: "Nieuwe actie" });
+    await expect(add).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(add).not.toBeFocused();
+    await expect(selectedRow(page)).toBeFocused();
+    await page.keyboard.press("2");
+    await page.keyboard.press("j");
+    await expect(page.locator("#addInput")).toHaveValue("");
+    await expect(entryButton(page, "Inbox")).toHaveAttribute("aria-current", "page");
+    await expect(detail(page).getByRole("heading", { level: 2 })).toHaveText("Vraag over OIDC-scope voor partnerportaal");
+  });
+
+  test("elk type heeft Vraag Claude: c op een afspraak neemt de afspraak mee als context", async ({ page, open }) => {
+    await open(buildMock({ sample: { rules: [{ match: "Vraag van Thomas over dit item", text: "Mark wil een besluit." }] } }));
+    await openItem(page, "Architectuuroverleg Object Store");
+    await expect(actionBar(page).getByRole("button", { name: "Vraag Claude" })).toHaveAttribute("title", /\(c\)$/);
+    await page.keyboard.press("c");
+    await expect(page.getByRole("group", { name: "Context voor je vraag" })).toContainText("Over: Architectuuroverleg Object Store");
+    const box = page.getByRole("textbox", { name: "Bericht aan Claude" });
+    await box.fill("Wat moet ik voorbereiden?");
+    await box.press("Enter");
+    await expect(page.getByText("Mark wil een besluit.").first()).toBeVisible({ timeout: 8000 });
+    const input = JSON.stringify((await mockLog(page)).sample.at(-1).input);
+    expect(input).toContain("Afspraak");
+    expect(input).toContain("Architectuuroverleg Object Store");
+    expect(input).toContain("Mark Bakker");
+  });
+
+  test("na e en z staat de focus op de geselecteerde rij, niet op body", async ({ page, open }) => {
+    await open(buildMock());
+    await goTo(page, "Inbox");
+    await openItem(page, "Budget CI-runners Q4");
+    await page.keyboard.press("e");
+    await expect(detail(page).getByRole("heading", { level: 2 })).toHaveText("Vraag over OIDC-scope voor partnerportaal");
+    await expect(selectedRow(page)).toBeFocused();
+    await expect(itemWith(page, "Vraag over OIDC-scope voor partnerportaal").getByRole("button", { name: "Noor Mulder" })).toBeFocused();
+    await page.keyboard.press("z");
+    await expect(itemWith(page, "Budget CI-runners Q4")).toBeVisible();
+    await expect(selectedRow(page)).toBeFocused();
+    expect(await page.evaluate(() => document.activeElement !== document.body)).toBe(true);
+  });
+
+  test("tellers in navigatie en lijstkop tellen hetzelfde", async ({ page, open }) => {
+    await open(buildMock());
+    for (const name of ["Vandaag", "Acties", "Agenda"]) {
+      await goTo(page, name);
+      const navCount = (await entryButton(page, name).innerText()).replace(/\D+/g, "");
+      const region = page.getByRole("region", { name });
+      await expect(region.getByText(navCount, { exact: true }).first()).toBeVisible();
+      const headText = await region.locator(".card-head").innerText();
+      expect(headText.match(/\d+/)?.[0], `kopteller ${name}`).toBe(navCount);
+    }
+  });
+
+  test("1280px: actiebalk op één regel; extra acties die niet passen staan onder Meer en houden hun toets", async ({ page, open }) => {
+    await open(buildMock());
+    const oneLine = async () => {
+      const heights = await actionBar(page).evaluate((bar) => [...bar.children].map((c) => Math.round(c.getBoundingClientRect().top)));
+      expect(new Set(heights).size, `rijen: ${heights}`).toBe(1);
+    };
+    await goTo(page, "Inbox");
+    await openItem(page, "Budget CI-runners Q4");
+    await expect(actionBar(page).locator("[data-slot]")).toHaveCount(5);
+    await oneLine();
+    await goTo(page, "Acties");
+    await openItem(page, "Akkoord geven op releaseplanning 26.4");
+    await oneLine();
+    const more = actionBar(page).getByRole("button", { name: "Meer acties" });
+    await expect(more).toBeVisible();
+    await more.click();
+    const menu = actionBar(page).getByRole("menu", { name: "Meer acties" });
+    await expect(menu.getByRole("menuitem", { name: "Laten vervallen" })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(menu).toBeHidden();
+    await page.locator("body").press("x"); // Laten vervallen via de toets, ook vanuit Meer
+    await expect.poll(async () => (await dbDump(page, "acties/seed-001"))["acties/seed-001"].status).toBe("dropped");
+  });
+});
+
+test.describe("Review B1 mobiel 375px", () => {
+  test.use({ viewport: { width: 375, height: 812 } });
+
+  test("feedbackbalk bedekt de invoer en verzendknop van het Claude-paneel niet", async ({ page, open }) => {
+    await open(buildMock());
+    await goTo(page, "Inbox");
+    await itemWith(page, "Budget CI-runners Q4").click({ position: { x: 60, y: 14 } });
+    await actionBar(page).getByRole("button", { name: "Afhandelen" }).click();
+    await expect(feedbackBar(page)).toBeVisible();
+    await actionBar(page).getByRole("button", { name: "Vraag Claude" }).click();
+    const fbBox = await feedbackBar(page).boundingBox();
+    for (const loc of [page.getByRole("textbox", { name: "Bericht aan Claude" }), page.getByRole("button", { name: "Verstuur" }), page.locator("#chat")]) {
+      await expect(loc).toBeInViewport();
+      expect(overlaps(await loc.boundingBox(), fbBox), "feedbackbalk bedekt het paneel").toBe(false);
+    }
+    expect(overlaps(fbBox, await nav(page).boundingBox()), "feedbackbalk bedekt de tabbalk").toBe(false);
+  });
+
+  test("actiebalk plakt onderaan het detail boven de tabbalk, ook bij een lange mail en met feedbackbalk", async ({ page, open }) => {
+    const mock = buildMock();
+    const m = mock.tools["Microsoft 365"].outlook_email_search.items.find((x) => x.id === "mail-003");
+    m.summary = Array.from({ length: 60 }, (_, i) => "Regel " + (i + 1) + " van een lange mail over runners.").join(" ");
+    await open(mock);
+    await goTo(page, "Inbox");
+    await itemWith(page, "Budget CI-runners Q4").click({ position: { x: 60, y: 14 } });
+    const bar = actionBar(page);
+    const tab = await nav(page).boundingBox();
+    const check = async () => {
+      const b = await bar.boundingBox();
+      expect(b.y + b.height, "actiebalk onder de tabbalk").toBeLessThanOrEqual(tab.y + 1);
+      expect(b.y + b.height, "actiebalk niet in duimbereik").toBeGreaterThan(812 - 60 - 160);
+      for (const btn of await bar.locator("[data-slot], .abar-more > button").all()) await expect(btn).toBeInViewport();
+    };
+    await check();
+    expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeGreaterThan(812); // echt lang
+    await page.mouse.wheel(0, 600);
+    await check();
+    await bar.getByRole("button", { name: "Maak actie" }).isVisible();
+    // Met feedbackbalk: de actiebalk schuift erboven.
+    await page.evaluate(() => feedback({ text: "Test" }));
+    await expect(feedbackBar(page)).toBeVisible();
+    const fbBox = await feedbackBar(page).boundingBox();
+    await expect.poll(async () => { const b = await bar.boundingBox(); return b.y + b.height <= fbBox.y + 1; }).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
+  });
+
+  test("kop: Vraag Claude en Thema met zichtbaar label, geen losse iconen", async ({ page, open }) => {
+    await open(buildMock());
+    await expect(page.getByRole("button", { name: "Vraag Claude" })).toContainText("Vraag Claude");
+    await expect(page.getByRole("button", { name: /^Thema:/ })).toContainText("Thema");
+    await expect(page.getByRole("button", { name: "Alles verversen" })).toBeHidden();
+    await expect(page.getByRole("button", { name: "Sneltoetsen" })).toBeHidden();
+    const tools = await page.locator(".head-tools").evaluate((el) => [...el.children].filter((c) => c.offsetParent).map((c) => c.innerText.trim()));
+    for (const t of tools) expect(t.length, `knop zonder zichtbaar label: ${t}`).toBeGreaterThan(2);
+  });
+});
+

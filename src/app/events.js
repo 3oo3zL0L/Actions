@@ -105,6 +105,9 @@ document.addEventListener("keydown", function (e) {
   if ((e.ctrlKey || e.metaKey) && (e.key === "k" || e.key === "K")) { e.preventDefault(); openClaude(); return; }
   if ($("keys").open) return;
   if (e.key === "Escape") {
+    if (Shell.closeMore()) { e.preventDefault(); return; }
+    // Esc sluit het invulveld: veld verlaten, focus terug naar de geselecteerde rij.
+    if (typing && !(t.closest && t.closest("#chat"))) { e.preventDefault(); Shell.leaveField(t); return; }
     if (closeMenus()) { e.preventDefault(); return; }
     if (!chatEl.hidden) { e.preventDefault(); closePanel(); return; }
     if (Shell.isPhone() && Shell.screen() === "detail") { e.preventDefault(); Shell.back(); return; }

@@ -3,7 +3,7 @@
 
 // ---------- Vraag Claude per item ----------
 var ASK_NOUN = { mail: "deze mail", teams: "dit Teams-bericht", actie: "deze actie", jira: "dit Jira-issue",
-  vandaag: "mijn agenda van vandaag", inbox: "mijn inbox", acties: "mijn acties" };
+  vandaag: "mijn agenda van vandaag", inbox: "mijn inbox", acties: "mijn acties", item: "dit item" };
 var SECTION_TITLE = { vandaag: "Vandaag (agenda)", inbox: "Inbox (mail en Teams)", acties: "Acties (open acties)" };
 function itemId(type, it) { return type === "jira" ? str(it.key) : str(it.id); }
 function itemTitle(type, it) {
@@ -11,11 +11,13 @@ function itemTitle(type, it) {
   if (type === "mail") return str(it.subject) || "(geen onderwerp)";
   if (type === "teams") return trunc(it.summary || it.body, 60) || "Teams-bericht";
   if (type === "jira") return str(it.key) + " " + str(it.fields && it.fields.summary);
+  if (type === "item") return str(it.title);
   return str(it.text);
 }
 // Context voor de chat in de pagina (met ids voor voer_uit).
 function itemContext(type, it, body) {
   if (SECTION_TITLE[type]) return sectionContext(type, true);
+  if (type === "item") return str(it.context); // generieke context uit de schil (Shell.act.askDefault)
   var L = [];
   if (type === "mail") {
     L.push("Mail", "messageId: " + str(it.id), "uri: " + str(it.uri), "Van: " + nameFromAddr(it.sender || it.from), "Onderwerp: " + str(it.subject),
@@ -36,6 +38,7 @@ function itemContext(type, it, body) {
 // Context voor claude.ai/new: kort, zonder e-mailadressen of ids.
 function itemContextShort(type, it) {
   if (SECTION_TITLE[type]) return sectionContext(type, false);
+  if (type === "item") return trunc(it.short || it.context, 900);
   var L = [];
   if (type === "mail") L.push("Mail van " + nameFromAddr(it.sender || it.from) + ", onderwerp: " + str(it.subject), trunc(it.summary, 900));
   else if (type === "teams") L.push("Teams-bericht van " + teamsFrom(it) + (chatName(it.chatId) ? " in chat " + chatName(it.chatId) : ""), trunc(it.summary || it.body, 900));
