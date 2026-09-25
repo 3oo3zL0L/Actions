@@ -54,6 +54,7 @@ test.describe("Ingangen en tellers", () => {
     await expect(entryButton(page, "Inbox")).toHaveAttribute("title", "Inbox (2)");
     // Cijfers werken niet tijdens typen.
     await goTo(page, "Acties");
+    await page.getByRole("button", { name: "Nieuwe actie" }).click(); // B5: Nieuwe actie opent een formulier bovenaan het detail
     const add = page.getByRole("textbox", { name: "Nieuwe actie" });
     await add.fill("");
     await add.pressSequentially("2 offertes");
@@ -129,6 +130,9 @@ test.describe("Selectie en detail", () => {
     // In een invoerveld: j is gewoon een letter.
     await actionBar(page).getByRole("button", { name: "Antwoord-concept" }).click();
     const ta = detail(page).getByRole("textbox", { name: "Tekst" });
+    // Wacht tot Claude klaar is met het concept, anders overschrijft de laatste stap wat hier getypt wordt.
+    await expect(ta).toHaveValue(/\S/);
+    await expect(detail(page).getByText("Claude schrijft…")).toHaveCount(0);
     await ta.fill("");
     await ta.pressSequentially("jk");
     await expect(ta).toHaveValue(/jk$/);

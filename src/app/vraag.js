@@ -2,7 +2,7 @@
 "use strict";
 
 // ---------- Vraag Claude per item ----------
-var ASK_NOUN = { mail: "deze mail", teams: "dit Teams-bericht", actie: "deze actie", jira: "dit Jira-issue",
+var ASK_NOUN = { mail: "deze mail", teams: "dit Teams-bericht", actie: "deze actie", jira: "dit Jira-issue", event: "deze afspraak",
   vandaag: "mijn agenda van vandaag", inbox: "mijn inbox", acties: "mijn acties" };
 var SECTION_TITLE = { vandaag: "Vandaag (agenda)", inbox: "Inbox (mail en Teams)", acties: "Acties (open acties)" };
 function itemId(type, it) { return type === "jira" ? str(it.key) : str(it.id); }
@@ -11,6 +11,7 @@ function itemTitle(type, it) {
   if (type === "mail") return str(it.subject) || "(geen onderwerp)";
   if (type === "teams") return trunc(it.summary || it.body, 60) || "Teams-bericht";
   if (type === "jira") return str(it.key) + " " + str(it.fields && it.fields.summary);
+  if (type === "event") return (str(it.it && it.it.subject) || "Afspraak") + (it.start ? " (" + eventWhen(it) + ")" : "");
   return str(it.text);
 }
 // Context voor de chat in de pagina (met ids voor voer_uit).
@@ -27,6 +28,12 @@ function itemContext(type, it, body) {
     var f = it.fields || {};
     L.push("Jira-issue", "issueKey: " + str(it.key), "Samenvatting: " + str(f.summary), "Status: " + str(f.status && f.status.name),
       "Prioriteit: " + str(f.priority && f.priority.name), "Project: " + str(f.project && f.project.name), "Assignee: " + str(f.assignee && f.assignee.displayName));
+  } else if (type === "event") {
+    var ev = it.it || {};
+    L.push("Afspraak", "eventId: " + str(ev.id), "uri: " + str(ev.uri), "Onderwerp: " + str(ev.subject), "Tijd: " + eventWhen(it),
+      "Waar: " + str(ev.location), "Organisator: " + str(ev.organizer), "Deelnemers: " + (Array.isArray(ev.attendees) ? ev.attendees.map(evPersonName).slice(0, 20).join(", ") : ""),
+      isInvite(it) ? "Uitnodiging: nog niet beantwoord (outlook_respond_to_event)" : "",
+      (body && body.full ? "Volledige afspraak:" : "Beschrijving:"), body ? body.text : trunc(ev.summary, 3000));
   } else {
     L.push("Actie van Thomas", "Tekst: " + str(it.text), "Wie: " + str(it.who), "Deadline: " + str(it.due), "Programma: " + str(it.prog), "Status: " + str(it.status),
       it.why ? "Waarom: " + str(it.why) : "", it.extra ? "Notities: " + str(it.extra) : "", it.onderwerp ? "Bron: " + str(it.bron) + ", " + str(it.onderwerp) : "");
@@ -40,6 +47,7 @@ function itemContextShort(type, it) {
   if (type === "mail") L.push("Mail van " + nameFromAddr(it.sender || it.from) + ", onderwerp: " + str(it.subject), trunc(it.summary, 900));
   else if (type === "teams") L.push("Teams-bericht van " + teamsFrom(it) + (chatName(it.chatId) ? " in chat " + chatName(it.chatId) : ""), trunc(it.summary || it.body, 900));
   else if (type === "jira") { var f = it.fields || {}; L.push("Jira-issue " + str(it.key) + ": " + str(f.summary) + " (status " + str(f.status && f.status.name) + ")"); }
+  else if (type === "event") L.push("Afspraak: " + str(it.it && it.it.subject) + " (" + eventWhen(it) + ")", trunc(it.it && it.it.summary, 600));
   else L.push("Actie: " + str(it.text) + (it.prog ? " (" + it.prog + ")" : "") + (it.due ? ", deadline " + it.due : ""), it.why ? "Waarom: " + trunc(it.why, 300) : "", it.extra ? "Notities: " + trunc(it.extra, 300) : "");
   return L.filter(Boolean).join("\n");
 }
@@ -120,7 +128,7 @@ async function userAsk(v) {
   var c = chat.ctx;
   if (!c) { sendChat(v); return; }
   var body = null;
-  if (c.type === "mail" || c.type === "teams") { c.status = "Inhoud ophalen…"; renderCtx(); body = await fullOrSummary(c.it); }
+  if (c.type === "mail" || c.type === "teams" || c.type === "event") { c.status = "Inhoud ophalen…"; renderCtx(); body = await fullOrSummary(c.type === "event" ? c.it.it : c.it); }
   if (chat.ctx !== c) { sendChat(v); return; }
   chat.ctx = null; renderCtx();
   var prompt = "Vraag van Thomas over " + ASK_NOUN[c.type] + ": " + v +

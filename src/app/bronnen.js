@@ -4,7 +4,8 @@
 // ---------- Bronnen (mcp) ----------
 function getJql() { return lsGet(LS.jql) || DEFAULT_JQL; }
 var SOURCES = {
-  cal: { server: M365, tool: "outlook_calendar_search", input: function () { return { query: "*", afterDateTime: "today", beforeDateTime: "tomorrow", limit: 25 }; }, every: 300000 },
+  // Vandaag en morgen (B4): tot het begin van overmorgen.
+  cal: { server: M365, tool: "outlook_calendar_search", input: function () { var d = startOfDay(new Date()); d.setDate(d.getDate() + 2); return { query: "*", afterDateTime: "today", beforeDateTime: isoDay(d), limit: 25 }; }, every: 300000 },
   mail: { server: M365, tool: "outlook_email_search", input: function () { return { order: "newest", limit: 25 }; }, every: 180000 },
   teams: { server: M365, tool: "chat_message_search", input: function () { return { query: "*", afterDateTime: "yesterday", limit: 25 }; }, every: 180000 },
   chats: { server: M365, tool: "teams_list_chats", input: function () { return { limit: 25 }; }, every: 600000, silent: true },

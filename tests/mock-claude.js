@@ -105,6 +105,81 @@
     return { payload: {} };
   }
 
+  // ==== B4 Agenda (additief, begin) =====================================================================
+  // Echte vormen en invoergrenzen van outlook_find_available_time, outlook_respond_to_event en
+  // outlook_create_event (schema's van de Microsoft 365-connector), plus read_resource per uri.
+  //   Fixture read_resource: { byUri: { "<uri>": Fixture }, fallback?: Fixture }
+  //   Zonder fixture: find_available_time geeft vrije sloten op werkdagen (09:30, 11:00, 14:00, 16:00,
+  //   wandklok "W. Europe Standard Time") binnen [afterDateTime, beforeDateTime); respond geeft een tekstblok;
+  //   create_event geeft {id, webLink, onlineMeeting?}. Ongeldige invoer zonder fixture = contractschending.
+  const AG_WALL = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,7})?)?$/;
+  const AG_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
+  const AG_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const AG_EVENT_ID = /^[A-Za-z0-9+/=_-]+$/;
+  const AG_CREATE_KEYS = ["subject", "start", "end", "attendees", "body", "bodyType", "calendarId", "importance", "isOnlineMeeting", "location",
+    "responseRequested", "sensitivity", "showAs"];
+  function agendaInputError(tool, i) {
+    i = i || {};
+    if (tool === "outlook_find_available_time") {
+      if (!AG_UTC.test(i.afterDateTime || "") || !AG_UTC.test(i.beforeDateTime || "")) return "afterDateTime/beforeDateTime must be ISO 8601 UTC (YYYY-MM-DDTHH:mm:ssZ)";
+      if (Date.parse(i.beforeDateTime) <= Date.parse(i.afterDateTime)) return "beforeDateTime must be after afterDateTime";
+      if (i.durationMinutes != null && !(Number.isInteger(i.durationMinutes) && i.durationMinutes >= 15 && i.durationMinutes <= 480)) return "durationMinutes must be 15..480";
+      if (i.participants != null && (!Array.isArray(i.participants) || i.participants.length > 50 || !i.participants.every((x) => AG_EMAIL.test(String(x))))) return "participants must be email addresses (max 50)";
+      if (i.maxCandidates != null && !(Number.isInteger(i.maxCandidates) && i.maxCandidates >= 1 && i.maxCandidates <= 50)) return "maxCandidates must be 1..50";
+    } else if (tool === "outlook_respond_to_event") {
+      if (!AG_EVENT_ID.test(i.eventId || "") || String(i.eventId).length > 512) return "eventId invalid";
+      if (!["accept", "decline", "tentative"].includes(i.response)) return "response must be accept|decline|tentative";
+      if (i.comment != null && (typeof i.comment !== "string" || i.comment.length > 1024)) return "comment must be a string (max 1024)";
+      if (i.comment && i.sendResponse === false) return "comment requires sendResponse";
+      if (i.proposedNewTime && i.response === "accept") return "proposedNewTime only with decline or tentative";
+    } else if (tool === "outlook_create_event") {
+      const extra = Object.keys(i).filter((k) => !AG_CREATE_KEYS.includes(k));
+      if (extra.length) return "unknown field(s) " + extra.join(", ");
+      if (typeof i.subject !== "string" || !i.subject || i.subject.length > 255) return "subject required (max 255)";
+      for (const k of ["start", "end"]) {
+        const t = i[k];
+        if (!t || typeof t !== "object" || !AG_WALL.test(t.dateTime || "") || !t.timeZone) return k + " must be {dateTime (no offset), timeZone}";
+      }
+      if (i.start.timeZone === i.end.timeZone && i.end.dateTime <= i.start.dateTime) return "end must be after start";
+      if (i.attendees != null && (!Array.isArray(i.attendees) || i.attendees.length > 50 ||
+        !i.attendees.every((a) => a && AG_EMAIL.test(a.email || "") && (!a.type || ["required", "optional", "resource"].includes(a.type)) && (a.name == null || String(a.name).length <= 256))))
+        return "attendees must be [{email, name?, type?}] (max 50)";
+      if (i.bodyType != null && !["text", "html"].includes(i.bodyType)) return "bodyType must be text|html";
+    }
+    return null;
+  }
+  const agendaPad = (n) => String(n).padStart(2, "0");
+  const agendaWall = (d) => d.getFullYear() + "-" + agendaPad(d.getMonth() + 1) + "-" + agendaPad(d.getDate()) + "T" + agendaPad(d.getHours()) + ":" + agendaPad(d.getMinutes()) + ":00.0000000";
+  function agendaDefaultFixture(tool, i) {
+    i = i || {};
+    if (tool === "outlook_find_available_time") {
+      // De testbrowser draait in Europe/Amsterdam: lokale tijd = wandklok W. Europe Standard Time.
+      const from = new Date(i.afterDateTime), to = new Date(i.beforeDateTime), dur = i.durationMinutes || 60, max = i.maxCandidates || 10;
+      const out = [];
+      const day = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+      for (let n = 0; n < 60 && day < to && out.length < max; n++, day.setDate(day.getDate() + 1)) {
+        if (day.getDay() === 0 || day.getDay() === 6) continue;
+        for (const [hh, mm, conf] of [[9, 30, 100], [11, 0, 100], [14, 0, 80], [16, 0, 50]]) {
+          const st = new Date(day.getFullYear(), day.getMonth(), day.getDate(), hh, mm);
+          const en = new Date(st.getTime() + dur * 60000);
+          if (st < from || en > to || out.length >= max) continue;
+          out.push({ start: { dateTime: agendaWall(st), timeZone: "W. Europe Standard Time" }, end: { dateTime: agendaWall(en), timeZone: "W. Europe Standard Time" },
+            confidence: conf, organizerAvailability: "free",
+            attendeeAvailability: (i.participants || []).map((email) => ({ email, availability: conf === 100 ? "free" : "tentative" })) });
+        }
+      }
+      return { payload: { nowDateTime: new Date().toISOString(), availableTimes: out, unavailableParticipants: [] } };
+    }
+    if (tool === "outlook_respond_to_event") return { text: "Responded '" + i.response + "' to event " + i.eventId + "." };
+    if (tool === "outlook_create_event") {
+      const id = "mock-event-" + (LOG.mcp.length + 1);
+      return { payload: { id, webLink: "https://outlook.example.com/owa/?itemid=" + id, subject: i.subject,
+        onlineMeeting: i.isOnlineMeeting ? { joinUrl: "https://teams.example.com/l/meetup-join/" + id } : null } };
+    }
+    return null;
+  }
+  // ==== B4 Agenda (additief, einde) =====================================================================
+
   function tryParse(text) { try { return JSON.parse(text); } catch { return text; } }
 
   function buildResult(fx) {
@@ -161,6 +236,14 @@
         const n = countPrior(server, tool);
         fx = fx.sequence[Math.min(n, fx.sequence.length - 1)];
       }
+      // ---- B4 Agenda (additief): read_resource per uri, invoercontrole en standaardvormen agenda-tools ----
+      if (fx && fx.byUri) fx = fx.byUri[input && input.uri] || fx.fallback || null;
+      if (!fx && server === "Microsoft 365") {
+        const bad = agendaInputError(tool, input);
+        if (bad) { violation(`${tool}: ${bad}`); throw mcpErr("tool_error", "Input validation error: " + bad, { server }); }
+        fx = agendaDefaultFixture(tool, input);
+      }
+      // ---- B4 Agenda (einde) ----
       if (!fx) fx = defaultFixture(server, tool);
       await sleep(fx.delayMs || 5);
       if (signal && signal.aborted) throw mcpErr("cancelled", "aborted");
