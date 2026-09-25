@@ -41,7 +41,7 @@ test.describe("Fase 2: voorstellen uit je mail", () => {
   test("toont alleen nieuwe voorstellen met bronregel en mail-link", async ({ page, open }) => {
     await open(mockWith());
     const blok = voorstelBlok(page);
-    await expect(blok.getByRole("heading", { name: /uit je mail \(2\)/i })).toBeVisible();
+    await expect(blok.getByRole("heading", { name: /voorstellen \(2\)/i })).toBeVisible();
     await expect(blok.getByText("Reageren op budgetvoorstel CI-runners")).toBeVisible();
     await expect(blok.getByText("OIDC-scope beoordelen voor partnerportaal")).toBeVisible(); // `tekst` defensief gelezen
     await expect(blok.getByText("Al eerder afgewezen voorstel")).toHaveCount(0);
@@ -52,10 +52,13 @@ test.describe("Fase 2: voorstellen uit je mail", () => {
     await expect(link).toHaveAttribute("target", "_blank");
   });
 
-  test("blok is verborgen zonder nieuwe voorstellen", async ({ page, open }) => {
+  test("zonder nieuwe voorstellen alleen een compacte scanregel", async ({ page, open }) => {
     await open(buildMock());
     await expect(page.getByText("Akkoord geven op releaseplanning 26.4").first()).toBeVisible();
-    await expect(page.getByRole("heading", { name: /uit je mail/i })).toHaveCount(0);
+    // Ronde 4: geen kop, alleen een compacte regel met "Scan nu".
+    await expect(page.getByRole("heading", { name: /voorstellen \(/i })).toHaveCount(0);
+    await expect(page.locator("#voorstellen")).toContainText("Geen voorstellen");
+    await expect(page.locator("#voorstellen").getByRole("button", { name: "Scan nu" })).toBeVisible();
   });
 
   test("Op de lijst maakt actie v-<id> en zet voorstel op ja", async ({ page, open }) => {
@@ -66,7 +69,7 @@ test.describe("Fase 2: voorstellen uit je mail", () => {
     expect(actie).toMatchObject({ text: "Reageren op budgetvoorstel CI-runners", status: "open", bron: "mail",
       bronUrl: "https://outlook.example.com/owa/?ItemID=mail-003", van: "Ruben Smit", onderwerp: "Budget CI-runners Q4",
       prog: "CI Acceleration" });
-    await expect(page.getByRole("heading", { name: /uit je mail \(1\)/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /voorstellen \(1\)/i })).toBeVisible();
     // Actie staat nu in de lijst, met why als tweede regel.
     await expect(page.locator("#acties-list").getByText("Reageren op budgetvoorstel CI-runners")).toBeVisible();
     await expect(page.locator("#acties-list").getByText("Ruben wacht op akkoord voor Q4")).toBeVisible();

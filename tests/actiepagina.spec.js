@@ -447,6 +447,11 @@ test.describe("Layout, thema en toegankelijkheid", () => {
   test("donker thema geeft een andere achtergrond, ook via data-theme", async ({ page, open }) => {
     await page.emulateMedia({ colorScheme: "light" });
     await open(buildMock());
+    // Ronde 4: standaardthema is Dark Forest (data-theme="forest", zwarte achtergrond), ongeacht het systeem.
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "forest");
+    expect(await bodyBg(page), "Dark Forest is niet de standaard").toBe("rgb(0, 0, 0)");
+    // Thema "Systeem" = geen data-theme: dan volgt de pagina prefers-color-scheme.
+    await page.evaluate(() => document.documentElement.removeAttribute("data-theme"));
     const light = await bodyBg(page);
     await page.emulateMedia({ colorScheme: "dark" });
     const dark = await bodyBg(page);
