@@ -45,3 +45,6 @@
 .wpanel .field label { font-size: var(--fs-sm); font-weight: 600; }
 .wpanel .fgrid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 0 10px; }
 @media (max-width: 560px) { .wpanel .fgrid { grid-template-columns: minmax(0, 1fr); } .wpanel input[type="text"], .wpanel select { min-height: 44px; } }
+.meta-list .wijzig { min-height: 0; padding: 0 4px; font-size: var(--fs-xs); vertical-align: baseline; }
+.wpanel .field-hint { margin: 4px 0 0; color: var(--warn); font-size: var(--fs-sm); font-weight: 600; }
+@media (max-width: 700px) { .meta-list .wijzig { min-height: 32px; padding: 0 8px; } }

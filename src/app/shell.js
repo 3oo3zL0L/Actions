@@ -235,6 +235,22 @@ var Shell = (function () {
   var SLOTS = ["primary", "done", "make", "ask", "open", "extra", "more"];
   var curActions = [];
   function inlineSlot() { return $("detailInline"); }
+  // Mobiel: een invulkaart in de detailkolom (Reageer, Status, concept, formulier) mag niet achter de sticky
+  // actiebalk vallen. Na openen, en als hij groeit terwijl je erin werkt, scrollt de pagina tot zijn onderkant
+  // vrij boven de balk staat (de bovenkant blijft in beeld). Zie ook scroll-padding-bottom in shell.css.
+  function keepInlineVisible(force) {
+    if (!isPhone() || st.screen !== "detail") return;
+    var slot = $("detailInline"), bar = $("abar"), card = slot.lastElementChild;
+    if (!card || (!force && !slot.contains(document.activeElement))) return;
+    var r = card.getBoundingClientRect();
+    var barTop = bar.hidden || !bar.offsetParent ? window.innerHeight : bar.getBoundingClientRect().top;
+    var over = r.bottom - (barTop - 8);
+    if (over > 0) window.scrollBy(0, Math.min(over, Math.max(0, r.top - 8)));
+  }
+  try {
+    new MutationObserver(function () { requestAnimationFrame(function () { keepInlineVisible(true); }); }).observe($("detailInline"), { childList: true });
+    if (window.ResizeObserver) new ResizeObserver(function () { keepInlineVisible(false); }).observe($("detailInline"));
+  } catch (e) { /* oudere browser: alleen scroll-padding */ }
   function renderDetail() {
     var body = clear($("detailBody")), bar = clear($("abar")), slot = clear($("detailInline"));
     curActions = [];

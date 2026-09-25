@@ -31,6 +31,8 @@
 @media (max-width: 700px) {
   .cmdbar { margin: 8px auto auto; width: calc(100vw - 16px); }
   .cmd-tag, .cmd-ic { min-width: 0; }
-  .cmd-hint { display: none; }
-  .cmd-opt { min-height: 44px; align-items: center; }
+  /* Mobiel: de hint (waar gaat het over) als tweede regel onder het label. */
+  .cmd-opt { min-height: 44px; flex-wrap: wrap; row-gap: 0; align-items: baseline; }
+  .cmd-hint { order: 5; flex: 1 1 100%; padding-left: 0; font-size: var(--fs-xs); }
+  .k-ask .cmd-hint { padding-left: 0; }
 }

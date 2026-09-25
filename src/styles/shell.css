@@ -112,6 +112,8 @@ button.stretch:focus-visible::after { outline: 2px solid var(--focus); outline-o
   .detail-top { display: block; order: 0; margin: 0 0 -4px -6px; }
   .detail-body { order: 1; }
   .detail-inline { order: 2; }
+  /* Focus in een invulkaart scrolt hem vrij van actiebalk en tabbalk (shell.js keepInlineVisible doet de hele kaart). */
+  html { scroll-padding-bottom: calc(var(--tab-h) + var(--fb-h) + 120px + env(safe-area-inset-bottom)); }
   .abar { order: 3; margin: auto calc(-1 * var(--sp-4)) 0; padding: var(--sp-2) var(--sp-4); position: sticky; top: auto;
     bottom: calc(var(--tab-h) + var(--fb-h) + env(safe-area-inset-bottom)); border-bottom: 0; border-top: 1px solid var(--border); background: var(--surface); }
   :root[data-theme="forest"] .abar { background: rgb(24 25 28 / .98); }
