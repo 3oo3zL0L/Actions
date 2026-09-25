@@ -189,7 +189,8 @@ test.describe("Vraag Claude per item", () => {
     expect(prompt).toContain("messageId: mail-003");
     expect(prompt).toContain("Volledige mail over runners.");
     expect(call.toolNames).toContain("voer_uit");
-    expect((await mcpCalls(page, "read_resource"))[0].input).toEqual({ uri: "mail:///messages/mail-003" });
+    // B4: de open afspraak in Vandaag wordt ook volledig gelezen; de mail-oproep is die met de mail-uri.
+    expect((await mcpCalls(page, "read_resource")).map((c) => c.input)).toContainEqual({ uri: "mail:///messages/mail-003" });
     await expect(ctxCard(page)).toBeHidden(); // context is gebruikt
   });
 

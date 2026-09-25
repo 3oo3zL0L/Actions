@@ -41,7 +41,7 @@ function acceptVoorstel(v) {
   }).then(function () {
     delete voorst.busy[v.id];
     voorst.last = { v: v, kind: "ja" };
-    feedback({ text: "Op de lijst gezet: " + trunc(v.text, 60), undo: undoVoorstel });
+    feedback({ text: "Op de lijst gezet: " + trunc(v.text, 60), undo: undoVoorstel, undoText: "Terug bij de voorstellen: " + trunc(v.text, 60) });
     logEvent("voorstel_ja");
     renderVoorstellen();
   }, function (e) {
@@ -54,7 +54,7 @@ function rejectVoorstel(v) {
   if (!cap.db || voorst.busy[v.id]) return;
   voorst.busy[v.id] = true; renderVoorstellen();
   setVoorstStatus(v, "nee").then(function () {
-    delete voorst.busy[v.id]; voorst.last = { v: v, kind: "nee" }; feedback({ text: "Weggelegd: " + trunc(v.text, 60), undo: undoVoorstel }); logEvent("voorstel_nee"); renderVoorstellen();
+    delete voorst.busy[v.id]; voorst.last = { v: v, kind: "nee" }; feedback({ text: "Weggelegd: " + trunc(v.text, 60), undo: undoVoorstel, undoText: "Terug bij de voorstellen: " + trunc(v.text, 60) }); logEvent("voorstel_nee"); renderVoorstellen();
   }, function (e) { delete voorst.busy[v.id]; setLocal(v.id, "nieuw"); voorst.error = e || { code: "unavailable" }; renderVoorstellen(); });
 }
 function setLocal(id, st) { voorst.docs.forEach(function (d) { if (d.id === id) d.status = st; }); }
@@ -67,7 +67,7 @@ function undoVoorstel() {
         acties.docs = acties.docs.filter(function (d) { return d.id !== "v-" + id; }); delete acties.pending["v-" + id]; renderActies(); renderNowStrip();
       })
     : Promise.resolve();
-  p.then(function () { return setVoorstStatus(l.v, "nieuw"); }).then(function () { feedback({ text: "Ongedaan gemaakt" }); logEvent("voorstel_ongedaan"); renderVoorstellen(); },
+  p.then(function () { return setVoorstStatus(l.v, "nieuw"); }).then(function () { feedback({ text: "Terug bij de voorstellen: " + trunc(l.v.text, 60) }); logEvent("voorstel_ongedaan"); renderVoorstellen(); },
     function (e) { voorst.error = e || { code: "unavailable" }; renderVoorstellen(); });
   renderVoorstellen();
 }
@@ -191,6 +191,13 @@ async function scanVoorstellen() {
 }
 
 // ---------- Voorstel als rij in Vandaag, met detail ----------
+// Herkomst leesbaar: "ochtend-2026-09-25" wordt "Ochtendscan 25 sep", "scan 25 sep 2026" wordt "Scan 25 sep"; anders niets.
+function runLabel(run) {
+  var m = /^ochtend-(\d{4})-(\d{2})-(\d{2})$/.exec(str(run));
+  if (m) return "Ochtendscan " + (+m[3]) + " " + MONTHS_S[+m[2] - 1];
+  m = /^scan (\d{1,2} \w+)/i.exec(str(run));
+  return m ? "Scan " + m[1] : "";
+}
 function voorstelRow(v) {
   var src = [v.van, v.onderwerp, v.prog].filter(Boolean).join(" · ");
   var row = h("li", { class: "row" },
@@ -202,7 +209,7 @@ Shell.type("voorstel", {
   title: function (v) { return v.text; },
   detail: function (v, body) {
     add(body, metaList([["Van", v.van], ["Onderwerp", v.onderwerp], ["Programma", v.prog], ["Bron", v.bron === "teams" ? "Teams" : "mail"],
-      ["Uit", v.run]]));
+      ["Uit", runLabel(v.run)]]));
     if (v.why) body.append(h("p", { class: "detail-text", text: v.why }));
     if (voorst.error) body.append(h("p", { class: "errmsg", role: "alert", text: "Opslaan van je besluit lukte niet. Probeer het opnieuw." }));
   },

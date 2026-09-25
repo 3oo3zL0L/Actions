@@ -356,8 +356,9 @@ var Shell = (function () {
     if (b && b.offsetParent !== null) b.focus({ preventScroll: true });
     else { var l = $("lijst"); l.focus({ preventScroll: true }); }
   }
+  function paneOpen() { return $("detailView").classList.contains("has-pane"); }
   function runPrimary() {
-    if (!$("chat").hidden || !st.cur) return false;
+    if (!$("chat").hidden || !st.cur || paneOpen()) return false;
     for (var i = 0; i < curActions.length; i++) {
       var a = curActions[i];
       if (a.slot === "primary" && a.el && document.contains(a.el)) { a.el.click(); return true; }
@@ -366,7 +367,7 @@ var Shell = (function () {
   }
   function refreshDetail() { if (st.cur) st.sig = sigOf(st.cur); renderDetail(); }
   function runKey(k) {
-    if (!$("chat").hidden || !st.cur) return false;
+    if (!$("chat").hidden || !st.cur || paneOpen()) return false;
     if (isPhone() && st.screen !== "detail") return false;
     for (var i = 0; i < curActions.length; i++) {
       var a = curActions[i];
@@ -468,7 +469,9 @@ var Shell = (function () {
 
 // ---------- Feedbackbalk: één balk onderaan voor alles ----------
 // feedback({text, undo?: fn, undoLabel?, countdown?: seconden, onCountdownDone?: fn, link?, linkLabel?, note?,
-//           action?: {label, title?, run}})  action: een tweede knop in de app zelf (bv. "Bekijk": naar het nieuwe item).
+//           action?: {label, title?, run}, undoText?})  action: een tweede knop in de app zelf (bv. "Bekijk": naar het nieuwe item).
+// Na Ongedaan maken / Annuleer zegt de balk wat nu waar is: undoText ("Terug op de lijst: …"), anders "Ongedaan gemaakt"
+// (bij een uitstel "Geannuleerd"). Roept de undo zelf feedback() aan, dan wint die melding.
 // Toont "✓ <text> · <undoLabel> (Ns) · Bekijk ↗". Geeft {update(opts), close()} terug. Toets z = undo.
 // Met countdown is undo een annuleer-knop: onCountdownDone loopt na N seconden (bv. mail echt versturen),
 // of direct als er een nieuwe melding komt of de balk gesloten wordt (een uitstel wordt nooit stil geannuleerd).
@@ -481,7 +484,8 @@ function feedback(o) {
   var cur = { text: o.text, undo: o.undo || null, undoLabel: o.undoLabel || (o.countdown ? "Annuleer" : "Ongedaan maken"),
     countdown: o.countdown || 0, left: o.countdown || 0, onCountdownDone: o.onCountdownDone || null, link: safeUrl(o.link), linkLabel: o.linkLabel || "Bekijk",
     note: o.note || "", settled: false, icon: o.icon == null ? "✓" : o.icon, btn: null,
-    action: o.action && typeof o.action.run === "function" ? o.action : null };
+    action: o.action && typeof o.action.run === "function" ? o.action : null,
+    undoText: o.undoText || (o.countdown ? "Geannuleerd" : "Ongedaan gemaakt") };
   fb.cur = cur;
   function label() { return cur.undoLabel + (cur.countdown && !cur.settled ? " (" + cur.left + "s)" : ""); }
   function paint() {
@@ -510,6 +514,7 @@ function feedback(o) {
     clearInterval(fb.tick);
     var u = cur.undo; cur.undo = null;
     Shell.focusSoon();
+    cur.text = cur.undoText; cur.icon = "✓"; cur.action = null; cur.link = null;
     paint();
     try { u(); } catch (e) { /* */ }
     if (fb.cur === cur) hideLater(4000);

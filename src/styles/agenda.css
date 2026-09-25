@@ -4,7 +4,6 @@
 .timeline::before { content: ""; position: absolute; left: 4px; top: 6px; bottom: 6px; width: 2px; background: var(--border); border-radius: 2px; }
 .timeline .row.past .title, .timeline .row.past .l2, .timeline .row.past .time { color: var(--text-3); }
 .timeline .row.cancelled { opacity: .7; }
-.timeline .row.current { background: var(--accent-soft); }
 .time { font-family: var(--mono); font-size: var(--fs-sm); color: var(--text-2); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .nowline { display: flex; align-items: center; gap: 8px; color: var(--accent-text); font-size: var(--fs-xs); font-weight: 600; margin: 4px 0; list-style: none; }
 .nowline::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); margin-left: -19px; flex: none; }
@@ -17,6 +16,10 @@
 .aday h3 { font-size: var(--fs-sm); font-weight: 600; margin: 0 0 4px; color: var(--text-2); display: flex; gap: 8px; align-items: baseline; }
 .aday h3 .n { color: var(--text-3); font-weight: 400; }
 .badge.invite { background: var(--info-soft); color: var(--info); }
+/* Nu-rij: accentrand en vette tijd, geen vlak (het vlak is voor de selectie). */
+.timeline .row.current { background: transparent; box-shadow: inset 0 0 0 1px var(--accent); }
+.timeline .row.current .time { color: var(--accent-text); font-weight: 700; }
+.timeline .row.current.is-sel { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent), inset 0 0 0 1px var(--accent); }
 .vsub { margin: var(--sp-2) 0 2px; font-size: var(--fs-xs); font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: .05em; }
 .plan-btn { white-space: nowrap; }
 .card-head .fresh:empty + .plan-btn { margin-left: auto; }
@@ -30,8 +33,8 @@
 .dpane { order: 0; border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: var(--r-md); background: var(--bg);
   padding: var(--sp-3) var(--sp-4); display: flex; flex-direction: column; gap: var(--sp-3); }
 .dpane[hidden] { display: none; }
-.detail.has-pane .abar { margin-top: 0; }
-.detail.has-pane .detail-empty { display: none; }
+/* Formulier open: het detail van het geselecteerde item (en zijn actiebalk) staat er even niet, ook niet sticky op mobiel. */
+.detail.has-pane > .abar, .detail.has-pane > .detail-inline, .detail.has-pane > .detail-body { display: none; }
 .dpane-head { display: flex; align-items: center; gap: 8px; margin: -4px -8px -4px 0; }
 .dpane-head h3 { margin: 0; font-size: var(--fs-md); font-weight: 700; flex: 1; }
 .dpane .btns { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }

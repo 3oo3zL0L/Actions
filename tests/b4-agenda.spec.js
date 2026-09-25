@@ -2,7 +2,10 @@
 // Maak actie vanuit een afspraak en "Plan een vergadering" op beschikbaarheid. Gedrag via rollen en teksten.
 const { test: base, expect } = require("@playwright/test");
 const { buildMock } = require("./fixtures");
-const { buildAgendaMock, freeSlots, nextWorkdays } = require("./fixtures/agenda");
+const { buildAgendaMock, freeSlots, nextWorkdays, nextDay } = require("./fixtures/agenda");
+const { referenceNow } = require("./fixtures");
+const NEXT = nextDay(referenceNow()); // "Morgen", of op vrijdag "Maandag"
+const nextHead = new RegExp("^" + NEXT.title);
 const { openPage, mockLog, mcpCalls, dbDump, itemWith, goTo, entryButton, detail, actionBar, feedbackBar, openItem, heading } = require("./helpers");
 
 const test = base.extend({
@@ -27,8 +30,8 @@ test.describe("Agenda: vandaag en morgen", () => {
     await open(buildAgendaMock());
     await goTo(page, "Agenda");
     await expect(heading(page, /^Vandaag/)).toBeVisible();
-    await expect(heading(page, /^Morgen/)).toBeVisible();
-    const morgen = page.locator(".aday").filter({ has: page.getByRole("heading", { name: /^Morgen/ }) });
+    await expect(heading(page, nextHead)).toBeVisible();
+    const morgen = page.locator(".aday").filter({ has: page.getByRole("heading", { name: nextHead }) });
     await expect(morgen.getByText("Roadmapsessie Jakarta migratie")).toBeVisible();
     await expect(morgen).toContainText("09:30-10:30");
     await expect(morgen.getByText(/^nu \d/)).toHaveCount(0); // nu-lijn alleen bij vandaag
@@ -47,10 +50,7 @@ test.describe("Agenda: vandaag en morgen", () => {
     await expect(rij.getByRole("button")).toHaveCount(1);
     // Zoekbereik: vandaag tot het begin van overmorgen (morgen zit erin).
     const [call] = await mcpCalls(page, "outlook_calendar_search");
-    const d = new Date(await page.evaluate(() => Date.now()));
-    d.setDate(d.getDate() + 2);
-    const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-    expect(call.input).toMatchObject({ afterDateTime: "today", beforeDateTime: iso });
+    expect(call.input).toMatchObject({ afterDateTime: "today", beforeDateTime: NEXT.afterIso }); // tot na de volgende werkdag
     expect(call.input.limit).toBeLessThanOrEqual(25);
     // Teller van Agenda blijft: afspraken van vandaag die nog komen of lopen (4 + uitnodiging 14:30).
     await expect(entryButton(page, "Agenda")).toHaveAccessibleName("Agenda 5");
@@ -59,8 +59,8 @@ test.describe("Agenda: vandaag en morgen", () => {
   test("zonder afspraken morgen een uitleg in plaats van een lege plek", async ({ page, open }) => {
     await open(buildMock());
     await goTo(page, "Agenda");
-    await expect(heading(page, /^Morgen/)).toBeVisible();
-    await expect(page.getByText("Geen afspraken morgen.")).toBeVisible();
+    await expect(heading(page, nextHead)).toBeVisible();
+    await expect(page.getByText("Geen afspraken " + NEXT.title.toLowerCase() + ".")).toBeVisible();
   });
 
   test("Vandaag: als de dag voorbij is, staat de eerste afspraak van morgen erbij", async ({ page, open }) => {
@@ -68,7 +68,7 @@ test.describe("Agenda: vandaag en morgen", () => {
     mock.refNow += 8 * 3600000; // 18:15
     await open(mock);
     await expect(page.getByText("Geen afspraken meer vandaag.")).toBeVisible();
-    await expect(page.getByText("Morgen als eerste")).toBeVisible();
+    await expect(page.getByText(NEXT.title + " als eerste")).toBeVisible();
     await expect(itemWith(page, "Roadmapsessie Jakarta migratie")).toContainText("09:30-10:30");
     await expect(page.getByText("Demo CI Acceleration")).toHaveCount(0); // alleen de eerste
   });
@@ -97,7 +97,7 @@ test.describe("Uitnodiging beantwoorden", () => {
     await expect(actionBar(page).getByRole("button", { name: "Voorlopig" })).toHaveAttribute("title", /\(t\)$/);
     await expect(actionBar(page).getByRole("button", { name: "Vraag Claude" })).toHaveAttribute("title", /\(c\)$/);
     // Optioneel bericht: inline veld onder de actiebalk, geen popup.
-    await expect(d.getByRole("textbox", { name: "Bericht aan Eva Jansen (optioneel)" })).toBeVisible();
+    await expect(d.getByRole("textbox", { name: "Bericht aan Eva Jansen (optioneel, toets m)" })).toBeVisible();
     await expect(page.getByRole("dialog")).toHaveCount(0);
   });
 
@@ -138,7 +138,7 @@ test.describe("Uitnodiging beantwoorden", () => {
     await expect.poll(async () => (await respondCalls(page)).map((c) => c.input.response)).toEqual(["accept", "decline"]);
 
     await openItem(page, "Demo CI Acceleration");
-    await expect(detail(page)).toContainText("morgen 13:00-13:45");
+    await expect(detail(page)).toContainText(NEXT.label + " 13:00-13:45");
     await page.keyboard.press("t");
     await expect.poll(async () => (await respondCalls(page)).at(-1)?.input).toEqual({ eventId: "evt-202", response: "tentative", sendResponse: true });
     await expect(feedbackBar(page)).toContainText("✓ Voorlopig geaccepteerd: Demo CI Acceleration");
@@ -333,5 +333,80 @@ test.describe("Plan een vergadering", () => {
     await page.keyboard.press("Escape");
     await expect(planner(page)).toHaveCount(0);
     await expect(page.locator('#lijst button[aria-current="true"]')).toBeFocused(); // Esc: focus naar de geselecteerde rij
+  });
+});
+
+// =========================================================================================
+// UX-review B4: volledig detail ook in Vandaag, bericht via toets m, planner zonder actiebalk van een ander item.
+test.describe("Review B4", () => {
+  test("Vandaag: de automatisch geselecteerde lopende afspraak krijgt het volledige detail, Deelnemen voorop", async ({ page, open }) => {
+    await open(buildAgendaMock());
+    await expect(entryButton(page, "Vandaag")).toHaveAttribute("aria-current", "page");
+    await expect(detail(page).getByRole("heading", { level: 2 })).toHaveText("Architectuuroverleg Object Store");
+    await expect(actionBar(page).locator("[data-slot]").first()).toHaveText(/^Deelnemen/);
+    await expect(detail(page)).toContainText("Stand van zaken");
+    await expect(detail(page).locator(".detail-text")).not.toContainText("Deelnemen aan de vergadering"); // geen dode linktekst
+  });
+
+  test("toets m gaat naar het berichtveld; Enter accepteert met het bericht", async ({ page, open }) => {
+    await open(buildAgendaMock());
+    await goTo(page, "Agenda");
+    await openItem(page, "Kwartaalplanning Platform Stability");
+    await page.locator("body").press("m");
+    const msg = detail(page).getByRole("textbox", { name: /Bericht aan Eva Jansen/ });
+    await expect(msg).toBeFocused();
+    await page.keyboard.type("Ik ben er om half drie.");
+    await page.keyboard.press("Enter");
+    await expect.poll(async () => (await respondCalls(page)).map((c) => c.input)).toEqual([{ eventId: "evt-101", response: "accept", sendResponse: true, comment: "Ik ben er om half drie." }]);
+  });
+
+  test("planner: onderwerp voorgesteld, item eronder verborgen, focus op het eerste slot, nieuwe vergadering direct in de tijdlijn", async ({ page, open }) => {
+    await open(buildAgendaMock());
+    await goTo(page, "Agenda");
+    await openItem(page, "Architectuuroverleg Object Store");
+    await expect(actionBar(page)).toBeVisible();
+    await page.locator("body").press("p");
+    const p = planner(page);
+    await expect(p).toBeVisible();
+    await expect(actionBar(page)).toBeHidden(); // geen knoppen van een ander item onder het formulier
+    const who = p.getByRole("combobox", { name: "Deelnemers" });
+    await who.pressSequentially("lot");
+    await who.press("Enter");
+    const subj = p.getByRole("textbox", { name: "Onderwerp" });
+    await expect(subj).toHaveValue("Overleg met Lotte");
+    await expect(subj).toHaveAttribute("aria-required", "true");
+    await p.getByRole("button", { name: "Zoek tijd" }).click();
+    const first = p.getByRole("group", { name: "Vrije momenten" }).getByRole("button").first();
+    await expect(first).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect.poll(async () => (await mcpCalls(page, "outlook_create_event")).length).toBe(1);
+    await expect(itemWith(page, "Overleg met Lotte")).toBeVisible(); // optimistisch in de tijdlijn
+    await expect(actionBar(page)).toBeVisible();
+  });
+
+  test("mobiel 375px: planner zonder sticky actiebalk van een ander item, sloten in beeld", async ({ page, open }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    await open(buildAgendaMock());
+    await goTo(page, "Agenda");
+    await page.getByRole("button", { name: "Plan een vergadering" }).click();
+    const p = planner(page);
+    await expect(p).toBeVisible();
+    await expect(actionBar(page)).toBeHidden();
+    await p.getByRole("combobox", { name: "Deelnemers" }).fill("noor.mulder@example.com");
+    await p.getByRole("textbox", { name: "Onderwerp" }).press("Enter");
+    const first = p.getByRole("group", { name: "Vrije momenten" }).getByRole("button").first();
+    await expect(first).toBeFocused();
+    await expect(first).toBeInViewport();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  });
+
+  test("Ctrl+K vindt een afspraak van de volgende werkdag; Enter selecteert hem in Agenda", async ({ page, open }) => {
+    await open(buildAgendaMock());
+    await expect(page.getByText("Architectuuroverleg Object Store").first()).toBeVisible();
+    await page.keyboard.press("Control+k");
+    await page.getByRole("combobox", { name: "Zoek, voer uit of vraag Claude" }).fill("roadmapsessie");
+    await page.keyboard.press("Enter");
+    await expect(entryButton(page, "Agenda")).toHaveAttribute("aria-current", "page");
+    await expect(detail(page).getByRole("heading", { level: 2 })).toHaveText("Roadmapsessie Jakarta migratie");
   });
 });
