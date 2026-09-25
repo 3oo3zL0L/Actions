@@ -54,13 +54,13 @@ $("nowstrip").addEventListener("click", function (e) {
   e.preventDefault(); Shell.go(a.getAttribute("data-go"), { user: true, focus: true });
 });
 
-// Claude openen zonder item (tot de command bar er is): knop, / en Ctrl+K.
+// Claude openen zonder item (command bar: "Vraag Claude" zonder tekst; c zonder geselecteerd item).
 function openClaude(opener) {
   if (!cap.sample) return;
   logEvent("claude_open");
   openPanel(opener || $("askClaude"));
 }
-$("askClaude").addEventListener("click", function () { openClaude($("askClaude")); });
+$("askClaude").addEventListener("click", function () { openCmdBar($("askClaude")); }); // B7: "Zoek of vraag…" opent de command bar
 $("chatForm").addEventListener("submit", function (e) { e.preventDefault(); var v = chatInput.value; if (chat.busy) return; chatInput.value = ""; chatInput.style.height = ""; userAsk(v); });
 chatInput.addEventListener("keydown", function (e) { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); $("chatForm").requestSubmit(); } });
 chatInput.addEventListener("input", function () { chatInput.style.height = "auto"; chatInput.style.height = Math.min(chatInput.scrollHeight + 2, 160) + "px"; });
@@ -102,8 +102,8 @@ var ENTRY_KEYS = { "1": "vandaag", "2": "inbox", "3": "acties", "4": "werk", "5"
 document.addEventListener("keydown", function (e) {
   var t = e.target;
   var typing = t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable);
-  if ((e.ctrlKey || e.metaKey) && (e.key === "k" || e.key === "K")) { e.preventDefault(); openClaude(); return; }
-  if ($("keys").open) return;
+  if ((e.ctrlKey || e.metaKey) && (e.key === "k" || e.key === "K")) { e.preventDefault(); openCmdBar(); return; }
+  if ($("keys").open || cmdOpen()) return;
   if (e.key === "Escape") {
     if (Shell.closeMore()) { e.preventDefault(); return; }
     // Esc sluit het invulveld: veld verlaten, focus terug naar de geselecteerde rij.
@@ -126,7 +126,8 @@ document.addEventListener("keydown", function (e) {
   if (ENTRY_KEYS[e.key] && !e.shiftKey) { e.preventDefault(); Shell.go(ENTRY_KEYS[e.key], { user: true, focus: true }); }
   else if (!inChat && (e.key === "j" || e.key === "ArrowDown")) { e.preventDefault(); Shell.move(1); }
   else if (!inChat && (e.key === "k" || e.key === "ArrowUp")) { e.preventDefault(); Shell.move(-1); }
-  else if (e.key === "/") { e.preventDefault(); openClaude(); }
+  else if (e.key === "/") { e.preventDefault(); openCmdBar(); }
+  else if (e.key === "Enter" && !e.shiftKey && !inChat) { if (enterKey(t)) e.preventDefault(); }
   else if (e.key === "?") { e.preventDefault(); openKeys(); }
   else if (e.key === "z") { if (undoLast()) e.preventDefault(); }
   else if (e.key === "g") { gPending = Date.now(); }
@@ -139,6 +140,17 @@ document.addEventListener("keydown", function (e) {
     if (sec) { e.preventDefault(); var b = sec.querySelector("[data-refresh]"); if (b) refreshGroup(b.getAttribute("data-refresh")); }
   }
 });
+
+// Enter (B7): op mobiel het detail openen; staat het detail open, dan de primaire actie. Alleen vanaf de
+// geselecteerde rij of een neutrale plek (niet op een andere knop of link: die doen hun eigen klik).
+function enterKey(t) {
+  var row = t && t.closest ? t.closest("#lijst .row") : null;
+  var neutral = !t || t === document.body || t === $("lijst") || (t.matches && t.matches("section.entry, #detailView, #confRead, #detailBody *:not(a):not(button):not(summary)"));
+  if (row && !(t.classList.contains("sel") && row.classList.contains("is-sel"))) return false;
+  if (!row && !neutral) return false;
+  if (Shell.isPhone() && Shell.screen() !== "detail") { if (row || !Shell.current()) return false; Shell.showDetail(); return true; }
+  return Shell.runPrimary();
+}
 
 // Klok: elke minuut, zonder netwerk
 var lastDay = new Date().getDate();

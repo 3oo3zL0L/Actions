@@ -469,9 +469,9 @@ test.describe("Review B1 mobiel 375px", () => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
   });
 
-  test("kop: Vraag Claude en Thema met zichtbaar label, geen losse iconen", async ({ page, open }) => {
+  test("kop: Zoek of vraag en Thema met zichtbaar label, geen losse iconen", async ({ page, open }) => {
     await open(buildMock());
-    await expect(page.getByRole("button", { name: "Vraag Claude" })).toContainText("Vraag Claude");
+    await expect(page.getByRole("button", { name: /Zoek of vraag/ })).toContainText("Zoek of vraag");
     await expect(page.getByRole("button", { name: /^Thema:/ })).toContainText("Thema");
     await expect(page.getByRole("button", { name: "Alles verversen" })).toBeHidden();
     await expect(page.getByRole("button", { name: "Sneltoetsen" })).toBeHidden();

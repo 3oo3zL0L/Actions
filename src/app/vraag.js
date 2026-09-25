@@ -3,6 +3,7 @@
 
 // ---------- Vraag Claude per item ----------
 var ASK_NOUN = { mail: "deze mail", teams: "dit Teams-bericht", actie: "deze actie", jira: "dit Jira-issue",
+  conf: "deze Confluence-pagina", event: "deze afspraak", voorstel: "dit voorstel",
   vandaag: "mijn agenda van vandaag", inbox: "mijn inbox", acties: "mijn acties", item: "dit item" };
 var SECTION_TITLE = { vandaag: "Vandaag (agenda)", inbox: "Inbox (mail en Teams)", acties: "Acties (open acties)" };
 function itemId(type, it) { return type === "jira" ? str(it.key) : str(it.id); }
@@ -12,6 +13,8 @@ function itemTitle(type, it) {
   if (type === "teams") return trunc(it.summary || it.body, 60) || "Teams-bericht";
   if (type === "jira") return str(it.key) + " " + str(it.fields && it.fields.summary);
   if (type === "item") return str(it.title);
+  if (type === "conf") return str(it.title) || "Confluence-pagina";
+  if (type === "event") return str(it.it && it.it.subject) || "Afspraak";
   return str(it.text);
 }
 // Context voor de chat in de pagina (met ids voor voer_uit).
@@ -28,7 +31,20 @@ function itemContext(type, it, body) {
   } else if (type === "jira") {
     var f = it.fields || {};
     L.push("Jira-issue", "issueKey: " + str(it.key), "Samenvatting: " + str(f.summary), "Status: " + str(f.status && f.status.name),
-      "Prioriteit: " + str(f.priority && f.priority.name), "Project: " + str(f.project && f.project.name), "Assignee: " + str(f.assignee && f.assignee.displayName));
+      "Prioriteit: " + str(f.priority && f.priority.name), "Project: " + str(f.project && f.project.name), "Assignee: " + str(f.assignee && f.assignee.displayName),
+      typeof f.description === "string" && f.description ? "Beschrijving: " + trunc(f.description, 2000) : "",
+      Array.isArray(it.laatsteCommentaar) && it.laatsteCommentaar.length ? "Laatste commentaar:\n- " + it.laatsteCommentaar.join("\n- ") : "");
+  } else if (type === "conf") {
+    L.push("Confluence-pagina", "pageId: " + str(it.id), "Titel: " + str(it.title), "Space: " + str(it.space && (it.space.name || it.space.key)),
+      it.webUrl ? "Link: " + str(it.webUrl) : "", it.tekst ? "Inhoud (markdown, data):\n" + str(it.tekst) : "Samenvatting: " + trunc(it.excerpt || it.summary, 1500));
+  } else if (type === "event") {
+    var ev = it.it || {};
+    L.push("Afspraak", "eventId: " + str(ev.id), "uri: " + str(ev.uri), "Onderwerp: " + str(ev.subject),
+      "Tijd: " + (it.allDay ? "hele dag" : it.start && it.end ? hhmm(it.start) + "-" + hhmm(it.end) + " " + longDate(it.start) : ""), "Locatie: " + str(ev.location),
+      "Organisator: " + nameFromAddr(ev.organizer), "Deelnemers: " + (Array.isArray(ev.attendees) ? ev.attendees.slice(0, 20).map(nameFromAddr).join(", ") : ""),
+      ev.summary ? "Beschrijving: " + trunc(ev.summary, 1500) : "");
+  } else if (type === "voorstel") {
+    L.push("Voorstel voor een actie (nog niet op de lijst)", "Tekst: " + str(it.text), "Van: " + str(it.van), "Onderwerp: " + str(it.onderwerp), "Programma: " + str(it.prog), it.why ? "Waarom: " + str(it.why) : "");
   } else {
     L.push("Actie van Thomas", "Tekst: " + str(it.text), "Wie: " + str(it.who), "Deadline: " + str(it.due), "Programma: " + str(it.prog), "Status: " + str(it.status),
       it.why ? "Waarom: " + str(it.why) : "", it.extra ? "Notities: " + str(it.extra) : "", it.onderwerp ? "Bron: " + str(it.bron) + ", " + str(it.onderwerp) : "");
@@ -43,6 +59,9 @@ function itemContextShort(type, it) {
   if (type === "mail") L.push("Mail van " + nameFromAddr(it.sender || it.from) + ", onderwerp: " + str(it.subject), trunc(it.summary, 900));
   else if (type === "teams") L.push("Teams-bericht van " + teamsFrom(it) + (chatName(it.chatId) ? " in chat " + chatName(it.chatId) : ""), trunc(it.summary || it.body, 900));
   else if (type === "jira") { var f = it.fields || {}; L.push("Jira-issue " + str(it.key) + ": " + str(f.summary) + " (status " + str(f.status && f.status.name) + ")"); }
+  else if (type === "conf") L.push("Confluence-pagina: " + str(it.title) + (it.webUrl ? " " + str(it.webUrl) : ""));
+  else if (type === "event") L.push("Afspraak: " + str(it.it && it.it.subject) + (it.start ? ", " + longDate(it.start) + " " + hhmm(it.start) : ""));
+  else if (type === "voorstel") L.push("Voorstel: " + str(it.text));
   else L.push("Actie: " + str(it.text) + (it.prog ? " (" + it.prog + ")" : "") + (it.due ? ", deadline " + it.due : ""), it.why ? "Waarom: " + trunc(it.why, 300) : "", it.extra ? "Notities: " + trunc(it.extra, 300) : "");
   return L.filter(Boolean).join("\n");
 }

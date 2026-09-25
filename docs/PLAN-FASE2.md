@@ -163,3 +163,22 @@ Oordeel per criterium: voldoet / bijna / voldoet niet, met concrete verbetering.
   zodat een db-write die nog onderweg was geen verse keuze overschrijft.
 - B1: alleen de actieve ingang heeft rijen in de DOM; bij wisselen roept de schil render() van de ingang aan.
 
+- B6: actiebalk Jira = Reageer · Maak actie · Vraag Claude · Open in Jira + één extra (Status, s). Toewijzen (t) en
+  Nieuw Jira-issue (i, op mail, Teams en actie) hebben geen knop (slot "more" in de schil): toets en command bar,
+  zodat de balk op 1280px op één regel past.
+- B6: "Aan mij" gebruikt de accountId uit `context.atlassianAccountId` die elk Rovo-antwoord meestuurt
+  (atlassianUserInfo staat niet in het manifest); terugval lookupJiraAccountId met het e-mailadres uit get_me.
+  `lookupJiraAccountId` geeft `{data:{users:{users:[{accountId, displayName, html}]}}}` (e-mail alleen in `html`).
+- B6: getJiraIssue geeft zonder `fields: [..., "comment"]` geen commentaar; de app vraagt de velden expliciet op, met
+  `responseContentFormat: "markdown"`. getVisibleJiraProjects: `{values:[{key,name}], isLast}`, max 50 per pagina.
+- B6: Confluence-markdown bevat tabellen (lege kopregel), backslash-escapes en HTML-resten. Werk rendert die met een
+  eigen voorbewerking bovenop renderMarkdown (tabellen, scheidingslijn, afbeelding als link); renderMarkdown zelf is
+  ongewijzigd. Nog steeds geen HTML-injectie: alles via textContent.
+- B6: commentaarstijl via `werkFinishComment` in werk.js; die gebruikt `finishChat` zodra groep A die levert.
+- B7: de knop bovenaan heet "Zoek of vraag… Ctrl K" (id askClaude) en opent de command bar; een aparte
+  Claude-knop is er niet meer. "Vraag Claude" zonder tekst in de bar = paneel zonder item (het oude pad).
+  Zonder Claude verbergt claude.js deze knop nog; Ctrl+K en / werken dan wel.
+- B7: een vraag uit de bar krijgt het geselecteerde item als context (ook een automatisch geselecteerde rij); de
+  suggestie noemt dat ("over <item>"), en bij een lopend gesprek blijft de context van dat gesprek.
+- B7: Enter voert de primaire actie uit vanaf de geselecteerde rij of een neutrale plek; op een andere knop of link
+  doet Enter gewoon zijn eigen klik.
