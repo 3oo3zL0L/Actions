@@ -50,6 +50,19 @@
  *    Shell.changed(), Shell.inlineSlot(). Feedback: feedback({text, undo, undoLabel, countdown,
  *    onCountdownDone, link, linkLabel, note}); toets z = laatste Ongedaan maken. Voorkeuren: getPref/setPref
  *    (app/prefs.js). Het Claude-paneel (#chat) vervangt de detailkolom: openPanel()/closePanel() in claude.js.
+ *
+ * 5. Extra acties op het type van een andere module (B6/B7), zonder die module te wijzigen:
+ *      Shell.extraActions("mail", function (m) { return { slot: "extra", label: "Nieuw Jira-issue", key: "i", run: … }; });
+ *    fn(item) geeft één actie, een lijst of null; ze komen na de acties van het type zelf in de actiebalk.
+ *    Slot "more" (voor elk type): geen knop in de balk (max 5 vaste knoppen + 1 extra), wel via de toets en de
+ *    command bar. Shell.runAction(a) voert een actie uit Shell.actions() uit.
+ *    Een type dat later geregistreerd wordt, krijgt ze ook. Shell.actions() geeft de acties die nu in de
+ *    actiebalk staan (label, key, slot, title, el); de command bar (app/commandbar.js) gebruikt die.
+ *    Shell.runPrimary() voert de primaire actie van het open detail uit (toets Enter).
+ *
+ * 6. Command bar (B7): een ingang mag `search: function () { return [{ key, title, hint }] }` meegeven. Dan
+ *    zoekt de command bar (Ctrl+K) in die items; Enter springt naar de ingang en selecteert Shell.select(key).
+ *    Zonder search() gebruikt de command bar zijn eigen bronnen (mail, Teams, Jira, Confluence, acties, agenda).
  */
 
 // Open invulkaarten per item (bv. "mail:<id>"), blijven bestaan als je van selectie wisselt.
@@ -57,7 +70,7 @@ var inlineCards = {};
 
 var Shell = (function () {
   var ORDER = ["vandaag", "inbox", "acties", "werk", "agenda"];
-  var entries = {}, types = {};
+  var entries = {}, types = {}, extras = {};
   // sel: per ingang de geselecteerde sleutel; auto: selectie kwam van de schil (niet van Thomas) en volgt de eerste rij.
   var st = { entry: null, sel: {}, auto: {}, cur: null, sig: "", screen: "list", userNav: false, pending: false };
   var mqPhone = window.matchMedia("(max-width: 700px)");
@@ -65,6 +78,12 @@ var Shell = (function () {
 
   function entry(id, spec) { spec.id = id; entries[id] = spec; }
   function type(t, spec) { types[t] = spec; }
+  function extraActions(t, fn) { (extras[t] = extras[t] || []).push(fn); }
+  function actionsOf(t, it) {
+    var spec = types[t], list = spec && spec.actions ? spec.actions(it) || [] : [];
+    (extras[t] || []).forEach(function (fn) { var r = null; try { r = fn(it); } catch (e) { r = null; } list = list.concat(r || []); });
+    return list;
+  }
 
   function sections(id) { return Array.prototype.slice.call(document.querySelectorAll('#lijst section[data-entry="' + id + '"]')); }
   function navBtn(id) { return document.querySelector('#nav [data-entry="' + id + '"]'); }
@@ -202,7 +221,7 @@ var Shell = (function () {
   }
 
   // ---- Detail en actiebalk ----
-  var SLOTS = ["primary", "done", "make", "ask", "open", "extra"];
+  var SLOTS = ["primary", "done", "make", "ask", "open", "extra", "more"];
   var curActions = [];
   function inlineSlot() { return $("detailInline"); }
   function renderDetail() {
@@ -220,8 +239,11 @@ var Shell = (function () {
       return;
     }
     var it = cur.item;
-    var acts = (spec.actions ? spec.actions(it) : []).filter(function (a) { return a && (a.run || safeUrl(a.href)); });
+    var acts = actionsOf(cur.type, it).filter(function (a) { return a && (a.run || safeUrl(a.href)); });
     acts.sort(function (a, b) { return SLOTS.indexOf(a.slot || "extra") - SLOTS.indexOf(b.slot || "extra"); });
+    // slot "more": geen knop (de balk past zo op één regel), wel bereikbaar met de toets en via de command bar.
+    var more = acts.filter(function (a) { return a.slot === "more" && a.run; });
+    acts = acts.filter(function (a) { return a.slot !== "more"; });
     bar.hidden = !acts.length;
     acts.forEach(function (a) {
       var tip = (a.title || a.label) + (a.key ? " (" + a.key + ")" : "");
@@ -238,11 +260,20 @@ var Shell = (function () {
       curActions.push(a);
       bar.append(el);
     });
+    more.forEach(function (a) { a.el = null; curActions.push(a); });
     body.append(h("p", { class: "detail-type", text: spec.label || "" }), h("h2", { class: "detail-title", id: "detailTitle", text: spec.title ? spec.title(it) : "" }));
     if (spec.detail) spec.detail(it, body);
     var ik = spec.inline ? spec.inline(it) : null;
     if (ik && inlineCards[ik]) slot.append(inlineCards[ik]);
     $("detailView").scrollTop = 0;
+  }
+  function runPrimary() {
+    if (!$("chat").hidden || !st.cur) return false;
+    for (var i = 0; i < curActions.length; i++) {
+      var a = curActions[i];
+      if (a.slot === "primary" && a.el && document.contains(a.el)) { a.el.click(); return true; }
+    }
+    return false;
   }
   function refreshDetail() { if (st.cur) st.sig = sigOf(st.cur); renderDetail(); }
   function runKey(k) {
@@ -251,7 +282,15 @@ var Shell = (function () {
     for (var i = 0; i < curActions.length; i++) {
       var a = curActions[i];
       if (a.key === k && a.el && document.contains(a.el)) { a.el.click(); return true; }
+      if (a.key === k && a.slot === "more" && a.run) { runAction(a); return true; }
     }
+    return false;
+  }
+  // Voer een actie uit de actiebalk uit (knop klikken, of bij slot "more" direct run).
+  function runAction(a) {
+    if (!a) return false;
+    if (a.el && document.contains(a.el)) { a.el.click(); return true; }
+    if (a.run && st.cur) { st.auto[st.cur.entry] = false; a.run(st.cur.item, null); return true; }
     return false;
   }
 
@@ -330,7 +369,9 @@ var Shell = (function () {
   return { ORDER: ORDER, entry: entry, type: type, row: row, selTitle: selTitle, changed: changed, go: go, select: select, move: move,
     current: function () { return st.cur; }, active: function () { return st.entry; }, shown: function (id) { return st.entry === id; }, isPhone: isPhone, showDetail: showDetail, back: back,
     screen: function () { return st.screen; }, refreshDetail: refreshDetail, revalidate: revalidate, inlineSlot: inlineSlot, runKey: runKey, init: init, restore: restore,
-    act: act, renderCounts: renderCounts };
+    act: act, renderCounts: renderCounts, extraActions: extraActions, runPrimary: runPrimary, runAction: runAction,
+    actions: function () { return st.cur ? curActions.slice() : []; }, entrySpec: function (id) { return entries[id] || null; },
+    typeSpec: function (t) { return types[t] || null; } };
 })();
 
 // ---------- Feedbackbalk: één balk onderaan voor alles ----------

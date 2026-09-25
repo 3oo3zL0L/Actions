@@ -18,6 +18,8 @@
  *   db: { docs: { "acties/a1": {...} }, failWrites: {code,message}, persist?: false }
  *        // De store overleeft een herlaad binnen dezelfde test (sessionStorage), zoals de echte db;
  *        // persist: false zet dat uit.
+ *   werk: { … }                        // B6: staat voor Jira-detail/transities/personen/projecten/Confluence
+ *                                        // (tests/fixtures/werk.js, werkState()); zie blok "B6 Werk" hieronder.
  *   comments: null | { canSend?: "available"|"writers_only"|"no_session"|"off",   // default "available"
  *               canSendError?, anchorError?, sendError?, createError? : {code,message} }
  *             // comments-capability (docs/contract/comments.d.ts); null => use("comments") -> null.
@@ -105,6 +107,131 @@
     return { payload: {} };
   }
 
+  // ======================= B6 Werk: Jira-detail en Confluence (begin) =======================
+  // Staat per pagina uit __MOCK__.werk (tests/fixtures/werk.js). Alleen actief als er voor de tool geen
+  // eigen fixture in __MOCK__.tools staat. Vormen zoals de echte Atlassian Rovo-connector.
+  const WERK_TOOLS = new Set(["getJiraIssue", "getTransitionsForJiraIssue", "transitionJiraIssue", "addCommentToJiraIssue",
+    "editJiraIssue", "lookupJiraAccountId", "getVisibleJiraProjects", "getJiraProjectIssueTypesMetadata", "createJiraIssue", "getConfluencePage"]);
+  let werkState = null;
+  function werkS() { if (!werkState) werkState = clone(cfg().werk); return werkState; }
+  const toolErr = (message) => ({ error: { code: "tool_error", message } });
+  function werkPerson(W, id) {
+    const u = (W.users || []).find((x) => x.accountId === id);
+    return u ? { accountId: u.accountId, displayName: u.displayName, emailAddress: u.email, active: true, accountType: "atlassian" } : null;
+  }
+  function werkIssue(W, key) {
+    const i = W.issues[key];
+    if (!i) return null;
+    return {
+      expand: "renderedFields,names,schema", id: i.id, key, self: "https://api.example.com/rest/api/3/issue/" + i.id,
+      fields: {
+        summary: i.summary, description: i.description || null, status: clone(i.status), assignee: werkPerson(W, i.assignee),
+        reporter: werkPerson(W, i.reporter), priority: i.priority ? { name: i.priority } : null, issuetype: { name: i.issuetype },
+        project: { key: i.project[0], name: i.project[1] }, created: i.created, updated: i.updated,
+        comment: { comments: (i.comments || []).map((c) => ({ id: c.id, author: werkPerson(W, c.author), body: c.body, created: c.created, updated: c.created })),
+          total: (i.comments || []).length, startAt: 0, maxResults: (i.comments || []).length },
+      },
+      webUrl: W.site + "/browse/" + key,
+    };
+  }
+  function werkFixture(tool, input) {
+    const W = werkS();
+    const inp = input || {};
+    const key = inp.issueIdOrKey;
+    const ctx = { atlassianAccountId: W.me, cloudId: inp.cloudId, toolName: tool };
+    if (["getJiraIssue", "getTransitionsForJiraIssue", "transitionJiraIssue", "addCommentToJiraIssue", "editJiraIssue"].includes(tool) && !W.issues[key])
+      return toolErr("Issue does not exist or you do not have permission to see it.");
+    switch (tool) {
+      case "getJiraIssue": {
+        const f = inp.fields || [];
+        const issue = werkIssue(W, key);
+        if (!f.includes("comment")) delete issue.fields.comment; // zoals echt: commentaar alleen op verzoek
+        return { payload: { issues: { nodes: [issue] }, context: ctx } };
+      }
+      case "getTransitionsForJiraIssue":
+        return { payload: { transitions: clone(W.transitionsByStatus[W.issues[key].status.name] || []) } };
+      case "transitionJiraIssue": {
+        const id = inp.transition && inp.transition.id;
+        const t = (W.transitionsByStatus[W.issues[key].status.name] || []).find((x) => x.id === id);
+        if (!t) return toolErr("Transition id '" + id + "' is not valid for this issue.");
+        W.issues[key].status = clone(t.to);
+        W.issues[key].updated = new Date().toISOString();
+        return { payload: { success: true, issueIdOrKey: key } };
+      }
+      case "addCommentToJiraIssue": {
+        if (inp.contentFormat !== "markdown") violation("addCommentToJiraIssue zonder contentFormat markdown");
+        if (!inp.commentBody || !String(inp.commentBody).trim()) return toolErr("commentBody is required");
+        const c = { id: "c" + (Date.now() % 100000), author: W.me, created: new Date().toISOString(), body: String(inp.commentBody) };
+        W.issues[key].comments.push(c);
+        return { payload: { id: c.id, self: "https://api.example.com/rest/api/3/issue/" + W.issues[key].id + "/comment/" + c.id, body: c.body, created: c.created, author: werkPerson(W, W.me) } };
+      }
+      case "editJiraIssue": {
+        const a = inp.fields && inp.fields.assignee;
+        if (a !== undefined) {
+          if (a && !(W.users || []).some((u) => u.accountId === a.accountId)) return toolErr("User '" + (a && a.accountId) + "' does not exist.");
+          W.issues[key].assignee = a ? a.accountId : null;
+        }
+        W.issues[key].updated = new Date().toISOString();
+        return { payload: { success: true, key } };
+      }
+      case "lookupJiraAccountId": {
+        const q = String(inp.searchString || "").toLowerCase();
+        const hits = (W.users || []).filter((u) => q && (u.displayName.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)));
+        return { payload: { data: { users: { users: hits.map((u) => ({ accountId: u.accountId, accountType: "atlassian", displayName: u.displayName,
+          html: "<strong>" + u.displayName + "</strong> - " + u.email })), total: hits.length, header: "Showing " + hits.length + " of " + hits.length + " matching users" },
+          groups: { header: "Showing 0 of 0 matching groups", total: 0, groups: [] } }, statusCode: 200 } };
+      }
+      case "getVisibleJiraProjects": {
+        const max = inp.maxResults == null ? 50 : inp.maxResults, start = inp.startAt || 0;
+        if (max > 50) { violation("getVisibleJiraProjects: maxResults " + max + " > 50"); return toolErr("maxResults must be <= 50"); }
+        const q = String(inp.searchString || "").toLowerCase();
+        const all = W.projects.filter((p) => !q || p.name.toLowerCase().includes(q) || p.key.toLowerCase().includes(q));
+        const page = all.slice(start, start + max);
+        return { payload: { self: "https://api.example.com/rest/api/3/project/search", maxResults: max, startAt: start, total: all.length, isLast: start + max >= all.length,
+          values: page.map((p) => ({ expand: "description,lead,issueTypes", self: "https://api.example.com/rest/api/3/project/" + p.id, id: p.id, key: p.key, name: p.name,
+            issueTypes: inp.expandIssueTypes === false ? undefined : clone(W.issueTypes), projectTypeKey: "software" })) } };
+      }
+      case "getJiraProjectIssueTypesMetadata": {
+        if (!W.projects.some((p) => p.key === inp.projectIdOrKey || p.id === inp.projectIdOrKey)) return toolErr("No project could be found with key '" + inp.projectIdOrKey + "'.");
+        return { payload: { startAt: 0, maxResults: 50, total: W.issueTypes.length, issueTypes: clone(W.issueTypes) } };
+      }
+      case "createJiraIssue": {
+        if (inp.contentFormat !== "markdown") violation("createJiraIssue zonder contentFormat markdown");
+        const p = W.projects.find((x) => x.key === inp.projectKey);
+        if (!p) return toolErr("Project '" + inp.projectKey + "' does not exist.");
+        if (!W.issueTypes.some((t) => t.name === inp.issueTypeName)) return toolErr("Issue type '" + inp.issueTypeName + "' is not valid for this project.");
+        if (!inp.summary || !String(inp.summary).trim()) return toolErr("summary is required");
+        W.created = (W.created || 0) + 1;
+        const newKey = p.key + "-" + (900 + W.created), id = String(30000 + W.created);
+        W.issues[newKey] = { id, summary: inp.summary, description: inp.description || "", status: clone(W.transitionsByStatus["Done"][0].to), assignee: null,
+          reporter: W.me, priority: "Major", issuetype: inp.issueTypeName, project: [p.key, p.name], created: new Date().toISOString(), updated: new Date().toISOString(), comments: [] };
+        return { payload: { id, key: newKey, self: "https://api.example.com/rest/api/3/issue/" + id } };
+      }
+      case "getConfluencePage": {
+        if (inp.contentFormat !== "markdown") violation("getConfluencePage zonder contentFormat markdown");
+        const pg = W.pages[inp.pageId];
+        if (!pg) return toolErr("Page not found: " + inp.pageId);
+        return { payload: { content: { totalCount: 1, nodes: [{ id: inp.pageId, type: "page", status: "current", title: pg.title, lastModified: pg.lastModified,
+          space: clone(pg.space), author: { displayName: pg.author }, body: pg.body,
+          _links: { webui: "/spaces/" + pg.space.key + "/pages/" + inp.pageId }, webUrl: W.wiki + "/spaces/" + pg.space.key + "/pages/" + inp.pageId }] } } };
+      }
+    }
+    return null;
+  }
+  // Zoekresultaat met de actuele status/toewijzing uit de werk-staat (zoals Jira na een transitie).
+  function werkSearch(fx) {
+    const W = werkS(), out = clone(fx);
+    const nodes = out.payload && out.payload.issues && out.payload.issues.nodes;
+    (Array.isArray(nodes) ? nodes : []).forEach((n) => {
+      const i = n && W.issues[n.key];
+      if (!i || !n.fields) return;
+      n.fields.status = clone(i.status);
+      n.fields.assignee = i.assignee ? { displayName: werkPerson(W, i.assignee).displayName, accountId: i.assignee } : null;
+    });
+    return out;
+  }
+  // ======================= B6 Werk: Jira-detail en Confluence (einde) ========================
+
   function tryParse(text) { try { return JSON.parse(text); } catch { return text; } }
 
   function buildResult(fx) {
@@ -161,6 +288,8 @@
         const n = countPrior(server, tool);
         fx = fx.sequence[Math.min(n, fx.sequence.length - 1)];
       }
+      if (!fx && c.werk && server === "Atlassian Rovo" && WERK_TOOLS.has(tool)) fx = werkFixture(tool, input); // B6 Werk
+      if (fx && c.werk && tool === "searchJiraIssuesUsingJql" && fx.payload) fx = werkSearch(fx); // B6: zoeken volgt de werk-staat
       if (!fx) fx = defaultFixture(server, tool);
       await sleep(fx.delayMs || 5);
       if (signal && signal.aborted) throw mcpErr("cancelled", "aborted");
