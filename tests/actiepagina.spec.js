@@ -4,7 +4,7 @@
 const { test: base, expect } = require("@playwright/test");
 const { buildMock, emptyMock } = require("./fixtures");
 const { openPage, mockLog, mcpCalls, dbDump, heading, section, itemWith, revealTab, JUNK_TEXT,
-  goTo, actionBar, openItem, openClaude } = require("./helpers");
+  goTo, actionBar, openItem, openClaude, detail } = require("./helpers");
 
 // ---- Microcopy-aannames (UI is Nederlands, zie BRIEF.md) ----------------------------------
 const H = {
@@ -382,6 +382,7 @@ test.describe("Acties", () => {
   test("actie toevoegen met Enter schrijft naar db-collectie acties", async ({ page, open }) => {
     await open(buildMock());
     await goTo(page, "Acties");
+    await page.getByRole("button", { name: "Nieuwe actie" }).click(); // B5: Nieuwe actie opent een formulier bovenaan het detail
     const input = page.getByRole("textbox", { name: ACTIE_INPUT }).first();
     await input.fill("Offerte runners opvragen bij leverancier");
     await input.press("Enter");
@@ -396,7 +397,9 @@ test.describe("Acties", () => {
     expect(typeof doc.createdAt === "string" || typeof doc.createdAt === "number", "createdAt ontbreekt").toBe(true);
     if ("prog" in doc && doc.prog) expect(PROGRAMMAS).toContain(doc.prog);
     await expect(page.getByText("Offerte runners opvragen bij leverancier").first()).toBeVisible();
-    await expect(input).toHaveValue("");
+    // B5: het formulier sluit en de nieuwe actie is geselecteerd (detail rechts).
+    await expect(page.getByRole("textbox", { name: "Nieuwe actie" })).toHaveCount(0);
+    await expect(detail(page).getByRole("heading", { level: 2 })).toHaveText("Offerte runners opvragen bij leverancier");
   });
 
   test("actie afvinken zet status op done", async ({ page, open }) => {
@@ -511,6 +514,7 @@ test.describe("Layout, thema en toegankelijkheid", () => {
     }
     await page.keyboard.press("Escape");
     await goTo(page, "Acties");
+    await page.getByRole("button", { name: "Nieuwe actie" }).click(); // B5: Nieuwe actie opent een formulier bovenaan het detail
     const actie = page.getByRole("textbox", { name: ACTIE_INPUT }).first();
     await actie.fill("");
     await actie.focus();

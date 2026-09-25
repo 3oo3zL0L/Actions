@@ -2,7 +2,7 @@
 // why/extra in actierijen, PAF-lijst als archief. Zelfde mock en helpers als actiepagina.spec.js.
 const { test: base, expect } = require("@playwright/test");
 const { buildMock, data } = require("./fixtures");
-const { openPage, mockLog, dbDump, itemWith, goTo, feedbackBar } = require("./helpers");
+const { openPage, mockLog, dbDump, itemWith, goTo, feedbackBar, openItem, actionBar, detail } = require("./helpers");
 
 const SEND_TOOLS = /send_mail|send_draft|forward_mail|outlook_send/;
 const test = base.extend({
@@ -36,6 +36,11 @@ function mockWith(extraDocs = {}) {
   return buildMock({ db: { docs: { ...acties, ...VOORSTELLEN, ...extraDocs } } });
 }
 const voorstelBlok = (page) => page.locator("#voorstellen");
+// B5: rijen hebben geen knoppen of links meer; Op de lijst, Weg en Open bron staan in de actiebalk van het detail.
+async function besluit(page, text, knop) {
+  await openItem(page, text);
+  await actionBar(page).getByRole("button", { name: knop }).click();
+}
 
 test.describe("Fase 2: voorstellen uit je mail", () => {
   test("toont alleen nieuwe voorstellen met bronregel en mail-link", async ({ page, open }) => {
@@ -48,7 +53,11 @@ test.describe("Fase 2: voorstellen uit je mail", () => {
     await expect(blok.getByText("Al eerder afgewezen voorstel")).toHaveCount(0);
     const rij = itemWith(page, "Reageren op budgetvoorstel CI-runners");
     await expect(rij).toContainText("Ruben Smit · Budget CI-runners Q4 · CI Acceleration");
-    const link = rij.getByRole("link", { name: /mail/i });
+    await expect(rij.getByRole("link")).toHaveCount(0);
+    await expect(rij.getByRole("button", { name: /Op de lijst|Weg/ })).toHaveCount(0);
+    await openItem(page, "Reageren op budgetvoorstel CI-runners");
+    await expect(detail(page)).toContainText("Ruben wacht op akkoord voor Q4");
+    const link = actionBar(page).getByRole("link", { name: /open bron/i });
     await expect(link).toHaveAttribute("href", "https://outlook.example.com/owa/?ItemID=mail-003");
     await expect(link).toHaveAttribute("target", "_blank");
   });
@@ -66,22 +75,23 @@ test.describe("Fase 2: voorstellen uit je mail", () => {
   test("Op de lijst maakt actie v-<id> en zet voorstel op ja", async ({ page, open }) => {
     await open(mockWith());
     await goTo(page, "Acties"); // B1: voorstellenblok en lijst staan onder Acties
-    await itemWith(page, "Reageren op budgetvoorstel CI-runners").getByRole("button", { name: "Op de lijst" }).click();
+    await besluit(page, "Reageren op budgetvoorstel CI-runners", "Op de lijst");
     await expect.poll(async () => (await dbDump(page, "voorstellen/v1"))["voorstellen/v1"]?.status).toBe("ja");
     const actie = (await dbDump(page, "acties/v-v1"))["acties/v-v1"];
     expect(actie).toMatchObject({ text: "Reageren op budgetvoorstel CI-runners", status: "open", bron: "mail",
       bronUrl: "https://outlook.example.com/owa/?ItemID=mail-003", van: "Ruben Smit", onderwerp: "Budget CI-runners Q4",
       prog: "CI Acceleration" });
     await expect(page.getByRole("heading", { name: /voorstellen \(1\)/i })).toBeVisible();
-    // Actie staat nu in de lijst, met why als tweede regel.
+    // Actie staat nu in de lijst; why staat in het detail (B5: rijen tonen alleen wat en context).
     await expect(page.locator("#acties-list").getByText("Reageren op budgetvoorstel CI-runners")).toBeVisible();
-    await expect(page.locator("#acties-list").getByText("Ruben wacht op akkoord voor Q4")).toBeVisible();
+    await openItem(page, "Reageren op budgetvoorstel CI-runners");
+    await expect(detail(page).getByRole("textbox", { name: "Waarom" })).toHaveValue("Ruben wacht op akkoord voor Q4");
   });
 
   test("Weg zet voorstel op nee zonder actie te maken", async ({ page, open }) => {
     await open(mockWith());
     await goTo(page, "Acties"); // B1: voorstellenblok en lijst staan onder Acties
-    await itemWith(page, "OIDC-scope beoordelen voor partnerportaal").getByRole("button", { name: "Weg" }).click();
+    await besluit(page, "OIDC-scope beoordelen voor partnerportaal", "Weg");
     await expect.poll(async () => (await dbDump(page, "voorstellen/v2"))["voorstellen/v2"]?.status).toBe("nee");
     expect(Object.keys(await dbDump(page, "acties/v-"))).toEqual([]);
     await expect(voorstelBlok(page).getByRole("listitem").filter({ hasText: "OIDC-scope beoordelen voor partnerportaal" })).toHaveCount(0);
@@ -91,7 +101,7 @@ test.describe("Fase 2: voorstellen uit je mail", () => {
   test("Ongedaan maken na Op de lijst verwijdert de actie en zet voorstel terug op nieuw", async ({ page, open }) => {
     await open(mockWith());
     await goTo(page, "Acties"); // B1: voorstellenblok en lijst staan onder Acties
-    await itemWith(page, "Reageren op budgetvoorstel CI-runners").getByRole("button", { name: "Op de lijst" }).click();
+    await besluit(page, "Reageren op budgetvoorstel CI-runners", "Op de lijst");
     await expect.poll(async () => (await dbDump(page, "voorstellen/v1"))["voorstellen/v1"]?.status).toBe("ja");
     await page.getByRole("button", { name: "Ongedaan maken" }).click();
     await expect.poll(async () => (await dbDump(page, "voorstellen/v1"))["voorstellen/v1"]?.status).toBe("nieuw");
@@ -103,7 +113,7 @@ test.describe("Fase 2: voorstellen uit je mail", () => {
   test("Ongedaan maken na Weg zet voorstel terug op nieuw", async ({ page, open }) => {
     await open(mockWith());
     await goTo(page, "Acties"); // B1: voorstellenblok en lijst staan onder Acties
-    await itemWith(page, "OIDC-scope beoordelen voor partnerportaal").getByRole("button", { name: "Weg" }).click();
+    await besluit(page, "OIDC-scope beoordelen voor partnerportaal", "Weg");
     await expect.poll(async () => (await dbDump(page, "voorstellen/v2"))["voorstellen/v2"]?.status).toBe("nee");
     await page.getByRole("button", { name: "Ongedaan maken" }).click();
     await expect.poll(async () => (await dbDump(page, "voorstellen/v2"))["voorstellen/v2"]?.status).toBe("nieuw");
@@ -113,7 +123,8 @@ test.describe("Fase 2: voorstellen uit je mail", () => {
 });
 
 test.describe("Fase 2: actierijen en archief", () => {
-  test("why en extra staan als tweede en derde regel; bron paf zonder link", async ({ page, open }) => {
+  // B5: rijen tonen alleen wat en context; why en extra staan (bewerkbaar) in het detail, in die volgorde.
+  test("why en extra staan in het detail, na de tekst; bron paf zonder link", async ({ page, open }) => {
     await open(mockWith({
       "acties/paf-17": { text: "Roadmap Object Store afstemmen", who: "eigen actie", due: "3 okt", prog: "Object Store",
         extra: "Notitie: na architectuuroverleg", why: "Keuze storage-backend blokkeert planning", status: "open",
@@ -122,14 +133,17 @@ test.describe("Fase 2: actierijen en archief", () => {
     }));
     await goTo(page, "Acties");
     const rij = itemWith(page, "Roadmap Object Store afstemmen");
-    await expect(rij.getByText("Keuze storage-backend blokkeert planning")).toBeVisible();
-    await expect(rij.getByText("Notitie: na architectuuroverleg")).toBeVisible();
     await expect(rij.getByText(/PAF/)).toBeVisible();
     await expect(rij.getByRole("link")).toHaveCount(0);
-    // Volgorde: titel, why, extra.
-    const txt = await rij.innerText();
-    expect(txt.indexOf("Roadmap")).toBeLessThan(txt.indexOf("Keuze storage-backend"));
-    expect(txt.indexOf("Keuze storage-backend")).toBeLessThan(txt.indexOf("Notitie:"));
+    await openItem(page, "Roadmap Object Store afstemmen");
+    const velden = detail(page).getByRole("group", { name: "Actie bewerken" });
+    await expect(velden.getByRole("textbox", { name: "Waarom" })).toHaveValue("Keuze storage-backend blokkeert planning");
+    await expect(velden.getByRole("textbox", { name: "Notities" })).toHaveValue("Notitie: na architectuuroverleg");
+    await expect(actionBar(page).getByRole("link")).toHaveCount(0); // bron paf: geen Open bron
+    // Volgorde: tekst, waarom, notities.
+    const namen = await velden.getByRole("textbox").evaluateAll((els) => els.map((e) => e.labels[0].textContent));
+    expect(namen.indexOf("Wat")).toBeLessThan(namen.indexOf("Waarom"));
+    expect(namen.indexOf("Waarom")).toBeLessThan(namen.indexOf("Notities"));
   });
 
   test("PAF-link is het archief", async ({ page, open }) => {
