@@ -39,3 +39,9 @@ details.klaar summary { cursor: pointer; color: var(--text-2); font-size: var(--
 .arow .extra { color: var(--text-3); font-size: var(--fs-xs); overflow-wrap: anywhere; white-space: pre-line; }
 .paf strong { font-weight: 600; display: block; }
 .paf span { font-size: var(--fs-sm); color: var(--text-2); }
+/* B5: rijen met deadline rechts, bewerkbaar detail. */
+.arow .row-side .when { font-size: var(--fs-sm); }
+.arow .errmsg { font-weight: 600; }
+.aform { display: flex; flex-direction: column; gap: var(--sp-3); }
+.aform .fld input[type="text"], .aform .fld input[type="date"], .aform .fld select, .aform .fld textarea { background: var(--bg); }
+.newact .srcchip { margin: -4px 0 0; }

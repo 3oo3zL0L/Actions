@@ -14,7 +14,7 @@ function itemTitle(type, it) {
   if (type === "jira") return str(it.key) + " " + str(it.fields && it.fields.summary);
   if (type === "item") return str(it.title);
   if (type === "conf") return str(it.title) || "Confluence-pagina";
-  if (type === "event") return str(it.it && it.it.subject) || "Afspraak";
+  if (type === "event") return (str(it.it && it.it.subject) || "Afspraak") + (it.start ? " (" + eventWhen(it) + ")" : "");
   return str(it.text);
 }
 // Context voor de chat in de pagina (met ids voor voer_uit).
@@ -39,10 +39,10 @@ function itemContext(type, it, body) {
       it.webUrl ? "Link: " + str(it.webUrl) : "", it.tekst ? "Inhoud (markdown, data):\n" + str(it.tekst) : "Samenvatting: " + trunc(it.excerpt || it.summary, 1500));
   } else if (type === "event") {
     var ev = it.it || {};
-    L.push("Afspraak", "eventId: " + str(ev.id), "uri: " + str(ev.uri), "Onderwerp: " + str(ev.subject),
-      "Tijd: " + (it.allDay ? "hele dag" : it.start && it.end ? hhmm(it.start) + "-" + hhmm(it.end) + " " + longDate(it.start) : ""), "Locatie: " + str(ev.location),
-      "Organisator: " + nameFromAddr(ev.organizer), "Deelnemers: " + (Array.isArray(ev.attendees) ? ev.attendees.slice(0, 20).map(nameFromAddr).join(", ") : ""),
-      ev.summary ? "Beschrijving: " + trunc(ev.summary, 1500) : "");
+    L.push("Afspraak", "eventId: " + str(ev.id), "uri: " + str(ev.uri), "Onderwerp: " + str(ev.subject), "Tijd: " + eventWhen(it),
+      "Waar: " + str(ev.location), "Organisator: " + str(ev.organizer), "Deelnemers: " + (Array.isArray(ev.attendees) ? ev.attendees.map(evPersonName).slice(0, 20).join(", ") : ""),
+      isInvite(it) ? "Uitnodiging: nog niet beantwoord (outlook_respond_to_event)" : "",
+      (body && body.full ? "Volledige afspraak:" : "Beschrijving:"), body ? body.text : trunc(ev.summary, 3000));
   } else if (type === "voorstel") {
     L.push("Voorstel voor een actie (nog niet op de lijst)", "Tekst: " + str(it.text), "Van: " + str(it.van), "Onderwerp: " + str(it.onderwerp), "Programma: " + str(it.prog), it.why ? "Waarom: " + str(it.why) : "");
   } else {
@@ -60,7 +60,7 @@ function itemContextShort(type, it) {
   else if (type === "teams") L.push("Teams-bericht van " + teamsFrom(it) + (chatName(it.chatId) ? " in chat " + chatName(it.chatId) : ""), trunc(it.summary || it.body, 900));
   else if (type === "jira") { var f = it.fields || {}; L.push("Jira-issue " + str(it.key) + ": " + str(f.summary) + " (status " + str(f.status && f.status.name) + ")"); }
   else if (type === "conf") L.push("Confluence-pagina: " + str(it.title) + (it.webUrl ? " " + str(it.webUrl) : ""));
-  else if (type === "event") L.push("Afspraak: " + str(it.it && it.it.subject) + (it.start ? ", " + longDate(it.start) + " " + hhmm(it.start) : ""));
+  else if (type === "event") L.push("Afspraak: " + str(it.it && it.it.subject) + " (" + eventWhen(it) + ")", trunc(it.it && it.it.summary, 600));
   else if (type === "voorstel") L.push("Voorstel: " + str(it.text));
   else L.push("Actie: " + str(it.text) + (it.prog ? " (" + it.prog + ")" : "") + (it.due ? ", deadline " + it.due : ""), it.why ? "Waarom: " + trunc(it.why, 300) : "", it.extra ? "Notities: " + trunc(it.extra, 300) : "");
   return L.filter(Boolean).join("\n");
@@ -142,7 +142,7 @@ async function userAsk(v) {
   var c = chat.ctx;
   if (!c) { sendChat(v); return; }
   var body = null;
-  if (c.type === "mail" || c.type === "teams") { c.status = "Inhoud ophalen…"; renderCtx(); body = await fullOrSummary(c.it); }
+  if (c.type === "mail" || c.type === "teams" || c.type === "event") { c.status = "Inhoud ophalen…"; renderCtx(); body = await fullOrSummary(c.type === "event" ? c.it.it : c.it); }
   if (chat.ctx !== c) { sendChat(v); return; }
   chat.ctx = null; renderCtx();
   var prompt = "Vraag van Thomas over " + ASK_NOUN[c.type] + ": " + v +

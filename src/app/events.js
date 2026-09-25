@@ -33,7 +33,6 @@ document.querySelectorAll("[data-refresh]").forEach(function (b) { b.addEventLis
 var selectInboxTab = setupTabs("inbox", ["mail", "teams"], LS.tabInbox);
 setupTabs("werk", ["jira", "conf"], LS.tabWork);
 onPrefs(function (p) { if ((p.inboxFilter === "mail" || p.inboxFilter === "teams") && p.inboxFilter !== activeTab.inbox) selectInboxTab(p.inboxFilter); });
-$("addForm").addEventListener("submit", onAddSubmit);
 $("jqlToggle").addEventListener("click", function () {
   var f = $("jqlForm"), open = f.hidden;
   f.hidden = !open; $("jqlToggle").setAttribute("aria-expanded", open ? "true" : "false");
@@ -131,7 +130,7 @@ document.addEventListener("keydown", function (e) {
   else if (e.key === "?") { e.preventDefault(); openKeys(); }
   else if (e.key === "z") { if (undoLast()) e.preventDefault(); }
   else if (e.key === "g") { gPending = Date.now(); }
-  else if (e.key === "n") { e.preventDefault(); var inp = $("addInput"); if (!inp.disabled) { Shell.go("acties", { user: true }); inp.focus(); } }
+  else if (e.key === "n") { e.preventDefault(); newActie(); }
   else if (e.key === "R") { e.preventDefault(); refreshAll(); }
   else if (!inChat && e.key.length === 1 && Shell.runKey(e.key)) { e.preventDefault(); }
   else if (e.key === "c") { e.preventDefault(); openClaude(); }

@@ -84,16 +84,11 @@
       <div class="card-head">
         <h2 id="h-acties">Acties</h2><span class="count" id="cnt-acties"></span>
         <span class="fresh" id="fresh-acties"></span>
+        <button class="btn plan-btn" id="newActieBtn" type="button" title="Nieuwe actie (n)" aria-keyshortcuts="n" hidden><span aria-hidden="true">+ </span>Nieuwe actie</button>
         <button class="icon-btn refresh" type="button" data-refresh="acties" aria-label="Ververs Acties" title="Ververs Acties"><span class="spin" aria-hidden="true">⟳</span></button>
       </div>
       <div class="card-body" id="body-acties">
         <div id="voorstellen" hidden></div>
-        <form class="add" id="addForm" autocomplete="off">
-          <label class="sr" for="addInput">Nieuwe actie</label>
-          <input id="addInput" type="text" placeholder="Nieuwe actie… (Enter)" enterkeyhint="done" title="Nieuwe actie (n)">
-        </form>
-        <div class="srcchip" id="srcchip" hidden></div>
-        <p class="add-help">@wie · #programma · !vr of !2026-10-01 · !vandaag</p>
         <div id="acties-state"></div>
         <div id="acties-list"></div>
         <a class="paf" id="pafLink" href="https://claude.ai/artifact/Ar6sRYzLNFu5dzdLw1Y4gw" target="_blank" rel="noopener noreferrer">
@@ -198,6 +193,7 @@
     <tr><td><span class="kbd">c</span></td><td>Vraag Claude over dit item</td></tr>
     <tr><td><span class="kbd">o</span></td><td>Open in Outlook, Teams, Jira of Confluence</td></tr>
     <tr><td><span class="kbd">n</span></td><td>Nieuwe actie</td></tr>
+    <tr><td><span class="kbd">p</span></td><td>Plan een vergadering</td></tr>
     <tr><td><span class="kbd">z</span></td><td>Ongedaan maken</td></tr>
     <tr><td><span class="kbd">Esc</span></td><td>Sluit invulveld, paneel of command bar</td></tr>
     <tr><td><span class="kbd">Shift R</span></td><td>Alles verversen</td></tr>
