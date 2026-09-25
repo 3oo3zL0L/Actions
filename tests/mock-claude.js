@@ -15,6 +15,10 @@
  *   tools: { "<server>": { "<tool>": Fixture } },
  *   sample: { rules: [SampleRule], default: SampleRule, error: {code,message}, context: {...} },
  *   db: { docs: { "acties/a1": {...} }, failWrites: {code,message} }
+ *   comments: null | { canSend?: "available"|"writers_only"|"no_session"|"off",   // default "available"
+ *               canSendError?, anchorError?, sendError?, createError? : {code,message} }
+ *             // comments-capability (docs/contract/comments.d.ts); null => use("comments") -> null.
+ *             // Wordt alleen geserveerd als capabilities.comments aan staat (of capabilities ontbreekt).
  * }
  *
  * Fixture (per tool):
@@ -32,7 +36,7 @@
  *     toolCalls?: [{ tool: "regex op naam/beschrijving", input?: {...}, hints?: {...} }],
  *     error?: {code,message}, errorAfterStream?: {code,message} }
  *
- * Logs voor asserts: window.__MOCK_LOG__ = { mcp, sample, sampleTools, db, violations }
+ * Logs voor asserts: window.__MOCK_LOG__ = { mcp, sample, sampleTools, db, comments, violations }
  * Helpers: window.__mockDb.dump(prefix?), window.__mockReleaseSample()
  */
 (() => {
@@ -54,6 +58,7 @@
     sample: [],       // {verb, input, toolNames, modelTier, cache, t, outcome}
     sampleTools: [],  // {name, input, result|error}
     db: [],           // {op, path, data}
+    comments: [],     // {verb, args, outcome, t}
     violations: [],   // contractschendingen door de pagina (string)
   });
 
@@ -636,13 +641,89 @@
     request: (names) => Promise.resolve(Object.fromEntries((names || ["mcp", "sample", "db"]).map((n) => [n, "granted"]))),
   });
 
+  // ------------------------------------------------------------- comments
+  const cErr = (code, message) => ({ code, message });
+  const commentsCfg = () => (cfg().comments && typeof cfg().comments === "object" ? cfg().comments : {});
+  let threadSeq = 0;
+  function isAnchor(a) {
+    return isPlainObject(a) && typeof a.path === "string" && Number.isFinite(a.x) && Number.isFinite(a.y);
+  }
+  function checkText(text) {
+    if (typeof text !== "string" || !text.trim()) return "empty text";
+    if (new TextEncoder().encode(text).length > 4096) return "text over 4 KiB";
+    if (/[\u0000-\u0008\u000B-\u001F\u007F]/.test(text)) return "control characters";
+    return null;
+  }
+  function cCall(verb, args, fn) {
+    const entry = { verb, args: clone(args), outcome: "pending", t: Date.now() };
+    LOG.comments.push(entry);
+    return new Promise((resolve, reject) => {
+      setTimeout(() => {
+        try {
+          const r = fn();
+          entry.outcome = "ok"; entry.result = clone(r); resolve(r);
+        } catch (e) { entry.outcome = e && e.code ? e.code : "error"; reject(e); }
+      }, 2);
+    });
+  }
+  const commentsNs = Object.freeze({
+    canSendToClaude: () => cCall("canSendToClaude", null, () => {
+      const c = commentsCfg();
+      if (c.canSendError) throw clone(c.canSendError);
+      return c.canSend || "available";
+    }),
+    anchorFor: (el) => {
+      const ok = el instanceof Element && document.contains(el);
+      const path = ok ? (el.id ? "#" + el.id : el.tagName.toLowerCase()) : null;
+      return cCall("anchorFor", { path }, () => {
+        const c = commentsCfg();
+        if (c.anchorError) throw clone(c.anchorError);
+        if (!ok) throw cErr("invalid", "anchorFor: element not attached to the document");
+        const r = el.getBoundingClientRect();
+        return { path, x: Math.round(r.left + r.width / 2 + scrollX), y: Math.round(r.top + r.height / 2 + scrollY) };
+      });
+    },
+    sendToClaude: (target) => cCall("sendToClaude", target, () => {
+      const c = commentsCfg();
+      if (!isPlainObject(target)) { violation("comments.sendToClaude: target not a plain object"); throw cErr("invalid", "target"); }
+      const hasA = "anchor" in target, hasT = "threadId" in target;
+      if (hasA === hasT) { violation("comments.sendToClaude: exactly one of anchor/threadId"); throw cErr("invalid", "target"); }
+      if (hasA && !isAnchor(target.anchor)) { violation("comments.sendToClaude: malformed anchor"); throw cErr("invalid", "anchor"); }
+      const bad = checkText(target.text);
+      if (bad) { violation("comments.sendToClaude: " + bad); throw cErr("invalid", bad); }
+      if (c.sendError) throw clone(c.sendError);
+      if ((c.canSend || "available") !== "available") throw cErr("claude_unavailable", "cannot send to Claude from this view");
+      const threadId = hasT ? target.threadId : "thread-" + (++threadSeq);
+      return { threadId, commentId: "comment-" + threadSeq };
+    }),
+    create: (opts) => cCall("create", opts, () => {
+      const c = commentsCfg();
+      if (!isPlainObject(opts) || !isAnchor(opts.anchor)) throw cErr("invalid", "anchor");
+      const bad = checkText(opts.text); if (bad) throw cErr("invalid", bad);
+      if (c.createError) throw clone(c.createError);
+      return { threadId: "thread-" + (++threadSeq), commentId: "comment-" + threadSeq };
+    }),
+    reply: (threadId, text) => cCall("reply", { threadId, text }, () => {
+      const bad = checkText(text); if (bad) throw cErr("invalid", bad);
+      return { commentId: "comment-" + (++threadSeq) };
+    }),
+    openComposer: (target) => cCall("openComposer", null, () => {
+      const el = target && (target.element || (target.range && target.range.startContainer));
+      if (!el || !document.contains(el)) throw cErr("invalid", "target");
+      return { opened: true };
+    }),
+    resolve: (threadId, resolved) => cCall("resolve", { threadId, resolved }, () => undefined),
+    delete: (threadId) => cCall("delete", { threadId }, () => undefined),
+    customAnchors: () => cCall("customAnchors", null, () => { throw cErr("not_granted", "customAnchors not declared"); }),
+  });
+
   // ------------------------------------------------------------------ use
-  const NAMESPACES = { mcp: mcpNs, sample, db: dbNs, permissions: permNs };
+  const NAMESPACES = { mcp: mcpNs, sample, db: dbNs, permissions: permNs, comments: commentsNs };
   const memo = {};
   function use(name) {
     const c = cfg();
-    const caps = c.capabilities || { mcp: true, sample: true, db: true, permissions: true };
-    const served = typeof name === "string" && NAMESPACES[name] && caps[name];
+    const caps = c.capabilities || { mcp: true, sample: true, db: true, permissions: true, comments: true };
+    const served = typeof name === "string" && NAMESPACES[name] && caps[name] && !(name === "comments" && c.comments === null);
     if (!served) return new Promise((r) => setTimeout(() => r(null), c.useDelayMs || 0));
     if (!memo[name]) memo[name] = new Promise((r) => setTimeout(() => r(NAMESPACES[name]), c.useDelayMs || 0));
     return memo[name];

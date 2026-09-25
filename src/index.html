@@ -88,7 +88,7 @@ a { color: var(--accent-text); }
 .head-main { flex: 1 1 320px; min-width: 0; }
 .greet { font-size: var(--fs-2xl); font-weight: 700; margin: 0; line-height: 1.15; }
 .date { color: var(--text-2); font-size: var(--fs-md); margin-top: 2px; }
-.head-tools { display: flex; gap: var(--sp-2); align-items: center; }
+.head-tools { display: flex; gap: var(--sp-2); align-items: center; flex-wrap: wrap; min-width: 0; }
 .nowstrip { margin-top: var(--sp-3); display: flex; flex-wrap: wrap; gap: 2px 6px; font-size: var(--fs-md); color: var(--text-2); align-items: center; }
 .nowstrip a { color: var(--text); text-decoration: none; border-bottom: 1px solid var(--border); }
 .nowstrip a:hover { border-bottom-color: var(--accent); }
@@ -144,7 +144,14 @@ a { color: var(--accent-text); }
 /* Cards */
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); box-shadow: var(--shadow-1); padding: var(--sp-4); min-width: 0; scroll-margin-top: 12px; }
 @media (min-width: 561px) { .card { padding: var(--sp-5); } }
-.card-head { display: flex; align-items: center; gap: var(--sp-2); margin-bottom: var(--sp-3); min-height: 36px; }
+.card-head { display: flex; align-items: center; gap: var(--sp-2); margin-bottom: var(--sp-3); min-height: 36px; flex-wrap: wrap; min-width: 0; }
+@media (max-width: 560px) {
+  .card-head { gap: 4px; }
+  .card-head .po-btn { margin-left: auto; }
+  .card-head .fresh { font-size: var(--fs-xs); order: 10; flex-basis: 100%; margin-left: 0; padding-left: 4px; }
+  .card-head .fresh:empty { display: none; }
+  #helpBtn { display: none; }
+}
 .card-head h2 { margin: 0; font-size: var(--fs-lg); font-weight: 600; }
 .card-head .count { color: var(--text-3); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
 .card-head .fresh { margin-left: auto; color: var(--text-3); font-size: var(--fs-sm); white-space: nowrap; font-variant-numeric: tabular-nums; }
@@ -342,6 +349,27 @@ dialog::backdrop { background: var(--scrim); }
 dialog h2 { margin: 0 0 var(--sp-3); font-size: var(--fs-lg); }
 dialog table { border-collapse: collapse; width: 100%; font-size: var(--fs-sm); }
 dialog td { padding: 4px 8px 4px 0; vertical-align: top; }
+.po-btn { font-size: var(--fs-xs); font-weight: 600; color: var(--text-3); border: 1px solid transparent; background: transparent; border-radius: var(--r-sm); padding: 2px 6px; min-height: 28px; cursor: pointer; white-space: nowrap; flex: none; }
+.po-btn:hover { color: var(--text); border-color: var(--border); }
+@media (max-width: 560px) { .po-btn { min-height: 44px; min-width: 44px; } }
+.cbar-foot { display: flex; justify-content: flex-end; margin-top: 4px; }
+#poDlg { width: min(520px, calc(100vw - 32px)); }
+#poDlg label, #poDlg legend { font-size: var(--fs-sm); font-weight: 600; display: block; margin: 10px 0 4px; }
+#poDlg select, #poDlg textarea { width: 100%; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--bg); padding: 8px; min-height: 40px; }
+#poDlg textarea { min-height: 140px; resize: vertical; }
+#poDlg fieldset { border: 0; padding: 0; margin: 0; }
+#poDlg .prios { display: flex; gap: 8px; flex-wrap: wrap; }
+#poDlg .prios label { font-weight: 500; display: inline-flex; align-items: center; gap: 6px; margin: 0; min-height: 40px; padding: 0 10px; border: 1px solid var(--border); border-radius: var(--r-pill); cursor: pointer; }
+#poDlg .prios input { accent-color: var(--accent); margin: 0; }
+#poDlg .cnt { font-size: var(--fs-xs); color: var(--text-3); text-align: right; font-variant-numeric: tabular-nums; }
+#poDlg .route { font-size: var(--fs-sm); color: var(--text-2); margin: 8px 0 0; }
+#poDlg .msg { font-size: var(--fs-sm); margin: 10px 0 0; }
+#poDlg .msg.ok { color: var(--success); font-weight: 600; }
+#poDlg .msg.err { color: var(--danger); }
+#poDlg .btns { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; flex-wrap: wrap; }
+.foot { max-width: 1440px; margin: 0 auto; padding: 0 var(--sp-4) var(--sp-5); color: var(--text-3); font-size: var(--fs-xs); }
+@media (min-width: 561px) { .foot { padding: 0 var(--sp-5) var(--sp-5); } }
+.lognote { color: var(--text-3); font-size: var(--fs-xs); margin: 12px 0 0; }
 
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
@@ -362,6 +390,7 @@ dialog td { padding: 4px 8px 4px 0; vertical-align: top; }
     <div class="pagealert" id="pageAlert" role="alert" hidden></div>
     <div class="head-tools">
       <button class="btn" id="refreshAll" type="button"><span class="spin" aria-hidden="true">⟳</span> <span class="lbl">Alles verversen</span></button>
+      <button class="btn po-open" id="poHeader" type="button" data-po="Algemeen" hidden>Send to PO</button>
       <button class="icon-btn bordered" id="themeBtn" type="button" aria-label="Thema: Systeem" title="Thema: Systeem">◐</button>
       <button class="icon-btn bordered" id="helpBtn" type="button" aria-label="Sneltoetsen" title="Sneltoetsen (?)">?</button>
     </div>
@@ -382,6 +411,7 @@ dialog td { padding: 4px 8px 4px 0; vertical-align: top; }
       <button type="button" data-q="teams">Wat speelt er in Teams?</button>
     </div>
     <p class="cbar-note" id="barNote" hidden></p>
+    <div class="cbar-foot"><button class="po-btn po-open" type="button" data-po="Claude" aria-label="Send to PO: Claude" title="Send to PO: Claude" hidden>→ PO</button></div>
   </section>
 
   <main style="display:contents">
@@ -390,6 +420,7 @@ dialog td { padding: 4px 8px 4px 0; vertical-align: top; }
       <button class="icon-btn collapse" type="button" aria-expanded="true" aria-controls="body-vandaag" aria-label="Vandaag in- of uitklappen"><span class="chev" aria-hidden="true">▾</span></button>
       <h2 id="h-vandaag">Vandaag</h2><span class="count" id="cnt-vandaag"></span>
       <span class="fresh" id="fresh-vandaag"></span>
+      <button class="po-btn po-open" type="button" data-po="Vandaag" aria-label="Send to PO: Vandaag" title="Send to PO: Vandaag" hidden>→ PO</button>
       <button class="icon-btn refresh" type="button" data-refresh="today" aria-label="Ververs Vandaag"><span class="spin" aria-hidden="true">⟳</span></button>
     </div>
     <div class="card-body" id="body-vandaag"></div>
@@ -400,6 +431,7 @@ dialog td { padding: 4px 8px 4px 0; vertical-align: top; }
       <button class="icon-btn collapse" type="button" aria-expanded="true" aria-controls="body-inbox" aria-label="Inbox in- of uitklappen"><span class="chev" aria-hidden="true">▾</span></button>
       <h2 id="h-inbox">Inbox</h2>
       <span class="fresh" id="fresh-inbox"></span>
+      <button class="po-btn po-open" type="button" data-po="Inbox" aria-label="Send to PO: Inbox" title="Send to PO: Inbox" hidden>→ PO</button>
       <button class="icon-btn refresh" type="button" data-refresh="inbox" aria-label="Ververs Inbox"><span class="spin" aria-hidden="true">⟳</span></button>
     </div>
     <div class="card-body" id="body-inbox">
@@ -417,6 +449,7 @@ dialog td { padding: 4px 8px 4px 0; vertical-align: top; }
       <button class="icon-btn collapse" type="button" aria-expanded="true" aria-controls="body-acties" aria-label="Acties in- of uitklappen"><span class="chev" aria-hidden="true">▾</span></button>
       <h2 id="h-acties">Acties</h2><span class="count" id="cnt-acties"></span>
       <span class="fresh" id="fresh-acties"></span>
+      <button class="po-btn po-open" type="button" data-po="Acties" aria-label="Send to PO: Acties" title="Send to PO: Acties" hidden>→ PO</button>
       <button class="icon-btn refresh" type="button" data-refresh="acties" aria-label="Ververs Acties"><span class="spin" aria-hidden="true">⟳</span></button>
     </div>
     <div class="card-body" id="body-acties">
@@ -441,6 +474,7 @@ dialog td { padding: 4px 8px 4px 0; vertical-align: top; }
       <button class="icon-btn collapse" type="button" aria-expanded="true" aria-controls="body-werk" aria-label="Werk in- of uitklappen"><span class="chev" aria-hidden="true">▾</span></button>
       <h2 id="h-werk">Werk<span class="sr">: Jira en Confluence</span></h2>
       <span class="fresh" id="fresh-werk"></span>
+      <button class="po-btn po-open" type="button" data-po="Werk" aria-label="Send to PO: Werk" title="Send to PO: Werk" hidden>→ PO</button>
       <button class="icon-btn refresh" type="button" data-refresh="work" aria-label="Ververs Werk"><span class="spin" aria-hidden="true">⟳</span></button>
     </div>
     <div class="card-body" id="body-werk">
@@ -466,6 +500,7 @@ dialog td { padding: 4px 8px 4px 0; vertical-align: top; }
   </main>
 </div>
 </div>
+<footer class="foot"><p>Deze pagina houdt anoniem bij welke knoppen je gebruikt, voor verbeteringen. Alleen jij ziet dit.</p></footer>
 
 <div class="scrim" id="scrim" hidden></div>
 <aside class="chat" id="chat" aria-labelledby="chatTitle" hidden>
@@ -497,7 +532,34 @@ dialog td { padding: 4px 8px 4px 0; vertical-align: top; }
     <tr><td><span class="kbd">Esc</span></td><td>Sluit paneel, menu of kaart</td></tr>
     <tr><td><span class="kbd">?</span></td><td>Dit overzicht</td></tr>
   </table>
+  <p class="lognote">Deze pagina houdt anoniem bij welke knoppen je gebruikt, voor verbeteringen. Alleen jij ziet dit.</p>
   <form method="dialog" style="margin-top:16px;text-align:right"><button class="btn primary">Sluiten</button></form>
+</dialog>
+<dialog id="poDlg" aria-labelledby="poTitle">
+  <h2 id="poTitle">Send to PO</h2>
+  <form id="poForm" autocomplete="off">
+    <label for="poPart">Onderdeel</label>
+    <select id="poPart">
+      <option>Vandaag</option><option>Inbox</option><option>Acties</option><option>Werk</option><option>Claude</option><option>Algemeen</option>
+    </select>
+    <label for="poText">Wat zie je / wat wil je</label>
+    <textarea id="poText" maxlength="3500"></textarea>
+    <div class="cnt" id="poCnt" aria-live="off">0 / 3500</div>
+    <fieldset>
+      <legend>Prio</legend>
+      <div class="prios">
+        <label><input type="radio" name="poPrio" value="Must"> Must</label>
+        <label><input type="radio" name="poPrio" value="Should" checked> Should</label>
+        <label><input type="radio" name="poPrio" value="Nice"> Nice</label>
+      </div>
+    </fieldset>
+    <p class="route" id="poRoute"></p>
+    <p class="msg" id="poMsg" role="status"></p>
+    <div class="btns">
+      <button class="btn" type="button" id="poCancel">Annuleren</button>
+      <button class="btn primary" type="submit" id="poSend">Verstuur naar PO</button>
+    </div>
+  </form>
 </dialog>
 <div class="sr" role="status" aria-live="polite" id="status"></div>
 
@@ -771,7 +833,7 @@ dialog td { padding: 4px 8px 4px 0; vertical-align: top; }
 
   // ---------- Runtime (window.claude) ----------
   var halted = false;
-  var cap = { mcp: undefined, sample: undefined, db: undefined };
+  var cap = { mcp: undefined, sample: undefined, db: undefined, comments: undefined };
   function useCap(name) {
     try {
       var c = window.claude;
@@ -844,9 +906,11 @@ dialog td { padding: 4px 8px 4px 0; vertical-align: top; }
     if (!s.refreshing) s.autoRetried = false;
     renderSource(k, changed);
   }
+  var LOG_SRC = { cal: "agenda", mail: "mail", teams: "teams", chats: "teamschats", jira: "jira", conf: "confluence" };
   function onError(k, e) {
     var s = S[k];
     var code = errCode(e);
+    if (code !== "cancelled" && code !== "user_changed" && !(s.status === "error" && errCode(s.error) === code)) logEvent("fout_" + LOG_SRC[k] + "_" + code);
     if (code === "user_changed") { halt(); return; }
     if (code === "cancelled") { s.refreshing = false; renderSource(k); return; }
     s.refreshing = false;
@@ -1384,7 +1448,7 @@ dialog td { padding: 4px 8px 4px 0; vertical-align: top; }
       sec.setAttribute("data-src", k);
     }
     tabs.forEach(function (t, i) {
-      t.addEventListener("click", function () { select(keys[i]); });
+      t.addEventListener("click", function () { if (activeTab[group] !== keys[i]) logEvent("tab_" + (keys[i] === "conf" ? "confluence" : keys[i])); select(keys[i]); });
       t.addEventListener("keydown", function (e) {
         var n = null;
         if (e.key === "ArrowRight") n = (i + 1) % keys.length;
@@ -1458,6 +1522,7 @@ dialog td { padding: 4px 8px 4px 0; vertical-align: top; }
       state = "bezig"; clear(errBox); sync();
       try {
         var r = await opts.execute(text);
+        if (opts.okEvent) logEvent(opts.okEvent, opts.okDetail);
         var link = findLink(r);
         var msgs = {
           mail: ["✓ Concept staat in Outlook. ", link ? extLink(link, "Open concept") : null],
@@ -1550,9 +1615,10 @@ dialog td { padding: 4px 8px 4px 0; vertical-align: top; }
   function openMailDraft(m, btn) {
     var key = "mail:" + m.id;
     if (toggleExisting(key)) return;
+    logEvent("antwoord_concept_open");
     var who = nameFromAddr(m.sender || m.from);
     var card = confirmCard({
-      kind: "mail", title: "Concept-antwoord in Outlook",
+      kind: "mail", title: "Concept-antwoord in Outlook", okEvent: "antwoord_concept_uitgevoerd",
       meta: "Aan: " + who + " · Re: " + (str(m.subject) || "(geen onderwerp)"),
       text: "", autoGenerate: !!cap.sample,
       generate: cap.sample ? function (hint, prev, onText, signal) {
@@ -1572,7 +1638,7 @@ dialog td { padding: 4px 8px 4px 0; vertical-align: top; }
     if (toggleExisting(key)) return;
     var cn = chatName(t.chatId) || teamsFrom(t);
     var card = confirmCard({
-      kind: "teams", title: "Teams-bericht naar " + cn, target: cn,
+      kind: "teams", title: "Teams-bericht naar " + cn, target: cn, okEvent: "teams_antwoord_uitgevoerd",
       meta: "Op: " + trunc(t.summary, 120),
       text: "", autoGenerate: !!cap.sample,
       generate: cap.sample ? function (hint, prev, onText, signal) {
@@ -1590,7 +1656,7 @@ dialog td { padding: 4px 8px 4px 0; vertical-align: top; }
     if (toggleExisting(key)) return;
     var f = i.fields || {};
     var card = confirmCard({
-      kind: "jira", title: "Commentaar op " + k, target: k, link: i.webUrl,
+      kind: "jira", title: "Commentaar op " + k, target: k, link: i.webUrl, okEvent: "jira_commentaar_uitgevoerd",
       meta: str(f.summary),
       text: "", autoGenerate: false,
       generate: cap.sample ? function (hint, prev, onText, signal) {
@@ -1967,26 +2033,27 @@ dialog td { padding: 4px 8px 4px 0; vertical-align: top; }
     var soort = str(inp.soort), tekst = stripDashes(str(inp.tekst)).trim();
     if (!tekst) throw new Error("tekst ontbreekt");
     var card;
+    if (["mail_concept", "teams_bericht", "jira_commentaar", "actie"].indexOf(soort) >= 0) logEvent("claude_voorstel_" + soort);
     if (soort === "mail_concept") {
       var mid = str(inp.messageId).trim();
       if (!mid) throw new Error("messageId ontbreekt; zoek de mail eerst met mail_zoeken");
       var m = seen.mail[mid] || S.mail.items.filter(function (x) { return x.id === mid; })[0];
-      card = confirmCard({ kind: "mail", title: "Concept-antwoord in Outlook", meta: m ? "Aan: " + nameFromAddr(m.sender || m.from) + " · Re: " + (str(m.subject) || "(geen onderwerp)") : "Antwoord op geselecteerde mail",
+      card = confirmCard({ okEvent: "claude_voorstel_uitgevoerd", okDetail: soort, kind: "mail", title: "Concept-antwoord in Outlook", meta: m ? "Aan: " + nameFromAddr(m.sender || m.from) + " · Re: " + (str(m.subject) || "(geen onderwerp)") : "Antwoord op geselecteerde mail",
         text: tekst, execute: function (t) { return needMcp() || doMailDraft(mid, t); } });
     } else if (soort === "teams_bericht") {
       var cid = str(inp.chatId).trim();
       if (!cid) throw new Error("chatId ontbreekt; zoek het bericht eerst met teams_zoeken");
       var cn = seen.chats[cid] || chatName(cid) || "chat";
-      card = confirmCard({ kind: "teams", title: "Teams-bericht naar " + cn, target: cn, text: tekst, execute: function (t) { return needMcp() || doTeamsSend(cid, t); } });
+      card = confirmCard({ okEvent: "claude_voorstel_uitgevoerd", okDetail: soort, kind: "teams", title: "Teams-bericht naar " + cn, target: cn, text: tekst, execute: function (t) { return needMcp() || doTeamsSend(cid, t); } });
     } else if (soort === "jira_commentaar") {
       var k = str(inp.issueKey).trim().toUpperCase();
       if (!/^[A-Z][A-Z0-9_]*-\d+$/.test(k)) throw new Error("issueKey ongeldig");
       var ji = seen.jira[k];
-      card = confirmCard({ kind: "jira", title: "Commentaar op " + k, target: k, link: ji && ji.webUrl, meta: ji ? str(ji.fields && ji.fields.summary) : "", text: tekst, execute: function (t) { return needMcp() || doJiraComment(k, t); } });
+      card = confirmCard({ okEvent: "claude_voorstel_uitgevoerd", okDetail: soort, kind: "jira", title: "Commentaar op " + k, target: k, link: ji && ji.webUrl, meta: ji ? str(ji.fields && ji.fields.summary) : "", text: tekst, execute: function (t) { return needMcp() || doJiraComment(k, t); } });
     } else if (soort === "actie") {
       var prog = matchProg(str(inp.programma)) || "Overig";
       var meta = [str(inp.wie) ? "Wie: " + str(inp.wie) : "", str(inp.deadline) ? "Deadline: " + str(inp.deadline) : "", "Programma: " + prog].filter(Boolean).join(" · ");
-      card = confirmCard({ kind: "actie", title: "Nieuwe actie", meta: meta, text: tekst, execute: function (t) {
+      card = confirmCard({ okEvent: "claude_voorstel_uitgevoerd", okDetail: soort, kind: "actie", title: "Nieuwe actie", meta: meta, text: tekst, execute: function (t) {
         if (!cap.db) return Promise.reject({ code: "not_granted" });
         return addActie({ text: t, who: str(inp.wie) || "eigen actie", due: str(inp.deadline), prog: prog, bron: "cowork" }, true);
       } });
@@ -2020,6 +2087,7 @@ dialog td { padding: 4px 8px 4px 0; vertical-align: top; }
   var QUICK_LABEL = { today: "Wat moet ik vandaag?", inbox: "Vat mijn inbox samen", teams: "Wat speelt er in Teams?" };
   function prepareMeeting(it, e, btn) {
     if (!cap.sample || chat.busy) return;
+    logEvent("bereid_voor");
     openPanel(btn);
     if (btn) btn.disabled = true;
     fullOrSummary(it).then(function (body) {
@@ -2121,6 +2189,7 @@ dialog td { padding: 4px 8px 4px 0; vertical-align: top; }
       delete voorst.busy[v.id];
       voorst.last = { v: v, kind: "ja" };
       announce("Op de lijst gezet: " + trunc(v.text, 60));
+      logEvent("voorstel_ja");
       renderVoorstellen();
     }, function (e) {
       delete voorst.busy[v.id];
@@ -2132,7 +2201,7 @@ dialog td { padding: 4px 8px 4px 0; vertical-align: top; }
     if (!cap.db || voorst.busy[v.id]) return;
     voorst.busy[v.id] = true; renderVoorstellen();
     setVoorstStatus(v, "nee").then(function () {
-      delete voorst.busy[v.id]; voorst.last = { v: v, kind: "nee" }; announce("Voorstel weggelegd"); renderVoorstellen();
+      delete voorst.busy[v.id]; voorst.last = { v: v, kind: "nee" }; announce("Voorstel weggelegd"); logEvent("voorstel_nee"); renderVoorstellen();
     }, function (e) { delete voorst.busy[v.id]; setLocal(v.id, "nieuw"); voorst.error = e || { code: "unavailable" }; renderVoorstellen(); });
   }
   function setLocal(id, st) { voorst.docs.forEach(function (d) { if (d.id === id) d.status = st; }); }
@@ -2145,7 +2214,7 @@ dialog td { padding: 4px 8px 4px 0; vertical-align: top; }
           acties.docs = acties.docs.filter(function (d) { return d.id !== "v-" + id; }); delete acties.pending["v-" + id]; renderActies(); renderNowStrip();
         })
       : Promise.resolve();
-    p.then(function () { return setVoorstStatus(l.v, "nieuw"); }).then(function () { announce("Ongedaan gemaakt"); renderVoorstellen(); },
+    p.then(function () { return setVoorstStatus(l.v, "nieuw"); }).then(function () { announce("Ongedaan gemaakt"); logEvent("voorstel_ongedaan"); renderVoorstellen(); },
       function (e) { voorst.error = e || { code: "unavailable" }; renderVoorstellen(); });
     renderVoorstellen();
   }
@@ -2275,6 +2344,7 @@ dialog td { padding: 4px 8px 4px 0; vertical-align: top; }
     return null;
   }
   function makeActie(src) {
+    logEvent("maak_actie", src && src.bron);
     srcDraft = { bron: src.bron, bronUrl: safeUrl(src.bronUrl) || "", van: str(src.van), onderwerp: str(src.onderwerp) };
     var inp = $("addInput");
     inp.value = srcDraft.onderwerp;
@@ -2373,6 +2443,7 @@ dialog td { padding: 4px 8px 4px 0; vertical-align: top; }
     inp.value = ""; srcDraft = null; renderSrcChip();
     addActie(f).then(function (r) {
       announce("Actie toegevoegd");
+      logEvent("actie_toegevoegd", f.bron);
       if (!p.prog && r) suggestProg(r.id, p.text);
     }, function () { announce("Actie niet opgeslagen."); });
   }
@@ -2384,7 +2455,7 @@ dialog td { padding: 4px 8px 4px 0; vertical-align: top; }
     var cb = h("input", { type: "checkbox", "aria-label": (done ? "Heropen: " : "Afvinken: ") + str(a.text) });
     cb.checked = done;
     cb.disabled = !!a._pending || !cap.db;
-    cb.addEventListener("change", function () { updateActie(a, { status: cb.checked ? "done" : "open" }); announce(cb.checked ? "Actie afgevinkt" : "Actie heropend"); });
+    cb.addEventListener("change", function () { updateActie(a, { status: cb.checked ? "done" : "open" }); if (cb.checked) logEvent("actie_afgevinkt"); announce(cb.checked ? "Actie afgevinkt" : "Actie heropend"); });
     var ds = dueState(a);
     var meta = h("div", { class: "l2" });
     if (a.who && a.who !== "eigen actie") meta.append(h("span", { text: str(a.who) }));
@@ -2402,8 +2473,8 @@ dialog td { padding: 4px 8px 4px 0; vertical-align: top; }
     if (a._pending === "error") main.append(h("div", { class: "errmsg" }, "Niet opgeslagen. ", h("button", { class: "btn text", type: "button", text: "Opnieuw", onclick: function () { retryAdd(a.id); } })));
     var menu = h("div", { class: "amenu", hidden: true });
     if (!a._pending) {
-      if (a.status === "open") menu.append(h("button", { class: "btn", type: "button", text: a.vandaag ? "Van vandaag halen" : "Op vandaag zetten", onclick: function () { updateActie(a, { vandaag: !a.vandaag }); } }));
-      if (a.status !== "dropped") menu.append(h("button", { class: "btn", type: "button", text: "Laten vervallen", onclick: function () { updateActie(a, { status: "dropped" }); } }));
+      if (a.status === "open") menu.append(h("button", { class: "btn", type: "button", text: a.vandaag ? "Van vandaag halen" : "Op vandaag zetten", onclick: function () { logEvent("actie_vandaag"); updateActie(a, { vandaag: !a.vandaag }); } }));
+      if (a.status !== "dropped") menu.append(h("button", { class: "btn", type: "button", text: "Laten vervallen", onclick: function () { logEvent("actie_vervallen"); updateActie(a, { status: "dropped" }); } }));
       else menu.append(h("button", { class: "btn", type: "button", text: "Heropenen", onclick: function () { updateActie(a, { status: "open" }); } }));
     }
     menu.append(h("button", { class: "btn", type: "button", text: "Verwijderen", onclick: function () { deleteActie(a); } }));
@@ -2484,8 +2555,9 @@ dialog td { padding: 4px 8px 4px 0; vertical-align: top; }
   });
 
   // ---------- Events ----------
-  $("refreshAll").addEventListener("click", refreshAll);
-  document.querySelectorAll("[data-refresh]").forEach(function (b) { b.addEventListener("click", function () { refreshGroup(b.getAttribute("data-refresh")); }); });
+  $("refreshAll").addEventListener("click", function () { logEvent("ververs_alles"); refreshAll(); });
+  var REFRESH_NAME = { today: "vandaag", inbox: "inbox", work: "werk", acties: "acties" };
+  document.querySelectorAll("[data-refresh]").forEach(function (b) { b.addEventListener("click", function () { var g = b.getAttribute("data-refresh"); logEvent("ververs_" + (REFRESH_NAME[g] || g)); refreshGroup(g); }); });
   document.querySelectorAll(".collapse").forEach(function (b) {
     b.addEventListener("click", function () {
       var sec = b.closest(".card"); var c = sec.getAttribute("data-collapsed") === "true";
@@ -2517,15 +2589,17 @@ dialog td { padding: 4px 8px 4px 0; vertical-align: top; }
     if (!v || !cap.sample) return;
     $("barInput").value = "";
     openPanel($("barInput"));
+    logEvent("claude_vraag", v);
     sendChat(v);
   });
   $("quick").addEventListener("click", function (e) {
     var b = e.target.closest("button[data-q]"); if (!b || !cap.sample) return;
     var q = b.getAttribute("data-q");
     openPanel(b);
+    logEvent("claude_snelknop_" + q);
     sendChat(QUICK[q], QUICK_LABEL[q]);
   });
-  $("chatForm").addEventListener("submit", function (e) { e.preventDefault(); var v = chatInput.value; chatInput.value = ""; chatInput.style.height = ""; sendChat(v); });
+  $("chatForm").addEventListener("submit", function (e) { e.preventDefault(); var v = chatInput.value; chatInput.value = ""; chatInput.style.height = ""; if (v.trim() && cap.sample && !chat.busy) logEvent("claude_vraag", v); sendChat(v); });
   chatInput.addEventListener("keydown", function (e) { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); $("chatForm").requestSubmit(); } });
   chatInput.addEventListener("input", function () { chatInput.style.height = "auto"; chatInput.style.height = Math.min(chatInput.scrollHeight + 2, 160) + "px"; });
   $("chatStop").addEventListener("click", function () { if (activeCtl) activeCtl.abort(); });
@@ -2555,6 +2629,7 @@ dialog td { padding: 4px 8px 4px 0; vertical-align: top; }
     var t = e.target;
     var typing = t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable);
     if ((e.ctrlKey || e.metaKey) && (e.key === "k" || e.key === "K")) { e.preventDefault(); focusBar(); return; }
+    if ($("poDlg").open || $("keys").open) return;
     if (e.key === "Escape") {
       if (closeMenus()) { e.preventDefault(); return; }
       if (!chatEl.hidden) { e.preventDefault(); closePanel(); return; }
@@ -2606,11 +2681,195 @@ dialog td { padding: 4px 8px 4px 0; vertical-align: top; }
     if (d !== lastDay && cap.mcp) { lastDay = d; refresh("cal"); refresh("teams"); }
   }, 60000);
 
+  // ---------- Gebruikslog (analist) ----------
+  // Alleen event-namen en de eigen Claude-vraag; nooit adressen, namen of inhoud uit bronnen.
+  var usage = { buf: [], writing: false };
+  function logEvent(e, d) {
+    if (halted || cap.db === null) return;
+    var ev = { t: new Date().toISOString(), e: String(e).replace(/[^a-z0-9_]/gi, "_").slice(0, 64) };
+    if (d != null && String(d).trim()) ev.d = String(d).replace(/\s+/g, " ").trim().slice(0, 120);
+    usage.buf.push(ev);
+    if (usage.buf.length > 1000) usage.buf.splice(0, usage.buf.length - 1000);
+  }
+  function flushUsage() {
+    if (!cap.db || usage.writing || !usage.buf.length) return Promise.resolve();
+    var batch = usage.buf.splice(0);
+    var byDay = {};
+    batch.forEach(function (ev) { var day = isoDay(new Date(ev.t)); (byDay[day] = byDay[day] || []).push(ev); });
+    usage.writing = true;
+    var days = Object.keys(byDay).sort(), failed = [];
+    function next(i) {
+      if (i >= days.length) return Promise.resolve();
+      var day = days[i], evs = byDay[day];
+      var ref;
+      try { ref = cap.db.collection("gebruik").doc(day); } catch (e) { return next(i + 1); }
+      return ref.get().then(function (snap) {
+        var old = snap && snap.exists ? (snap.data() || {}) : {};
+        var counts = {};
+        var oc = isPlain(old.counts) ? old.counts : {};
+        for (var k in oc) if (typeof oc[k] === "number") counts[k] = oc[k];
+        evs.forEach(function (ev) { counts[ev.e] = (counts[ev.e] || 0) + 1; });
+        var list = (Array.isArray(old.events) ? old.events.filter(isPlain) : []).concat(evs);
+        if (list.length > 300) list = list.slice(list.length - 300);
+        return ref.set({ counts: counts, events: list, updatedAt: new Date().toISOString() });
+      }).catch(function () { failed = failed.concat(evs); }).then(function () { return next(i + 1); });
+    }
+    return next(0).then(function () {
+      usage.writing = false;
+      if (failed.length) usage.buf = failed.concat(usage.buf).slice(-1000);
+    });
+  }
+  setInterval(flushUsage, 30000);
+  document.addEventListener("visibilitychange", function () { if (document.visibilityState === "hidden") flushUsage(); });
+  window.addEventListener("pagehide", function () { flushUsage(); });
+
+  // ---------- Send to PO ----------
+  var po = { anchorEl: null, canSend: null, canSendP: null, saved: null, busy: false, commentsOff: false, opener: null };
+  var PO_ANCHOR = { Vandaag: "vandaag", Inbox: "inbox", Acties: "acties", Werk: "werk", Claude: "claudebar", Algemeen: "top" };
+  function applyPoState() {
+    var show = !!(cap.db || cap.comments);
+    document.querySelectorAll(".po-open").forEach(function (b) { b.hidden = !show; });
+  }
+  var PO_REASON = {
+    writers_only: "Direct naar de PO sturen kan alleen als editor van deze pagina.",
+    no_session: "Er is nu geen PO-sessie die het kan ontvangen.",
+    off: "Direct naar de PO sturen staat in deze weergave uit.",
+    none: "Opmerkingen zijn in deze weergave niet beschikbaar."
+  };
+  function poRouteText() {
+    if (po.canSend === "available") return "Gaat als opmerking bij dit onderdeel naar de PO" + (cap.db ? " en wordt bewaard." : ".");
+    if (po.canSend === null && cap.comments && !po.commentsOff) return "Controleren of direct versturen kan…";
+    var reason = PO_REASON[po.commentsOff || !cap.comments ? "none" : po.canSend] || PO_REASON.off;
+    return cap.db ? "Wordt bewaard voor de PO. " + reason : reason;
+  }
+  function openPo(part, opener) {
+    var dlg = $("poDlg");
+    po.opener = opener || document.activeElement;
+    $("poPart").value = part || "Algemeen";
+    po.anchorEl = $(PO_ANCHOR[$("poPart").value]) || $("top");
+    $("poMsg").textContent = ""; $("poMsg").className = "msg";
+    po.canSend = null;
+    po.canSendP = null;
+    if (cap.comments && !po.commentsOff && typeof cap.comments.canSendToClaude === "function") {
+      po.canSendP = Promise.resolve().then(function () { return cap.comments.canSendToClaude(); }).then(function (v) {
+        po.canSend = ["available", "writers_only", "no_session", "off"].indexOf(v) >= 0 ? v : "off";
+      }, function () { po.canSend = "off"; }).then(function () { $("poRoute").textContent = poRouteText(); syncPo(); });
+    } else po.canSend = "off";
+    $("poRoute").textContent = poRouteText();
+    syncPo();
+    try { if (!dlg.open) dlg.showModal(); } catch (e) { dlg.setAttribute("open", ""); }
+    $("poText").focus();
+  }
+  function syncPo() {
+    var t = $("poText").value;
+    $("poCnt").textContent = t.length + " / 3500";
+    var canAny = !!cap.db || po.canSend === "available";
+    $("poSend").disabled = po.busy || !t.trim() || (!canAny && po.canSend !== null);
+    $("poSend").textContent = po.busy ? "Versturen…" : "Verstuur naar PO";
+  }
+  function closePo() {
+    var dlg = $("poDlg");
+    if (po.busy) return;
+    try { dlg.close(); } catch (e) { dlg.removeAttribute("open"); }
+    if (po.opener && document.contains(po.opener)) po.opener.focus();
+  }
+  function utf8Trim(s, maxBytes) {
+    var enc = new TextEncoder();
+    if (enc.encode(s).length <= maxBytes) return s;
+    var lo = 0, hi = s.length;
+    while (lo < hi) { var mid = (lo + hi + 1) >> 1; if (enc.encode(s.slice(0, mid)).length <= maxBytes - 4) lo = mid; else hi = mid - 1; }
+    return s.slice(0, lo) + " …";
+  }
+  function commentsErrText(code) {
+    switch (code) {
+      case "consent_required": return "Niet als opmerking geplaatst: je hebt deze pagina (nog) geen toestemming gegeven om opmerkingen te plaatsen.";
+      case "forbidden": return "Opmerkingen plaatsen vanaf deze pagina staat hier uit.";
+      case "claude_unavailable": return "Kon niet direct naar de PO sturen; er is niets geplaatst.";
+      case "rate_limited": return "Je verstuurt te snel achter elkaar. Probeer het straks opnieuw.";
+      case "invalid": case "transform_error": return "De tekst kon niet als opmerking worden geplaatst (te lang of ongeldige tekens).";
+      case "not_granted": case "capability_disabled": case "capability_removed": return "Opmerkingen zijn in deze weergave niet beschikbaar.";
+      default: return "Opmerkingen werken nu niet. Controleer in claude.ai of de opmerking toch geplaatst is voor je het opnieuw probeert.";
+    }
+  }
+  async function sendPo(ev) {
+    ev.preventDefault();
+    if (po.busy) return;
+    var tekst = $("poText").value.trim().slice(0, 3500);
+    if (!tekst) return;
+    var onderdeel = $("poPart").value, prio = (document.querySelector('input[name="poPrio"]:checked') || {}).value || "Should";
+    var anchorEl = $(PO_ANCHOR[onderdeel]) || po.anchorEl || $("top");
+    po.busy = true; syncPo();
+    var msg = $("poMsg"); msg.textContent = ""; msg.className = "msg";
+    var docRef = null, docId = null, dbErr = null;
+    // (a) bewaren in db (bij een handmatige herhaling met dezelfde tekst niet opnieuw)
+    if (cap.db) {
+      var same = po.saved && po.saved.tekst === tekst && po.saved.onderdeel === onderdeel && po.saved.prio === prio;
+      if (same) { docRef = po.saved.ref; docId = po.saved.id; }
+      else {
+        try {
+          docRef = cap.db.collection("feedback").doc();
+          await docRef.set({ onderdeel: onderdeel, tekst: tekst, prio: prio, status: "nieuw", createdAt: new Date().toISOString() });
+          docId = docRef.id;
+          po.saved = { ref: docRef, id: docId, tekst: tekst, onderdeel: onderdeel, prio: prio };
+        } catch (e) { dbErr = e || { code: "unavailable" }; docRef = null; }
+      }
+    }
+    // (b) naar de PO via een opmerking, alleen als dat kan
+    if (po.canSendP) await po.canSendP;
+    var sent = false, sendErr = null;
+    if (cap.comments && !po.commentsOff && po.canSend === "available") {
+      try {
+        var anchor = await cap.comments.anchorFor(anchorEl);
+        var text = utf8Trim("Send to PO\nOnderdeel: " + onderdeel + " · Prio: " + prio + "\n\n" + tekst + (docId ? "\n\nfeedback-id: " + docId : ""), 4096);
+        var res = await cap.comments.sendToClaude({ anchor: anchor, text: text });
+        sent = true;
+        if (docRef && res && res.threadId) {
+          try { await docRef.update({ threadId: String(res.threadId) }); } catch (e) { /* threadId is optioneel */ }
+        }
+      } catch (e) {
+        sendErr = e || { code: "upstream_error" };
+        var c = sendErr.code;
+        if (c === "forbidden" || c === "not_granted" || c === "capability_disabled" || c === "capability_removed") po.commentsOff = true;
+        if (c === "claude_unavailable") po.canSend = null;
+      }
+    }
+    po.busy = false;
+    var saved = !!docId;
+    if (sent) {
+      msg.className = "msg ok"; msg.textContent = "Verstuurd. De PO reageert in de opmerking bij dit onderdeel.";
+      $("poText").value = ""; po.saved = null;
+      logEvent("send_to_po", onderdeel + " " + prio);
+    } else if (saved && !sendErr) {
+      msg.className = "msg ok";
+      msg.textContent = "Bewaard. De PO pakt het op bij de volgende ronde." + (cap.comments && !po.commentsOff ? " " + (PO_REASON[po.canSend] || PO_REASON.off) : "");
+      $("poText").value = ""; po.saved = null;
+      logEvent("send_to_po", onderdeel + " " + prio);
+    } else if (saved && sendErr) {
+      msg.className = "msg err";
+      msg.textContent = "Bewaard. De PO pakt het op bij de volgende ronde. " + commentsErrText(sendErr.code);
+      logEvent("send_to_po", onderdeel + " " + prio);
+    } else if (sendErr) {
+      msg.className = "msg err"; msg.textContent = commentsErrText(sendErr.code) + (dbErr ? " Bewaren lukte ook niet." : "");
+    } else {
+      msg.className = "msg err";
+      msg.textContent = dbErr ? "Bewaren lukte niet. Probeer het opnieuw." : "Versturen kan hier niet. " + (PO_REASON[cap.comments ? po.canSend : "none"] || PO_REASON.off);
+    }
+    $("poRoute").textContent = poRouteText();
+    syncPo();
+  }
+  document.querySelectorAll(".po-open").forEach(function (b) { b.addEventListener("click", function () { openPo(b.getAttribute("data-po"), b); }); });
+  $("poForm").addEventListener("submit", sendPo);
+  $("poCancel").addEventListener("click", closePo);
+  $("poText").addEventListener("input", syncPo);
+  $("poText").addEventListener("keydown", function (e) { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); $("poForm").requestSubmit(); } });
+  $("poPart").addEventListener("change", function () { po.anchorEl = $(PO_ANCHOR[$("poPart").value]) || $("top"); });
+  $("poDlg").addEventListener("cancel", function (e) { if (po.busy) e.preventDefault(); else { e.preventDefault(); closePo(); } });
+
   // ---------- Opstart ----------
   renderAll();
   applySampleState();
   if (!hasRuntime) {
-    cap.mcp = null; cap.sample = null; cap.db = null;
+    cap.mcp = null; cap.sample = null; cap.db = null; cap.comments = null;
     renderAll(); applySampleState();
   } else {
     useCap("mcp").then(function (m) {
@@ -2630,8 +2889,11 @@ dialog td { padding: 4px 8px 4px 0; vertical-align: top; }
     useCap("db").then(function (d) {
       cap.db = d;
       if (d) { subscribeActies(); subscribeVoorstellen(); }
-      renderActies(); renderNowStrip();
+      else usage.buf = [];
+      renderActies(); renderNowStrip(); applyPoState();
     });
+    useCap("comments").then(function (c) { cap.comments = c; applyPoState(); });
+    logEvent("open_pagina");
   }
 })();
 </script>
