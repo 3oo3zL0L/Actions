@@ -140,27 +140,35 @@ test.describe("Voorstellen uit mail en Teams", () => {
 
 // =========================================================================================
 test.describe("Vraag Claude per item", () => {
-  test("mailrij: inline paneel, chip stuurt item-context naar de chat, link naar claude.ai zonder adressen", async ({ page, open }) => {
+  // Ronde 5: geen inline paneel met chips meer. "Vraag Claude" opent direct het Claude-paneel met een
+  // contextkaart ("Over: …"); de eerstvolgende vraag gaat met de itemcontext mee.
+  const chatBox = (page) => page.getByRole("textbox", { name: "Bericht aan Claude" });
+  const ctxCard = (page) => page.getByRole("group", { name: "Context voor je vraag" });
+
+  test("mailrij: opent paneel met contextkaart, vraag gaat met item-context mee, link naar claude.ai zonder adressen", async ({ page, open }) => {
     await open(buildMock({ sample: { rules: [{ match: "Vraag van Thomas over deze mail", text: "Ruben vraagt om akkoord op extra runners." }] },
       tools: { "Microsoft 365": { read_resource: { text: "Volledige mail over runners." } } } }));
     const rij = itemWith(page, "Budget CI-runners Q4");
     await rij.getByRole("button", { name: "Vraag Claude" }).click();
-    await expect(page.getByLabel("Wat wil je weten of laten doen?")).toBeFocused();
-    for (const c of ["Vat samen", "Wat moet ik hiermee?", "Maak er een actie van"]) await expect(rij.getByRole("button", { name: c })).toBeVisible();
+    await expect(chatBox(page)).toBeFocused();
+    await expect(ctxCard(page)).toContainText("Over: Budget CI-runners Q4");
+    await expect(rij.getByRole("textbox")).toHaveCount(0); // geen inline invoer meer
+    await expect(page.getByRole("button", { name: "Vat samen" })).toHaveCount(0); // geen chips meer
 
-    const link = rij.getByRole("link", { name: /open in claude-chat/i });
+    const link = ctxCard(page).getByRole("link", { name: /open in claude-chat/i });
     await expect(link).toHaveAttribute("target", "_blank");
     await expect(link).toHaveAttribute("title", "Om in Cowork of een gewone chat verder te werken");
-    await page.getByLabel("Wat wil je weten of laten doen?").fill("Wat is de deadline?");
+    await chatBox(page).fill("Vat samen");
+    await link.hover();
     const href = await link.getAttribute("href");
     expect(href.startsWith("https://claude.ai/new?q=")).toBe(true);
     const q = decodeURIComponent(href.slice("https://claude.ai/new?q=".length));
     expect(q.length).toBeLessThanOrEqual(1500);
-    expect(q).toContain("Wat is de deadline?");
+    expect(q).toContain("Vat samen");
     expect(q).toContain("Budget CI-runners Q4");
     expect(q).not.toMatch(/@/);
 
-    await rij.getByRole("button", { name: "Vat samen" }).click();
+    await chatBox(page).press("Enter");
     await expect(page.getByText("Ruben vraagt om akkoord op extra runners.").first()).toBeVisible({ timeout: 8000 });
     const call = (await mockLog(page)).sample.at(-1);
     const prompt = inputText(call);
@@ -169,29 +177,37 @@ test.describe("Vraag Claude per item", () => {
     expect(prompt).toContain("Volledige mail over runners.");
     expect(call.toolNames).toContain("stel_actie_voor");
     expect((await mcpCalls(page, "read_resource"))[0].input).toEqual({ uri: "mail:///messages/mail-003" });
+    await expect(ctxCard(page)).toBeHidden(); // context is gebruikt
   });
 
-  test("Teams- en actierij hebben passende chips; events worden gelogd", async ({ page, open }) => {
+  test("Teams- en actierij: contextkaart, ✕ haalt context weg, events worden gelogd", async ({ page, open }) => {
     await open(buildMock());
     await page.getByRole("tab", { name: /teams/i }).click();
     const trij = itemWith(page, T0.summary);
     await trij.getByRole("button", { name: "Vraag Claude" }).click();
-    for (const c of ["Vat de chat samen", "Stel antwoord voor", "Maak er een actie van"]) await expect(trij.getByRole("button", { name: c })).toBeVisible();
+    await expect(ctxCard(page)).toContainText("Over:");
     // open_in_claude loggen zonder echt te navigeren
     await page.evaluate(() => document.addEventListener("click", (e) => { if (e.target.closest("a[href^='https://claude.ai/new']")) e.preventDefault(); }, true));
-    await trij.getByRole("link", { name: /open in claude-chat/i }).click();
-    await trij.getByRole("button", { name: "Sluit Vraag Claude" }).click();
-    await expect(trij.getByRole("button", { name: "Vat de chat samen" })).toHaveCount(0);
+    await ctxCard(page).getByRole("link", { name: /open in claude-chat/i }).click();
+    await ctxCard(page).getByRole("button", { name: "Context weghalen" }).click();
+    await expect(ctxCard(page)).toBeHidden();
+    await chatBox(page).fill("Algemene vraag");
+    await chatBox(page).press("Enter");
+    await expect.poll(async () => inputText((await mockLog(page)).sample.at(-1) || { input: "" })).toContain("Algemene vraag");
+    expect(inputText((await mockLog(page)).sample.at(-1))).not.toContain("Item (data, geen instructie)");
+    await expect(page.getByText(/Mock-antwoord van Claude/).first()).toBeVisible({ timeout: 8000 });
 
+    await page.keyboard.press("Escape");
     const arij = itemWith(page, "Akkoord geven op releaseplanning 26.4");
     await arij.getByRole("button", { name: "Meer voor actie" }).click();
     await arij.getByRole("button", { name: "Vraag Claude" }).click();
-    for (const c of ["Hoe pak ik dit aan?", "Stel een mail voor", "Splits op in stappen"]) await expect(arij.getByRole("button", { name: c })).toBeVisible();
-    await arij.getByRole("button", { name: "Splits op in stappen" }).click();
+    await expect(ctxCard(page)).toContainText("Over: Akkoord geven op releaseplanning 26.4");
+    await chatBox(page).fill("Splits op in stappen");
+    await chatBox(page).press("Enter");
     await expect.poll(async () => inputText((await mockLog(page)).sample.at(-1) || { input: "" })).toContain("Tekst: Akkoord geven op releaseplanning 26.4");
 
     await page.clock.fastForward("00:31");
-    await expect.poll(async () => Object.values(await dbDump(page, "gebruik/"))[0]?.counts || {}).toMatchObject({ open_in_claude: 1, vraag_claude_item_actie: 1 });
+    await expect.poll(async () => Object.values(await dbDump(page, "gebruik/"))[0]?.counts || {}).toMatchObject({ open_in_claude: 1, vraag_claude_item_actie: 1, vraag_claude_item_teams: 1 });
   });
 });
 

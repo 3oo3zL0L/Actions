@@ -13,7 +13,8 @@
  *   connected: ["Microsoft 365", "Atlassian Rovo"], // anders server_not_connected
  *   manifest: { "<server>": ["tool", ...] },        // default = manifest uit BRIEF.md
  *   tools: { "<server>": { "<tool>": Fixture } },
- *   sample: { rules: [SampleRule], default: SampleRule, error: {code,message}, context: {...} },
+ *   sample: { rules: [SampleRule], default: SampleRule, error: {code,message}, context: {...},
+ *             toolsMax?: number (default 8; 0 = geen tools), allowSameRoleTurns?: boolean },
  *   db: { docs: { "acties/a1": {...} }, failWrites: {code,message} }
  *   comments: null | { canSend?: "available"|"writers_only"|"no_session"|"off",   // default "available"
  *               canSendError?, anchorError?, sendError?, createError? : {code,message} }
@@ -31,7 +32,8 @@
  *   + optioneel delayMs
  *
  * SampleRule:
- *   { match?: "regex op invoertekst", text?: "...", chunks?: ["..",".."], json?: any,
+ *   { match?: "regex op invoertekst", text?: "...", chunks?: ["..",".."], json?: any, tierApplied?: "quick"|"default"|"complex",
+ *     errorIfTools?: {code,message},       // fout alleen als de call tools meestuurt
  *     thinkMs?: 50, chunkDelayMs?: 40, holdLast?: false,
  *     toolCalls?: [{ tool: "regex op naam/beschrijving", input?: {...}, hints?: {...} }],
  *     error?: {code,message}, errorAfterStream?: {code,message} }
@@ -47,11 +49,11 @@
     "Microsoft 365": [
       "outlook_calendar_search", "outlook_email_search", "chat_message_search",
       "teams_list_chats", "read_resource", "outlook_create_reply_draft",
-      "teams_send_chat_message", "get_me",
+      "teams_send_chat_message", "get_me", "outlook_modify_labels",
     ],
     "Atlassian Rovo": ["searchJiraIssuesUsingJql", "searchConfluenceUsingCql", "addCommentToJiraIssue"],
   };
-  const WRITE_TOOLS = new Set(["outlook_create_reply_draft", "teams_send_chat_message", "addCommentToJiraIssue"]);
+  const WRITE_TOOLS = new Set(["outlook_create_reply_draft", "teams_send_chat_message", "addCommentToJiraIssue", "outlook_modify_labels"]);
 
   const LOG = (window.__MOCK_LOG__ = {
     mcp: [],          // {via, server, tool, input, t, outcome}
@@ -279,6 +281,11 @@
       }
       if (input[0].role !== "user" || input[input.length - 1].role !== "user")
         return "turns must start and end on a user turn";
+      // Strenger dan het contract (dat staat opeenvolgende zelfde rollen toe): de pagina moet strikt
+      // user/assistant afwisselen (PO-besluit ronde 6). Uit te zetten met __MOCK__.sample.allowSameRoleTurns.
+      if (!(cfg().sample && cfg().sample.allowSameRoleTurns)) {
+        for (let i = 1; i < input.length; i++) if (input[i].role === input[i - 1].role) return "two consecutive turns with the same role";
+      }
     } else {
       return "input must be a string or turn list (not {prompt})";
     }
@@ -299,6 +306,9 @@
         if (t.inputSchema && t.inputSchema.type !== "object") return `tool ${t.name}: inputSchema.type must be "object"`;
       }
       if ("cache" in options && options.cache !== false) return "cache (other than false) with tools";
+      const lim = sampleLimits();
+      if (!lim.tools && options.tools.length) return "__tools_unavailable__";
+      if (lim.tools && options.tools.length > lim.tools.maxCount) return `too many tools (${options.tools.length} > ${lim.tools.maxCount})`;
     }
     if ("cache" in options) {
       const ca = options.cache;
@@ -356,8 +366,8 @@
       };
       LOG.sample.push(entry);
       if (bad) {
-        entry.outcome = bad === "__too_large__" ? "prompt_too_large" : "invalid_request";
-        if (bad !== "__too_large__") violation("sample: " + bad);
+        entry.outcome = bad === "__too_large__" ? "prompt_too_large" : bad === "__tools_unavailable__" ? "tools_unavailable" : "invalid_request";
+        if (entry.outcome === "invalid_request") violation("sample: " + bad);
         return queueMicrotask(() => reject(sampleErr(entry.outcome, bad)));
       }
       const signal = options && options.signal;
@@ -390,6 +400,7 @@
         await sleep(rule.thinkMs == null ? 50 : rule.thinkMs);
         if (settled) return;
         if (rule.error) return fail(clone(rule.error));
+        if (rule.errorIfTools && options && Array.isArray(options.tools) && options.tools.length) return fail(clone(rule.errorIfTools));
 
         const tools = (options && options.tools) || [];
         for (const tc of rule.toolCalls || []) {
@@ -434,14 +445,20 @@
             return fail(sampleErr("invalid_json", "no JSON in reply", text));
           }
         }
-        ok({ text, truncated: false, modelTierApplied: (options && options.modelTier) || "default" });
+        ok({ text, truncated: false, modelTierApplied: rule.tierApplied || (options && options.modelTier) || "default" });
       })().catch((e) => fail(sampleErr("upstream_error", String(e && e.message || e))));
     });
   }
 
   function sample(input, options) { return runSample("text", input, options); }
   sample.json = (input, options) => runSample("json", input, options);
-  sample.limits = () => Promise.resolve({ maxPromptBytes: 65536, tools: { maxCount: 20 } });
+  // limits(): standaard 8 tools; __MOCK__.sample.toolsMax (getal) of .toolsMax = 0 (geen tools in deze weergave).
+  function sampleLimits() {
+    const sc = cfg().sample || {};
+    const max = sc.toolsMax === undefined ? 8 : sc.toolsMax;
+    return max ? { maxPromptBytes: 65536, tools: { maxCount: max } } : { maxPromptBytes: 65536 };
+  }
+  sample.limits = () => Promise.resolve(sampleLimits());
   Object.freeze(sample);
 
   // ------------------------------------------------------------------- db
