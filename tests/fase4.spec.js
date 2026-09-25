@@ -206,7 +206,7 @@ function contrast(a, b) {
 }
 
 test.describe("Thema Dark Forest", () => {
-  test("standaard: data-theme forest, zwarte achtergrond, sterren en AA-contrast", async ({ page, open }) => {
+  test("standaard: data-theme forest, zwarte achtergrond, oude kleuren, bos-illustratie en AA-contrast", async ({ page, open }) => {
     await page.emulateMedia({ colorScheme: "light" });
     await open(buildMock());
     await expect(page.locator("html")).toHaveAttribute("data-theme", "forest");
@@ -214,20 +214,24 @@ test.describe("Thema Dark Forest", () => {
     const t = await page.evaluate(() => {
       const cs = getComputedStyle(document.documentElement);
       const v = (n) => cs.getPropertyValue(n).trim();
-      const before = getComputedStyle(document.body, "::before");
+      const bg = document.querySelector(".forest-bg");
+      const bcs = bg && getComputedStyle(bg);
       return { surface: v("--surface"), text: v("--text"), text2: v("--text-2"), text3: v("--text-3"), accent: v("--accent"), onAccent: v("--on-accent"),
-        danger: v("--danger"), accentText: v("--accent-text"), bg: v("--bg"),
-        starOpacity: parseFloat(before.opacity), starPos: before.position, starEvents: before.pointerEvents, starAnim: before.animationName };
+        danger: v("--danger"), accentText: v("--accent-text"),
+        bgDisplay: bcs && bcs.display, bgPos: bcs && bcs.position, bgEvents: bcs && bcs.pointerEvents, bgHidden: bg && bg.getAttribute("aria-hidden"),
+        bgSvg: !!(bg && bg.querySelector("svg path")), anims: bg ? bg.querySelectorAll("animate, animateTransform").length : -1 };
     });
-    expect(t.surface).toBe("#07090a");
-    expect(t.accent).toBe("#7fd1b0");
-    expect(t.danger).toBe("#e0463a");
+    // Kleurstelling zoals voorheen: honinggeel accent op de vertrouwde donkere kaarten.
+    expect(t.surface).toBe("#18191c");
+    expect(t.accent).toBe("#e8a317");
     for (const fg of [t.text, t.text2, t.text3, t.accentText, t.danger]) expect(contrast(fg, t.surface), `${fg} op ${t.surface}`).toBeGreaterThanOrEqual(4.5);
     expect(contrast(t.onAccent, t.accent)).toBeGreaterThanOrEqual(4.5);
-    expect(t.starOpacity).toBeLessThanOrEqual(0.35);
-    expect(t.starPos).toBe("fixed");
-    expect(t.starEvents).toBe("none");
-    expect(t.starAnim).toBe("none");
+    expect(t.bgDisplay).toBe("block");
+    expect(t.bgPos).toBe("fixed");
+    expect(t.bgEvents).toBe("none");
+    expect(t.bgHidden).toBe("true");
+    expect(t.bgSvg).toBe(true);
+    expect(t.anims).toBe(0);
   });
 
   test("thema-knop cyclet Dark Forest → Licht → Systeem en onthoudt de keuze", async ({ page, open }) => {
