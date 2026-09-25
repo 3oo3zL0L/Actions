@@ -21,7 +21,6 @@
 .arow.err { background: var(--danger-soft); }
 .arow .errmsg { color: var(--danger); font-size: var(--fs-sm); }
 .amenu { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
-.arow .more { display: inline-flex; }
 details.klaar summary { cursor: pointer; color: var(--text-2); font-size: var(--fs-sm); font-weight: 600; padding: 8px 4px; min-height: 40px; display: flex; align-items: center; }
 .paf { display: block; margin-top: var(--sp-4); border-top: 1px solid var(--border); padding: 10px 4px 0; text-decoration: none; color: var(--text-2); font-size: var(--fs-sm); }
 .paf:hover strong { text-decoration: underline; }

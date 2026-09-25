@@ -2,6 +2,8 @@
 "use strict";
 
 // ---------- Opstart ----------
+Shell.init();
+onPrefs(function (p, first) { if (first && p.lastEntry) Shell.restore(p.lastEntry); });
 renderAll();
 applySampleState();
 if (!hasRuntime) {
@@ -30,7 +32,7 @@ if (!hasRuntime) {
   });
   useCap("db").then(function (d) {
     cap.db = d;
-    if (d) { subscribeActies(); subscribeVoorstellen(); subscribeHandled(); }
+    if (d) { loadPrefs(); subscribeActies(); subscribeVoorstellen(); subscribeHandled(); }
     else usage.buf = [];
     renderActies(); renderNowStrip();
   });

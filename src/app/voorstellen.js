@@ -41,7 +41,7 @@ function acceptVoorstel(v) {
   }).then(function () {
     delete voorst.busy[v.id];
     voorst.last = { v: v, kind: "ja" };
-    announce("Op de lijst gezet: " + trunc(v.text, 60));
+    feedback({ text: "Op de lijst gezet: " + trunc(v.text, 60), undo: undoVoorstel });
     logEvent("voorstel_ja");
     renderVoorstellen();
   }, function (e) {
@@ -54,7 +54,7 @@ function rejectVoorstel(v) {
   if (!cap.db || voorst.busy[v.id]) return;
   voorst.busy[v.id] = true; renderVoorstellen();
   setVoorstStatus(v, "nee").then(function () {
-    delete voorst.busy[v.id]; voorst.last = { v: v, kind: "nee" }; announce("Voorstel weggelegd"); logEvent("voorstel_nee"); renderVoorstellen();
+    delete voorst.busy[v.id]; voorst.last = { v: v, kind: "nee" }; feedback({ text: "Weggelegd: " + trunc(v.text, 60), undo: undoVoorstel }); logEvent("voorstel_nee"); renderVoorstellen();
   }, function (e) { delete voorst.busy[v.id]; setLocal(v.id, "nieuw"); voorst.error = e || { code: "unavailable" }; renderVoorstellen(); });
 }
 function setLocal(id, st) { voorst.docs.forEach(function (d) { if (d.id === id) d.status = st; }); }
@@ -67,17 +67,21 @@ function undoVoorstel() {
         acties.docs = acties.docs.filter(function (d) { return d.id !== "v-" + id; }); delete acties.pending["v-" + id]; renderActies(); renderNowStrip();
       })
     : Promise.resolve();
-  p.then(function () { return setVoorstStatus(l.v, "nieuw"); }).then(function () { announce("Ongedaan gemaakt"); logEvent("voorstel_ongedaan"); renderVoorstellen(); },
+  p.then(function () { return setVoorstStatus(l.v, "nieuw"); }).then(function () { feedback({ text: "Ongedaan gemaakt" }); logEvent("voorstel_ongedaan"); renderVoorstellen(); },
     function (e) { voorst.error = e || { code: "unavailable" }; renderVoorstellen(); });
   renderVoorstellen();
 }
 function canScan() { return !!(cap.db && cap.sample && cap.mcp && !halted); }
 function renderVoorstellen() {
+  renderVoorstellenBlok();
+  renderVandaag();
+}
+function renderVoorstellenBlok() {
   var box = clear($("voorstellen"));
   var list = cap.db ? voorstNieuw() : [];
-  var full = !!cap.db && (list.length || voorst.last || voorst.error && voorst.loaded);
+  var full = !!cap.db && (list.length || voorst.error && voorst.loaded);
   var compact = !full && voorst.loaded && canScan();
-  box.hidden = !full && !compact;
+  box.hidden = (!full && !compact) || !Shell.shown("acties");
   if (box.hidden) return;
   box.className = "vblock";
   var scanning = voorst.scan.state === "busy";
@@ -113,11 +117,7 @@ function renderVoorstellen() {
     ul.append(row);
   });
   if (list.length) box.append(ul);
-  if (voorst.last) {
-    box.append(h("div", { class: "undo" },
-      h("span", { text: (voorst.last.kind === "ja" ? "Op de lijst gezet: " : "Weggelegd: ") + trunc(voorst.last.v.text, 60) }),
-      h("button", { class: "btn", type: "button", text: "Ongedaan maken", onclick: undoVoorstel })));
-  }
+
 }
 // Scan mail en Teams met Claude (alleen na klik). Regels uit docs/OCHTENDRUN.md stap 2 en 4.
 function knownLinks() {
@@ -204,3 +204,26 @@ async function scanVoorstellen() {
     done("error", e && e.code === "invalid_json" ? "Claude gaf geen bruikbaar resultaat. Probeer het opnieuw." : sampleErrText(e));
   }
 }
+
+// ---------- Voorstel als rij in Vandaag, met detail ----------
+function voorstelRow(v) {
+  var src = [v.van, v.onderwerp, v.prog].filter(Boolean).join(" · ");
+  var row = h("li", { class: "row" },
+    h("div", { class: "row-main" }, h("div", { class: "l1" }, Shell.selTitle(v.text)), src ? h("div", { class: "l2", text: (v.bron === "teams" ? "💬 " : "✉ ") + src }) : null));
+  return Shell.row(row, "voorstel", "voorstel:" + v.id, v);
+}
+Shell.type("voorstel", {
+  label: "Voorstel",
+  title: function (v) { return v.text; },
+  detail: function (v, body) {
+    add(body, metaList([["Van", v.van], ["Onderwerp", v.onderwerp], ["Programma", v.prog], ["Bron", v.bron === "teams" ? "Teams" : "mail"]]));
+    if (v.why) body.append(h("p", { class: "detail-text", text: v.why }));
+  },
+  actions: function (v) {
+    return [
+      { slot: "primary", label: "Op de lijst", key: "a", title: "Als actie op je lijst zetten", run: function (x) { voorst.error = null; acceptVoorstel(x); } },
+      { slot: "done", label: "Weg", key: "e", title: "Voorstel wegleggen", run: function (x) { voorst.error = null; rejectVoorstel(x); } },
+      Shell.act.open(v.link, v.bron === "teams" ? "Teams" : "Outlook")
+    ];
+  }
+});

@@ -26,7 +26,15 @@ Lees dit als je (Claude, als PO) in een nieuwe sessie verdergaat met de Actiepag
 | `docs/contract/*.d.ts` | runtime-contracten van `window.claude` |
 
 ## Database van de app
-`acties` (hoofdlijst), `voorstellen` (ochtendrun en scan), `gebruik/<datum>` (gebruikslog). `feedback` is niet meer in gebruik.
+`acties` (hoofdlijst), `voorstellen` (ochtendrun en scan), `gebruik/<datum>` (gebruikslog), `inbox_verborgen`
+(afgehandelde mail), `prefs/thomas` (voorkeuren: vip, theme, lastEntry, followedChannels, inboxFilter,
+teamsSendBlocked). `feedback` is niet meer in gebruik.
+
+## Code (na B0/B1)
+`src/index.html` (markup) laadt `src/styles/*.css` en `src/app/*.js` in vaste volgorde. De schil staat in
+`src/app/shell.js`; bovenaan staat de plug-in API voor ingangen (rijen, teller, detail, actiebalk, toetsen).
+Feedbackbalk: `feedback({...})`, voorkeuren: `getPref/setPref` (`src/app/prefs.js`). Controle op gedeelde namen:
+`node tools/check-globals.js`. Publicatie: `node tools/files-map.js` geeft de `files`-map.
 
 ## Lessen
 - Microsoft 365-zoektools accepteren `limit` maximaal 25. De mock dwingt dit af.

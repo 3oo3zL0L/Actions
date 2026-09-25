@@ -1,7 +1,14 @@
 // Ronde 4: mailstijl van Thomas, voorstellen uit mail en Teams (+ scan), "Vraag Claude" per item, thema Dark Forest.
 const { test: base, expect } = require("@playwright/test");
 const { buildMock, data } = require("./fixtures");
-const { openPage, mockLog, mcpCalls, dbDump, itemWith } = require("./helpers");
+const { openPage, mockLog, mcpCalls, dbDump, itemWith, goTo, actionBar, openItem, openClaude } = require("./helpers");
+
+/** B1: mail selecteren in Inbox en een knop uit de actiebalk klikken. */
+async function mailAction(page, subject, button) {
+  await goTo(page, "Inbox");
+  await openItem(page, subject);
+  await actionBar(page).getByRole("button", { name: button }).click();
+}
 
 const SEND_TOOLS = /send_mail|send_draft|forward_mail|outlook_send/;
 const test = base.extend({
@@ -30,7 +37,7 @@ test.describe("Mailstijl van Thomas", () => {
   test("Antwoord-concept: prompt bevat EMAIL_STYLE, uitvoer eindigt op KR/Thomas zonder em-dash", async ({ page, open }) => {
     await open(buildMock({ sample: { rules: [{ match: "runner",
       text: "Hi Ruben,\n\nAkkoord met de verdubbeling — prima voorstel. That said, houd het budget in de gaten.\n\nGroet,\nThomas" }] } }));
-    await itemWith(page, "Budget CI-runners Q4").getByRole("button", { name: "Antwoord-concept" }).click();
+    await mailAction(page, "Budget CI-runners Q4", "Antwoord-concept");
     await expect.poll(async () => (await textareaValues(page)).some((v) => /KR\nThomas$/.test(v)), { timeout: 8000 }).toBe(true);
     const value = (await textareaValues(page)).find((v) => /KR\nThomas$/.test(v));
     expect(value).not.toMatch(/—|–/);
@@ -53,7 +60,7 @@ test.describe("Mailstijl van Thomas", () => {
 
   test("KR/Thomas wordt niet dubbel toegevoegd", async ({ page, open }) => {
     await open(buildMock({ sample: { rules: [{ match: "runner", text: "Hi Ruben,\n\nAkkoord.\n\nKR\nThomas" }] } }));
-    await itemWith(page, "Budget CI-runners Q4").getByRole("button", { name: "Antwoord-concept" }).click();
+    await mailAction(page, "Budget CI-runners Q4", "Antwoord-concept");
     await expect.poll(async () => (await textareaValues(page)).includes("Hi Ruben,\n\nAkkoord.\n\nKR\nThomas"), { timeout: 8000 }).toBe(true);
   });
 
@@ -62,7 +69,7 @@ test.describe("Mailstijl van Thomas", () => {
     await open(buildMock({ sample: { rules: [{ match: "maak een mailconcept", text: "Klaargezet.",
       toolCalls: [{ tool: "^voer_uit$", input: { server: "Microsoft 365", tool: "outlook_create_reply_draft",
         input: { messageId: "mail-003", bodyType: "text", body: "Hi Ruben,\n\nPrima — doen we.\n\nMet vriendelijke groet,\nThomas" } } }] }] } }));
-    const box = page.getByRole("textbox", { name: /vraag claude/i }).first();
+    const box = await openClaude(page);
     await box.fill("Maak een mailconcept voor Ruben");
     await box.press("Enter");
     await expect.poll(async () => (await mcpCalls(page, "outlook_create_reply_draft")).length, { timeout: 8000 }).toBe(1);
@@ -88,6 +95,7 @@ test.describe("Voorstellen uit mail en Teams", () => {
       "voorstellen/m1": { text: "Akkoord geven op budget", van: "Ruben Smit", onderwerp: "Budget CI-runners Q4", prog: "CI Acceleration",
         bron: "mail", mail: MAIL3, createdAt: "2026-09-25T06:01:00.000Z", run: "25 sep 2026", status: "nieuw" },
     }) } }));
+    await goTo(page, "Acties");
     const blok = page.locator("#voorstellen");
     await expect(blok.getByRole("heading", { name: "Voorstellen (2)" })).toBeVisible();
     const trij = itemWith(page, "Benchmark storage-backend beoordelen");
@@ -109,6 +117,7 @@ test.describe("Voorstellen uit mail en Teams", () => {
       { text: "Verzonnen link", van: "x", onderwerp: "y", prog: "Overig", bron: "mail", link: "https://evil.example.com/x" },
       { text: "Geen https", van: "x", onderwerp: "y", prog: "Overig", bron: "mail", link: "javascript:alert(1)" },
     ] } }] } }));
+    await goTo(page, "Acties");
     const blok = page.locator("#voorstellen");
     await expect(blok).toContainText("Geen voorstellen");
     await page.waitForTimeout(300);
@@ -150,8 +159,8 @@ test.describe("Vraag Claude per item", () => {
   test("mailrij: opent paneel met contextkaart, vraag gaat met item-context mee, link naar claude.ai zonder adressen", async ({ page, open }) => {
     await open(buildMock({ sample: { rules: [{ match: "Vraag van Thomas over deze mail", text: "Ruben vraagt om akkoord op extra runners." }] },
       tools: { "Microsoft 365": { read_resource: { text: "Volledige mail over runners." } } } }));
+    await mailAction(page, "Budget CI-runners Q4", "Vraag Claude");
     const rij = itemWith(page, "Budget CI-runners Q4");
-    await rij.getByRole("button", { name: "Vraag Claude" }).click();
     await expect(chatBox(page)).toBeFocused();
     await expect(ctxCard(page)).toContainText("Over: Budget CI-runners Q4");
     await expect(rij.getByRole("textbox")).toHaveCount(0); // geen inline invoer meer
@@ -184,9 +193,10 @@ test.describe("Vraag Claude per item", () => {
 
   test("Teams- en actierij: contextkaart, ✕ haalt context weg, events worden gelogd", async ({ page, open }) => {
     await open(buildMock());
+    await goTo(page, "Inbox");
     await page.getByRole("tab", { name: /teams/i }).click();
-    const trij = itemWith(page, T0.summary);
-    await trij.getByRole("button", { name: "Vraag Claude" }).click();
+    await openItem(page, T0.summary);
+    await actionBar(page).getByRole("button", { name: "Vraag Claude" }).click();
     await expect(ctxCard(page)).toContainText("Over:");
     // open_in_claude loggen zonder echt te navigeren
     await page.evaluate(() => document.addEventListener("click", (e) => { if (e.target.closest("a[href^='https://claude.ai/new']")) e.preventDefault(); }, true));
@@ -200,9 +210,10 @@ test.describe("Vraag Claude per item", () => {
     await expect(page.getByText(/Mock-antwoord van Claude/).first()).toBeVisible({ timeout: 8000 });
 
     await page.keyboard.press("Escape");
-    const arij = itemWith(page, "Akkoord geven op releaseplanning 26.4");
-    await arij.getByRole("button", { name: "Meer voor actie" }).click();
-    await arij.getByRole("button", { name: "Vraag Claude" }).click();
+    // B1: geen ⋯-menu per rij meer; Vraag Claude staat in de actiebalk van het detail.
+    await goTo(page, "Acties");
+    await openItem(page, "Akkoord geven op releaseplanning 26.4");
+    await actionBar(page).getByRole("button", { name: "Vraag Claude" }).click();
     await expect(ctxCard(page)).toContainText("Over: Akkoord geven op releaseplanning 26.4");
     await chatBox(page).fill("Splits op in stappen");
     await chatBox(page).press("Enter");

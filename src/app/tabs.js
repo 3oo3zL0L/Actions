@@ -18,9 +18,14 @@ function setupTabs(group, keys, lsKey) {
     setFresh(k);
     var sec = group === "inbox" ? $("inbox") : $("werk");
     sec.setAttribute("data-src", k);
+    if (typeof Shell !== "undefined") Shell.revalidate();
   }
   tabs.forEach(function (t, i) {
-    t.addEventListener("click", function () { if (activeTab[group] !== keys[i]) logEvent("tab_" + (keys[i] === "conf" ? "confluence" : keys[i])); select(keys[i]); });
+    t.addEventListener("click", function () {
+      if (activeTab[group] !== keys[i]) logEvent("tab_" + (keys[i] === "conf" ? "confluence" : keys[i]));
+      if (group === "inbox") setPref("inboxFilter", keys[i]);
+      select(keys[i]);
+    });
     t.addEventListener("keydown", function (e) {
       var n = null;
       if (e.key === "ArrowRight") n = (i + 1) % keys.length;
@@ -31,5 +36,6 @@ function setupTabs(group, keys, lsKey) {
   });
   var saved = lsGet(lsKey);
   if (keys.indexOf(saved) >= 0) select(saved);
+  return select;
 }
 

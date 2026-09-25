@@ -96,6 +96,7 @@ function halt() {
 var GROUPS = { today: ["cal"], inbox: ["mail", "teams", "chats"], work: ["jira", "conf"] };
 function refreshGroup(g) {
   if (g === "acties") { resubscribeActies(); return; }
+  if (g === "vandaag") { refresh("cal"); resubscribeActies(); return; }
   (GROUPS[g] || []).forEach(refresh);
 }
 function refreshAll() {
@@ -167,28 +168,28 @@ function renderNowStrip() {
     var nn = nowNext(calEvents());
     if (nn.cur.length) {
       var c = nn.cur[0];
-      parts.push(h("a", { href: "#vandaag" }, "Nu: ", h("strong", { text: str(c.it.subject) || "(geen onderwerp)" }), " tot ", h("time", { text: hhmm(c.end) })));
+      parts.push(h("a", { href: "#agenda", "data-go": "agenda" }, "Nu: ", h("strong", { text: str(c.it.subject) || "(geen onderwerp)" }), " tot ", h("time", { text: hhmm(c.end) })));
     }
     if (nn.next) {
       var mins = Math.round((nn.next.start - Date.now()) / 60000);
-      parts.push(h("a", { href: "#vandaag" }, "Straks ", h("time", { text: hhmm(nn.next.start) }), " " + (str(nn.next.it.subject) || "(geen onderwerp)") + (mins < 60 ? " (over " + Math.max(mins, 1) + " min)" : "")));
+      parts.push(h("a", { href: "#agenda", "data-go": "agenda" }, "Straks ", h("time", { text: hhmm(nn.next.start) }), " " + (str(nn.next.it.subject) || "(geen onderwerp)") + (mins < 60 ? " (over " + Math.max(mins, 1) + " min)" : "")));
     }
-    if (!nn.cur.length && !nn.next) parts.push(h("a", { href: "#vandaag", text: "Geen afspraken meer vandaag" }));
+    if (!nn.cur.length && !nn.next) parts.push(h("a", { href: "#agenda", "data-go": "agenda", text: "Geen afspraken meer vandaag" }));
   } else if (S.cal.status === "error") {
     // niets
   } else parts.push(ph());
   if (cap.mcp) {
-    if (S.mail.hasData) parts.push(h("a", { href: "#inbox", text: mailSplit().unread + " ongelezen" }));
+    if (S.mail.hasData) parts.push(h("a", { href: "#inbox", "data-go": "inbox", text: mailSplit().unread + " ongelezen" }));
     else if (S.mail.status !== "error") parts.push(ph());
   }
-  if (cap.db) parts.push(h("a", { href: "#acties", text: plural(actiesVandaag().length, "actie", "acties") + " vandaag" }));
+  if (cap.db) parts.push(h("a", { href: "#acties", "data-go": "acties", text: plural(actiesVandaag().length, "actie", "acties") + " vandaag" }));
   else if (cap.db === undefined && hasRuntime) parts.push(ph());
   parts.forEach(function (p, i) { if (i) el.append(h("span", { class: "sep", "aria-hidden": "true", text: "·" })); el.append(p); });
 }
 
 // ---------- Generieke sectie-helpers ----------
 var expanded = {};
-var FRESH = { cal: "fresh-vandaag", mail: "fresh-inbox", teams: "fresh-inbox", jira: "fresh-werk", conf: "fresh-werk" };
+var FRESH = { cal: ["fresh-agenda", "fresh-vandaag"], mail: "fresh-inbox", teams: "fresh-inbox", jira: "fresh-werk", conf: "fresh-werk" };
 function freshText(s) {
   if (!s.updatedAt) return "";
   var t = hhmm(new Date(s.updatedAt));
@@ -200,10 +201,10 @@ function setFresh(k) {
   var s = S[k];
   if ((k === "mail" || k === "teams") && activeTab.inbox !== k) return;
   if ((k === "jira" || k === "conf") && activeTab.werk !== k) return;
-  $(id).textContent = freshText(s);
+  (Array.isArray(id) ? id : [id]).forEach(function (x) { $(x).textContent = freshText(s); });
 }
 function setBusy() {
-  var map = { today: ["cal"], inbox: ["mail", "teams"], work: ["jira", "conf"] };
+  var map = { today: ["cal"], vandaag: ["cal"], inbox: ["mail", "teams"], work: ["jira", "conf"] };
   Object.keys(map).forEach(function (g) {
     var b = document.querySelector('[data-refresh="' + g + '"]');
     var busy = map[g].some(function (k) { return S[k].refreshing && S[k].hasData; });
@@ -213,7 +214,7 @@ function setBusy() {
   var any = Object.keys(SOURCES).some(function (k) { return S[k].refreshing; });
   var ra = $("refreshAll");
   ra.classList.toggle("busy", any);
-  ra.querySelector(".lbl").textContent = any ? "Verversen…" : "Alles verversen";
+  ra.setAttribute("aria-label", any ? "Verversen…" : "Alles verversen");
 }
 // Rendert standaard-staat; geeft container terug waarin de lijst moet (of null)
 var PAGE_KEYS_SECT = ["cal", "mail", "teams", "jira", "conf"];
@@ -264,15 +265,6 @@ function limited(list, key) { return expanded[key] ? list : list.slice(0, MAX_RO
 function showAllBtn(list, key, rerender) {
   if (list.length <= MAX_ROWS || expanded[key]) return null;
   return h("button", { class: "btn text showall", type: "button", text: "Toon alle (" + list.length + ")", onclick: function () { expanded[key] = true; rerender(); } });
-}
-function moreBtn(row) {
-  return h("button", { class: "icon-btn more", type: "button", "aria-label": "Meer acties", "aria-expanded": "false", onclick: function (ev) {
-    var open = !row.classList.contains("menu-open");
-    closeMenus();
-    row.classList.toggle("menu-open", open);
-    ev.currentTarget.setAttribute("aria-expanded", open ? "true" : "false");
-    if (open) { var f = row.querySelector(".row-actions button, .row-actions a, .amenu button"); if (f) f.focus(); }
-  } }, "⋯");
 }
 function closeMenus() {
   var any = false;

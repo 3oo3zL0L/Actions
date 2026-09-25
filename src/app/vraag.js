@@ -85,14 +85,9 @@ function sectionContext(type, withIds) {
   }
   return L.join("\n");
 }
-function askBtn(type, it, cls) {
-  var b = h("button", { class: cls || "btn text", type: "button", text: "Vraag Claude", onclick: function () { openAsk(type, it, b); } });
-  return b;
-}
 // Opent direct het Claude-paneel met het item als context; de eerstvolgende vraag gaat mét die context mee.
 function openAsk(type, it, btn) {
-  var row = btn.closest(".row"); if (row) row.classList.remove("menu-open");
-  var menu = btn.closest(".amenu"); if (menu) menu.hidden = true;
+  if (!cap.sample) return;
   chat.ctx = { type: type, it: it, title: itemTitle(type, it) };
   logEvent("vraag_claude_item_" + type);
   renderCtx();

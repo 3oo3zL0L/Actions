@@ -421,44 +421,34 @@ function spark(cls) {
   var sp = h("span", { class: cls || "", "aria-hidden": "true" }); sp.appendChild(svg); return sp;
 }
 var chatEl = $("chat"), chatLog = $("chatLog"), chatInput = $("chatInput");
-var mqMobile = window.matchMedia("(max-width: 560px)"), mqDesk = window.matchMedia("(min-width: 1100px)");
-function isOverlayTrap() { return !mqDesk.matches; }
+// Het paneel vervangt de detailkolom (nooit eroverheen). Op mobiel is het het detailscherm.
 function openPanel(opener) {
-  if (!chatEl.hidden) { chatInput.focus(); return; }
+  if (!chatEl.hidden) { Shell.showDetail(); chatInput.focus(); return; }
   chat.opener = opener || document.activeElement;
   chatEl.hidden = false;
+  $("detailView").hidden = true;
+  document.body.classList.add("chat-open");
   chatEl.classList.add("opening");
   setTimeout(function () { chatEl.classList.remove("opening"); }, 260);
-  $("scrim").hidden = !isOverlayTrap();
-  document.body.classList.toggle("docked", !isOverlayTrap());
-  chatEl.setAttribute("role", isOverlayTrap() ? "dialog" : "complementary");
-  if (isOverlayTrap()) chatEl.setAttribute("aria-modal", "true"); else chatEl.removeAttribute("aria-modal");
+  Shell.showDetail();
   chatInput.focus();
 }
-function closePanel() {
+function closePanel(noFocus) {
   if (chatEl.hidden) return;
   chatEl.hidden = true;
-  $("scrim").hidden = true;
-  document.body.classList.remove("docked");
+  $("detailView").hidden = false;
+  document.body.classList.remove("chat-open");
+  if (noFocus === true) return;
   var o = chat.opener;
-  if (o && document.contains(o) && o.offsetParent !== null) o.focus(); else $("barInput").focus();
+  if (o && document.contains(o) && o.offsetParent !== null) o.focus();
+  else { var sel = document.querySelector("#lijst .row.is-sel .sel"); if (sel && sel.offsetParent !== null) sel.focus(); else $("askClaude").focus(); }
 }
-// Wisselt de viewport terwijl het paneel open is: docking/scrim bijwerken.
-function syncPanelMode() {
-  if (chatEl.hidden) return;
-  $("scrim").hidden = !isOverlayTrap();
-  document.body.classList.toggle("docked", !isOverlayTrap());
-  chatEl.setAttribute("role", isOverlayTrap() ? "dialog" : "complementary");
-  if (isOverlayTrap()) chatEl.setAttribute("aria-modal", "true"); else chatEl.removeAttribute("aria-modal");
-}
-try { mqDesk.addEventListener("change", syncPanelMode); } catch (e) { /* oudere browser */ }
 function setChatBusy(b) {
   chat.busy = b;
   var hadFocus = document.activeElement === $("chatSend") || document.activeElement === $("chatStop");
   $("chatSend").hidden = b;
   $("chatStop").hidden = !b;
   if (hadFocus) (b ? $("chatStop") : chatInput).focus();
-  $("barSend").disabled = b || !cap.sample;
 }
 // Markdown zoals Claude: kopjes, vet, cursief, lijsten, inline code, codeblokken, citaten, links. Alles via textContent.
 function renderMarkdown(text) {
@@ -680,24 +670,10 @@ function disableSample() {
 function applySampleState() {
   renderVoorstellen();
   var on = !!cap.sample;
-  var waiting = cap.sample === undefined && hasRuntime;
-  $("barInput").disabled = !on;
-  $("barSend").disabled = !on;
-  $("quick").hidden = !on;
-  $("barNote").hidden = on || waiting;
-  $("barNote").textContent = on || waiting ? "" : "Claude is niet beschikbaar in deze weergave.";
-  if (!on && !waiting) $("barInput").placeholder = "Claude is niet beschikbaar in deze weergave.";
-  else $("barInput").placeholder = "Vraag Claude iets over je dag, mail, Teams of Jira…";
   $("chatInput").disabled = !on;
-  $("fab").disabled = !on;
-  renderToday();
+  $("askClaude").hidden = !on; // geen grijze knop: zonder Claude geen Vraag Claude
+  Shell.refreshDetail();
 }
-var QUICK = {
-  today: "Wat moet ik vandaag? Kijk naar mijn agenda, ongelezen mail, Teams van vandaag en mijn open acties. Geef een korte prioriteitenlijst met tijden.",
-  inbox: "Vat mijn inbox samen: wat vraagt om een reactie of beslissing van mij? Negeer meldingen. Kort, per mail één regel.",
-  teams: "Wat speelt er in Teams sinds gisteren? Groepeer per chat, noem wat op mij wacht."
-};
-var QUICK_LABEL = { today: "Wat moet ik vandaag?", inbox: "Vat mijn inbox samen", teams: "Wat speelt er in Teams?" };
 function prepareMeeting(it, e, btn) {
   if (!cap.sample || chat.busy) return;
   logEvent("bereid_voor");

@@ -2,7 +2,7 @@
 // gebruikt modelTier "complex" en ziet eruit als een klein Claude/Cowork-venster.
 const { test: base, expect } = require("@playwright/test");
 const { buildMock } = require("./fixtures");
-const { openPage, mockLog, dbDump, itemWith } = require("./helpers");
+const { openPage, mockLog, dbDump, itemWith, goTo, actionBar, openItem, openClaude } = require("./helpers");
 
 const SEND_TOOLS = /send_mail|send_draft|forward_mail|outlook_send/;
 const test = base.extend({
@@ -27,6 +27,12 @@ async function ask(page, q) {
   await chatBox(page).fill(q);
   await chatBox(page).press("Enter");
 }
+// B1: de snelknoppen vervielen; een gesprek begint met Vraag Claude en een getypte vraag.
+async function startChat(page, q = "Wat moet ik vandaag?") {
+  const box = await openClaude(page);
+  await box.fill(q);
+  await box.press("Enter");
+}
 function roles(call) { return call.input.map((m) => m.role); }
 function alternates(call) {
   const r = roles(call);
@@ -42,7 +48,7 @@ test.describe("Claude geeft antwoord", () => {
       { match: "tweede vraag", error: { code: "upstream_error", message: "tijdelijk" } },
       { match: "eerste vraag", text: "Antwoord op de eerste vraag." },
     ] } }));
-    await page.getByRole("button", { name: /wat moet ik vandaag/i }).click(); // opent het paneel
+    await startChat(page); // opent het paneel
     await expect(page.getByText(/Mock-antwoord van Claude/).first()).toBeVisible({ timeout: 8000 });
     await ask(page, "Dit is de eerste vraag");
     await expect(page.getByText("Antwoord op de eerste vraag.").first()).toBeVisible({ timeout: 8000 });
@@ -66,7 +72,7 @@ test.describe("Claude geeft antwoord", () => {
 
   test("tools beperkt tot limits().tools.maxCount, in volgorde van belang", async ({ page, open }) => {
     await open(buildMock({ sample: { toolsMax: 4, default: { text: "Ok." } } }));
-    await page.getByRole("button", { name: /wat moet ik vandaag/i }).click();
+    await startChat(page);
     await expect(page.getByText("Ok.").first()).toBeVisible({ timeout: 8000 });
     const [call] = await chatCalls(page);
     expect(call.toolNames).toEqual(["voer_uit", "lees", "schema", "acties_lijst"]); // ronde 7: generieke tools
@@ -75,7 +81,7 @@ test.describe("Claude geeft antwoord", () => {
 
   test("standaard mock-limiet 8: alle vijf generieke tools passen", async ({ page, open }) => {
     await open(buildMock());
-    await page.getByRole("button", { name: /wat moet ik vandaag/i }).click();
+    await startChat(page);
     await expect(page.getByText(/Mock-antwoord van Claude/).first()).toBeVisible({ timeout: 8000 });
     const [call] = await chatCalls(page);
     expect(call.toolNames).toEqual(["voer_uit", "lees", "schema", "acties_lijst", "actie_toevoegen"]);
@@ -84,9 +90,9 @@ test.describe("Claude geeft antwoord", () => {
   test("invalid_request met tools: één terugval zonder tools, met pagina-context", async ({ page, open }) => {
     await open(buildMock({ sample: { rules: [{ match: "budget", errorIfTools: { code: "invalid_request", message: "tool schema refused" },
       text: "Antwoord zonder tools over het budget." }] } }));
+    await goTo(page, "Inbox");
     await expect(page.getByText("Budget CI-runners Q4").first()).toBeVisible();
-    await page.getByRole("textbox", { name: /vraag claude/i }).first().fill("Wat speelt er rond het budget?");
-    await page.getByRole("textbox", { name: /vraag claude/i }).first().press("Enter");
+    await startChat(page, "Wat speelt er rond het budget?");
     await expect(page.getByText("Antwoord zonder tools over het budget.").first()).toBeVisible({ timeout: 8000 });
     const calls = await chatCalls(page);
     expect(calls).toHaveLength(2);
@@ -105,7 +111,7 @@ test.describe("Claude geeft antwoord", () => {
 
   test("tools_unavailable (geen tools in deze weergave): direct zonder tools en toch antwoord", async ({ page, open }) => {
     await open(buildMock({ sample: { toolsMax: 0, default: { text: "Antwoord zonder tools." } } }));
-    await page.getByRole("button", { name: /wat moet ik vandaag/i }).click();
+    await startChat(page);
     await expect(page.getByText("Antwoord zonder tools.").first()).toBeVisible({ timeout: 8000 });
     const calls = await chatCalls(page);
     expect(calls).toHaveLength(1);
@@ -115,7 +121,7 @@ test.describe("Claude geeft antwoord", () => {
 
   test("fout: melding met Details (code en message) en event claude_fout_<code>", async ({ page, open }) => {
     await open(buildMock({ sample: { default: { error: { code: "rate_limited", message: "Usage limit reached for this viewer" } } } }));
-    await page.getByRole("button", { name: /wat moet ik vandaag/i }).click();
+    await startChat(page);
     const err = panel(page).getByRole("alert");
     await expect(err).toContainText(/te veel vragen|limiet/i);
     await panel(page).getByText("Details").click();
@@ -133,13 +139,16 @@ test.describe("Model", () => {
       { match: "runner", text: "Hi Ruben,\n\nAkkoord.\n\nKR\nThomas", tierApplied: "default" },
       { match: "Architectuuroverleg", text: "Voorbereiding klaar." },
     ] } }));
-    await itemWith(page, "Architectuuroverleg Object Store").getByRole("button", { name: /bereid voor/i }).click();
+    await openItem(page, "Architectuuroverleg Object Store");
+    await actionBar(page).getByRole("button", { name: /bereid voor/i }).click();
     await expect(page.getByText("Voorbereiding klaar.").first()).toBeVisible({ timeout: 8000 });
     await expect(page.locator("#chatTier")).toHaveText("· meest capabel");
     await expect(page.locator("#chatTitle")).toHaveText("Claude");
 
     await page.getByRole("button", { name: "Sluit Claude-paneel" }).click();
-    await itemWith(page, "Budget CI-runners Q4").getByRole("button", { name: "Antwoord-concept" }).click();
+    await goTo(page, "Inbox");
+    await openItem(page, "Budget CI-runners Q4");
+    await actionBar(page).getByRole("button", { name: "Antwoord-concept" }).click();
     await expect.poll(async () => page.evaluate(() => [...document.querySelectorAll("textarea")].some((t) => /KR\nThomas$/.test(t.value))), { timeout: 8000 }).toBe(true);
     await expect(page.locator("#chatTier")).toHaveText("· standaard"); // plan gaf een ander tier terug
 
@@ -160,7 +169,7 @@ test.describe("Claude/Cowork-look", () => {
         { tool: "^lees$", input: { server: "Microsoft 365", tool: "outlook_calendar_search", input: { query: "*", afterDateTime: "today", beforeDateTime: "tomorrow" } } },
         { tool: "^lees$", input: { server: "Microsoft 365", tool: "outlook_email_search", input: { query: "budget", order: "newest" } } }],
       text: "## Je dag\n\nEerst **Ruben** antwoorden.\n\n- punt een\n- punt twee\n\n```\nnpm test\n```\n\nZie `code` en [plan](https://wiki.example.com/x)." }] } }));
-    await page.getByRole("button", { name: /wat moet ik vandaag/i }).click();
+    await startChat(page);
     // Tijdens streamen: vierkante stopknop.
     await expect(panel(page).getByRole("button", { name: "Stop" })).toBeVisible({ timeout: 8000 });
     await expect(page.getByText("punt twee").first()).toBeVisible({ timeout: 8000 });
@@ -228,7 +237,7 @@ test.describe("Claude/Cowork-look", () => {
 
   test("invoer: Enter verstuurt, Shift+Enter nieuwe regel; + voegt sectiecontext toe", async ({ page, open }) => {
     await open(buildMock({ sample: { rules: [{ match: "over mijn acties", text: "Je hebt één open actie." }] } }));
-    await page.getByRole("button", { name: /wat moet ik vandaag/i }).click();
+    await startChat(page);
     await expect(page.getByText(/Mock-antwoord van Claude/).first()).toBeVisible({ timeout: 8000 });
     await expect(chatBox(page)).toHaveAttribute("placeholder", "Antwoord aan Claude…");
     await chatBox(page).fill("regel een");

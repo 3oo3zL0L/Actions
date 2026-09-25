@@ -141,13 +141,10 @@ function makeActie(src) {
   var inp = $("addInput");
   inp.value = srcDraft.onderwerp;
   renderSrcChip();
-  closeMenus();
-  var sec = $("acties");
-  sec.setAttribute("data-collapsed", "false");
-  sec.querySelector(".collapse").setAttribute("aria-expanded", "true");
+  Shell.go("acties", { user: true });
   inp.focus();
   try { inp.setSelectionRange(inp.value.length, inp.value.length); } catch (e) { /* */ }
-  sec.scrollIntoView({ block: "nearest" });
+  inp.scrollIntoView({ block: "nearest" });
 }
 function renderSrcChip() {
   var c = clear($("srcchip"));
@@ -208,7 +205,20 @@ function deleteActie(a) {
   if (a._pending) { delete acties.pending[a.id]; renderActies(); return; }
   acties.docs = acties.docs.filter(function (d) { return d.id !== a.id; });
   renderActies(); renderNowStrip();
-  queueWrite(a.id, function () { return actiesCol().doc(a.id).delete(); }).then(function () { announce("Actie verwijderd"); }, function () { announce("Verwijderen mislukt."); });
+  var copy = {}; for (var k in a) if (k !== "id" && k.charAt(0) !== "_") copy[k] = a[k];
+  queueWrite(a.id, function () { return actiesCol().doc(a.id).delete(); }).then(function () {
+    feedback({ text: "Actie verwijderd", undo: function () {
+      queueWrite(a.id, function () { return actiesCol().doc(a.id).set(copy); }).then(function () { feedback({ text: "Actie terug" }); }, function () { feedback({ text: "Terugzetten lukte niet", icon: "⚠" }); });
+    } });
+  }, function () { feedback({ text: "Verwijderen mislukt", icon: "⚠" }); });
+}
+// Afvinken of heropenen, met Ongedaan maken in de feedbackbalk.
+function setDone(a, done) {
+  if (!cap.db || a._pending) return;
+  var before = a.status;
+  updateActie(a, { status: done ? "done" : "open" });
+  if (done) logEvent("actie_afgevinkt");
+  feedback({ text: done ? "Actie afgevinkt" : "Actie heropend", undo: function () { updateActie(a, { status: before }); } });
 }
 function suggestProg(id, text) {
   if (!cap.sample || !cap.sample.json) return;
@@ -234,7 +244,7 @@ function onAddSubmit(e) {
   if (srcDraft) { f.bron = srcDraft.bron; f.bronUrl = srcDraft.bronUrl; f.van = srcDraft.van; f.onderwerp = srcDraft.onderwerp; }
   inp.value = ""; srcDraft = null; renderSrcChip();
   addActie(f).then(function (r) {
-    announce("Actie toegevoegd");
+    feedback({ text: "Actie toegevoegd bij " + f.prog, undo: r ? function () { deleteActie({ id: r.id }); } : null });
     logEvent("actie_toegevoegd", f.bron);
     if (!p.prog && r) suggestProg(r.id, p.text);
   }, function () { announce("Actie niet opgeslagen."); });
@@ -244,10 +254,10 @@ var BRON_LABEL = { mail: "mail", teams: "Teams", jira: "Jira", cowork: "Cowork",
 function actieRow(a) {
   var done = a.status === "done" || a.status === "dropped";
   var row = h("li", { class: "row arow" + (done ? " done" : "") + (a._pending === "error" || (acties.rowErr && acties.rowErr[a.id]) ? " err" : "") });
-  var cb = h("input", { type: "checkbox", "aria-label": (done ? "Heropen: " : "Afvinken: ") + str(a.text) });
+  var cb = h("input", { type: "checkbox", "aria-label": (done ? "Heropen: " : "Afvinken: ") + str(a.text), title: done ? "Heropenen" : "Afvinken (e)" });
   cb.checked = done;
   cb.disabled = !!a._pending || !cap.db;
-  cb.addEventListener("change", function () { updateActie(a, { status: cb.checked ? "done" : "open" }); if (cb.checked) logEvent("actie_afgevinkt"); announce(cb.checked ? "Actie afgevinkt" : "Actie heropend"); });
+  cb.addEventListener("change", function () { setDone(a, cb.checked); });
   var ds = dueState(a);
   var meta = h("div", { class: "l2" });
   if (a.who && a.who !== "eigen actie") meta.append(h("span", { text: str(a.who) }));
@@ -258,28 +268,20 @@ function actieRow(a) {
   var bl = a.bron in BRON_LABEL ? BRON_LABEL[a.bron] : str(a.bron);
   if (bu) meta.append(h("a", { href: bu, target: "_blank", rel: "noopener noreferrer", title: "Bron: " + (bl || "link"), class: "btn text", style: "min-height:0;padding:0 4px" }, (BRON_ICON[a.bron] || "↗") + (bl ? " " + bl : ""), h("span", { class: "sr", text: " (opent in nieuw tabblad)" })));
   else if (bl) meta.append(h("span", { class: "pill", title: "Bron", text: (BRON_ICON[a.bron] ? BRON_ICON[a.bron] + " " : "") + bl }));
-  var main = h("div", { class: "row-main" }, h("div", { class: "title", text: str(a.text) }),
+  var main = h("div", { class: "row-main" }, h("div", { class: "l1" }, Shell.selTitle(str(a.text))),
     a.why ? h("div", { class: "why", text: str(a.why) }) : null,
     a.extra ? h("div", { class: "extra", text: str(a.extra) }) : null,
     meta.firstChild ? meta : null);
   if (a._pending === "error") main.append(h("div", { class: "errmsg" }, "Niet opgeslagen. ", h("button", { class: "btn text", type: "button", text: "Opnieuw", onclick: function () { retryAdd(a.id); } })));
-  var menu = h("div", { class: "amenu", hidden: true });
-  if (!a._pending) {
-    if (a.status === "open") menu.append(h("button", { class: "btn", type: "button", text: a.vandaag ? "Van vandaag halen" : "Op vandaag zetten", onclick: function () { logEvent("actie_vandaag"); updateActie(a, { vandaag: !a.vandaag }); } }));
-    if (a.status !== "dropped") menu.append(h("button", { class: "btn", type: "button", text: "Laten vervallen", onclick: function () { logEvent("actie_vervallen"); updateActie(a, { status: "dropped" }); } }));
-    else menu.append(h("button", { class: "btn", type: "button", text: "Heropenen", onclick: function () { updateActie(a, { status: "open" }); } }));
-  }
-  menu.append(h("button", { class: "btn", type: "button", text: "Verwijderen", onclick: function () { deleteActie(a); } }));
-  if (!a._pending) menu.insertBefore(askBtn("actie", a, "btn"), menu.firstChild);
-  main.append(menu);
-  var more = h("button", { class: "icon-btn more", type: "button", "aria-label": "Meer voor actie", "aria-expanded": "false", text: "⋯", onclick: function () {
-    var open = menu.hidden; closeMenus(); menu.hidden = !open; more.setAttribute("aria-expanded", open ? "true" : "false");
-    if (open) { var f = menu.querySelector("button"); if (f) f.focus(); }
-  } });
-  row.append(h("label", { class: "chk" }, cb), main, h("div", { class: "row-side" }, more));
-  return row;
+  row.append(h("label", { class: "chk" }, cb), main);
+  return Shell.row(row, "actie", "actie:" + a.id, a);
 }
 function renderActies() {
+  renderActiesList();
+  renderVandaag();
+  Shell.changed();
+}
+function renderActiesList() {
   var st = clear($("acties-state")), lst = clear($("acties-list"));
   var input = $("addInput");
   var cnt = $("cnt-acties");
@@ -303,6 +305,7 @@ function renderActies() {
   var open = all.filter(function (a) { return a.status === "open" || !a.status; });
   var closed = all.filter(function (a) { return a.status === "done" || a.status === "dropped"; });
   cnt.textContent = open.length ? String(open.length) : "";
+  if (!Shell.shown("acties")) { clear(st); return; }
   if (!open.length) lst.append(h("p", { class: "empty", text: "Geen open acties. Typ hierboven en druk op Enter." }));
   var today = open.filter(isToday);
   var rest = open.filter(function (a) { return !isToday(a); });
@@ -329,3 +332,46 @@ function renderActies() {
   closedGroup("N.v.t.", closed.filter(function (a) { return a.status === "dropped"; }), "nvtOpen");
 }
 
+
+// ---------- Detail: actie ----------
+Shell.type("actie", {
+  label: "Actie",
+  title: function (a) { return str(a.text); },
+  detail: function (a, body) {
+    var d = dueDate(a);
+    var bl = a.bron in BRON_LABEL ? BRON_LABEL[a.bron] : str(a.bron);
+    add(body, metaList([
+      ["Status", a.status === "done" ? "klaar" : a.status === "dropped" ? "n.v.t." : isToday(a) ? "open, vandaag" : "open"],
+      ["Wie", a.who && a.who !== "eigen actie" ? str(a.who) : ""],
+      ["Deadline", a.due ? (d ? shortDue(d) : str(a.due)) + (dueState(a) === "over" && a.status === "open" ? " (verlopen)" : "") : ""],
+      ["Programma", str(a.prog)],
+      ["Bron", bl ? bl + (a.van ? " van " + nameFromAddr(a.van) : "") + (a.onderwerp ? ", " + str(a.onderwerp) : "") : ""]
+    ]));
+    if (a.why) body.append(h("p", { class: "detail-text", text: str(a.why) }));
+    if (a.extra) body.append(h("p", { class: "detail-text extra", text: str(a.extra) }));
+  },
+  actions: function (a) {
+    if (a._pending) return [];
+    return [
+      a.status === "open" ? { slot: "primary", label: "Vink af", key: "e", title: "Actie afvinken", run: function (x) { setDone(x, true); } }
+        : { slot: "primary", label: "Heropen", key: "e", title: "Actie weer openzetten", run: function (x) { setDone(x, false); } },
+      Shell.act.ask("actie", a),
+      Shell.act.open(a.bronUrl, { mail: "Outlook", teams: "Teams", jira: "Jira" }[a.bron] || "bron"),
+      a.status === "open" ? { slot: "extra", label: a.vandaag ? "Van vandaag halen" : "Op vandaag zetten", key: "v", run: function (x) {
+        logEvent("actie_vandaag"); var was = !!x.vandaag; updateActie(x, { vandaag: !was });
+        feedback({ text: was ? "Van vandaag gehaald" : "Op vandaag gezet", undo: function () { updateActie(x, { vandaag: was }); } });
+      } } : null,
+      a.status === "open" ? { slot: "extra", label: "Laten vervallen", key: "x", run: function (x) {
+        logEvent("actie_vervallen"); updateActie(x, { status: "dropped" });
+        feedback({ text: "Actie vervallen", undo: function () { updateActie(x, { status: "open" }); } });
+      } } : null,
+      { slot: "extra", label: "Verwijderen", title: "Actie uit je eigen lijst verwijderen (Ongedaan maken kan)", run: function (x) { deleteActie(x); } }
+    ];
+  }
+});
+Shell.entry("acties", {
+  label: "Acties",
+  render: function () { renderActiesList(); renderVoorstellenBlok(); },
+  empty: "Kies een actie om hem hier te openen. Nieuwe actie: n.",
+  count: function () { return cap.db && acties.loaded ? actieList().filter(function (a) { return a.status === "open"; }).length : ""; }
+});

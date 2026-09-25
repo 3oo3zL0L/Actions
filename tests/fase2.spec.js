@@ -2,7 +2,7 @@
 // why/extra in actierijen, PAF-lijst als archief. Zelfde mock en helpers als actiepagina.spec.js.
 const { test: base, expect } = require("@playwright/test");
 const { buildMock, data } = require("./fixtures");
-const { openPage, mockLog, dbDump, itemWith } = require("./helpers");
+const { openPage, mockLog, dbDump, itemWith, goTo, feedbackBar } = require("./helpers");
 
 const SEND_TOOLS = /send_mail|send_draft|forward_mail|outlook_send/;
 const test = base.extend({
@@ -40,6 +40,7 @@ const voorstelBlok = (page) => page.locator("#voorstellen");
 test.describe("Fase 2: voorstellen uit je mail", () => {
   test("toont alleen nieuwe voorstellen met bronregel en mail-link", async ({ page, open }) => {
     await open(mockWith());
+    await goTo(page, "Acties"); // B1: voorstellenblok en lijst staan onder Acties
     const blok = voorstelBlok(page);
     await expect(blok.getByRole("heading", { name: /voorstellen \(2\)/i })).toBeVisible();
     await expect(blok.getByText("Reageren op budgetvoorstel CI-runners")).toBeVisible();
@@ -54,6 +55,7 @@ test.describe("Fase 2: voorstellen uit je mail", () => {
 
   test("zonder nieuwe voorstellen alleen een compacte scanregel", async ({ page, open }) => {
     await open(buildMock());
+    await goTo(page, "Acties");
     await expect(page.getByText("Akkoord geven op releaseplanning 26.4").first()).toBeVisible();
     // Ronde 4: geen kop, alleen een compacte regel met "Scan nu".
     await expect(page.getByRole("heading", { name: /voorstellen \(/i })).toHaveCount(0);
@@ -63,6 +65,7 @@ test.describe("Fase 2: voorstellen uit je mail", () => {
 
   test("Op de lijst maakt actie v-<id> en zet voorstel op ja", async ({ page, open }) => {
     await open(mockWith());
+    await goTo(page, "Acties"); // B1: voorstellenblok en lijst staan onder Acties
     await itemWith(page, "Reageren op budgetvoorstel CI-runners").getByRole("button", { name: "Op de lijst" }).click();
     await expect.poll(async () => (await dbDump(page, "voorstellen/v1"))["voorstellen/v1"]?.status).toBe("ja");
     const actie = (await dbDump(page, "acties/v-v1"))["acties/v-v1"];
@@ -77,15 +80,17 @@ test.describe("Fase 2: voorstellen uit je mail", () => {
 
   test("Weg zet voorstel op nee zonder actie te maken", async ({ page, open }) => {
     await open(mockWith());
+    await goTo(page, "Acties"); // B1: voorstellenblok en lijst staan onder Acties
     await itemWith(page, "OIDC-scope beoordelen voor partnerportaal").getByRole("button", { name: "Weg" }).click();
     await expect.poll(async () => (await dbDump(page, "voorstellen/v2"))["voorstellen/v2"]?.status).toBe("nee");
     expect(Object.keys(await dbDump(page, "acties/v-"))).toEqual([]);
     await expect(voorstelBlok(page).getByRole("listitem").filter({ hasText: "OIDC-scope beoordelen voor partnerportaal" })).toHaveCount(0);
-    await expect(voorstelBlok(page).getByText(/Weggelegd: OIDC-scope/)).toBeVisible();
+    await expect(feedbackBar(page).getByText(/Weggelegd: OIDC-scope/)).toBeVisible(); // B1: één feedbackbalk
   });
 
   test("Ongedaan maken na Op de lijst verwijdert de actie en zet voorstel terug op nieuw", async ({ page, open }) => {
     await open(mockWith());
+    await goTo(page, "Acties"); // B1: voorstellenblok en lijst staan onder Acties
     await itemWith(page, "Reageren op budgetvoorstel CI-runners").getByRole("button", { name: "Op de lijst" }).click();
     await expect.poll(async () => (await dbDump(page, "voorstellen/v1"))["voorstellen/v1"]?.status).toBe("ja");
     await page.getByRole("button", { name: "Ongedaan maken" }).click();
@@ -97,6 +102,7 @@ test.describe("Fase 2: voorstellen uit je mail", () => {
 
   test("Ongedaan maken na Weg zet voorstel terug op nieuw", async ({ page, open }) => {
     await open(mockWith());
+    await goTo(page, "Acties"); // B1: voorstellenblok en lijst staan onder Acties
     await itemWith(page, "OIDC-scope beoordelen voor partnerportaal").getByRole("button", { name: "Weg" }).click();
     await expect.poll(async () => (await dbDump(page, "voorstellen/v2"))["voorstellen/v2"]?.status).toBe("nee");
     await page.getByRole("button", { name: "Ongedaan maken" }).click();
@@ -114,6 +120,7 @@ test.describe("Fase 2: actierijen en archief", () => {
         vandaag: false, bron: "paf", bronUrl: "", pafId: "17", van: "", onderwerp: "",
         createdAt: "2026-09-01T08:00:00.000Z", updatedAt: "2026-09-01T08:00:00.000Z" },
     }));
+    await goTo(page, "Acties");
     const rij = itemWith(page, "Roadmap Object Store afstemmen");
     await expect(rij.getByText("Keuze storage-backend blokkeert planning")).toBeVisible();
     await expect(rij.getByText("Notitie: na architectuuroverleg")).toBeVisible();
@@ -127,6 +134,7 @@ test.describe("Fase 2: actierijen en archief", () => {
 
   test("PAF-link is het archief", async ({ page, open }) => {
     await open(buildMock());
+    await goTo(page, "Acties");
     const link = page.getByRole("link", { name: /oude PAF actielijst \(archief\)/i });
     await expect(link).toHaveAttribute("href", "https://claude.ai/artifact/Ar6sRYzLNFu5dzdLw1Y4gw");
     await expect(page.getByText("Alles staat nu hier. Alleen nog ter referentie.")).toBeVisible();

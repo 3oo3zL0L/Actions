@@ -1,7 +1,7 @@
 // Ronde 5: gedockt Claude-paneel (niets bedekt), mail "Afhandelen", "Vraag Claude" opent direct het paneel met context.
 const { test: base, expect } = require("@playwright/test");
 const { buildMock, data } = require("./fixtures");
-const { openPage, mockLog, mcpCalls, dbDump, itemWith } = require("./helpers");
+const { openPage, mockLog, mcpCalls, dbDump, itemWith, goTo, nav, detail, actionBar, openItem, openClaude } = require("./helpers");
 
 const SEND_TOOLS = /send_mail|send_draft|forward_mail|outlook_send/;
 const test = base.extend({
@@ -21,47 +21,54 @@ const test = base.extend({
 const overlaps = (a, b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
 
 // =========================================================================================
-test.describe("Claude-paneel gedockt", () => {
-  test("1400px: paneel gedockt, Acties en andere secties overlappen het paneel niet, ✕ geeft ruimte terug", async ({ page, open }) => {
+// B1: het paneel is niet meer gedockt naast de pagina maar vervangt de detailkolom (plan 3a: nooit eroverheen).
+test.describe("Claude-paneel in de detailkolom", () => {
+  test("1400px: paneel vervangt het detail, bedekt nav en lijst niet, ✕ geeft het detail terug", async ({ page, open }) => {
     await page.setViewportSize({ width: 1400, height: 900 });
     await open(buildMock());
     await expect(page.getByText("Architectuuroverleg Object Store").first()).toBeVisible();
-    const actiesBefore = await page.locator("#acties").boundingBox();
+    const col = await detail(page).boundingBox();
+    const listBefore = await page.locator("#lijst").boundingBox();
 
-    await page.getByRole("button", { name: /wat moet ik vandaag/i }).click();
+    await openClaude(page);
     const panel = page.locator("#chat");
     await expect(panel).toBeVisible();
-    await expect(page.locator("#scrim")).toBeHidden();
+    await expect(page.getByRole("dialog", { name: "Vraag Claude" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: /vastzetten|losmaken/i })).toHaveCount(0);
+    await expect(page.locator("#detailView")).toBeHidden(); // vervangen, niet overlapt
     const p = await panel.boundingBox();
     expect(p.width).toBeGreaterThanOrEqual(420);
-    expect(p.width).toBeLessThanOrEqual(560);
-    expect(Math.round(p.width)).toBe(Math.round(Math.min(560, Math.max(420, 0.34 * 1400))));
+    expect(p.x).toBeGreaterThanOrEqual(col.x - 1);
+    expect(p.x + p.width).toBeLessThanOrEqual(col.x + col.width + 1);
+    expect(p.y + p.height).toBeLessThanOrEqual(900 + 1);
 
-    for (const id of ["#acties", "#vandaag", "#inbox", "#werk", "#claudebar"]) {
-      const b = await page.locator(id).boundingBox();
-      expect(overlaps(b, p), `${id} overlapt het paneel`).toBe(false);
+    for (const loc of [nav(page), page.locator("#lijst")]) {
+      const b = await loc.boundingBox();
+      expect(overlaps(b, p), "paneel overlapt nav of lijst").toBe(false);
     }
-    const acties = await page.locator("#acties").boundingBox();
-    expect(acties.x + acties.width).toBeLessThanOrEqual(p.x);
-    expect(acties.y, "Acties staat niet in beeld naast het paneel").toBeLessThan(900);
-    await expect(page.locator("#acties").getByText("Akkoord geven op releaseplanning 26.4")).toBeInViewport();
+    const listNow = await page.locator("#lijst").boundingBox();
+    expect(Math.round(listNow.x)).toBe(Math.round(listBefore.x));
+    expect(Math.round(listNow.width)).toBe(Math.round(listBefore.width));
+    await expect(page.getByText("Architectuuroverleg Object Store").first()).toBeInViewport();
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1400);
 
     await page.getByRole("button", { name: "Sluit Claude-paneel" }).click();
     await expect(panel).toBeHidden();
-    const actiesAfter = await page.locator("#acties").boundingBox();
-    expect(Math.round(actiesAfter.x)).toBe(Math.round(actiesBefore.x));
-    expect(Math.round(actiesAfter.width)).toBe(Math.round(actiesBefore.width));
+    await expect(page.locator("#detailView")).toBeVisible();
+    const listAfter = await page.locator("#lijst").boundingBox();
+    expect(Math.round(listAfter.x)).toBe(Math.round(listBefore.x));
+    expect(Math.round(listAfter.width)).toBe(Math.round(listBefore.width));
   });
 
-  test("tablet: overlay met scrim", async ({ page, open }) => {
+  test("tablet: paneel in de detailkolom, geen scrim en geen dialoog", async ({ page, open }) => {
     await page.setViewportSize({ width: 900, height: 900 });
     await open(buildMock());
-    await page.getByRole("button", { name: /wat moet ik vandaag/i }).click();
+    await openClaude(page);
     await expect(page.locator("#chat")).toBeVisible();
-    await expect(page.locator("#scrim")).toBeVisible();
-    await expect(page.getByRole("dialog", { name: "Vraag Claude" })).toBeVisible();
+    await expect(page.locator("#scrim")).toHaveCount(0);
+    await expect(page.getByRole("dialog", { name: "Vraag Claude" })).toHaveCount(0);
+    const p = await page.locator("#chat").boundingBox();
+    for (const loc of [nav(page), page.locator("#lijst")]) expect(overlaps(await loc.boundingBox(), p)).toBe(false);
   });
 });
 
@@ -69,10 +76,12 @@ test.describe("Claude-paneel gedockt", () => {
 test.describe("Mail afhandelen", () => {
   test("verbergt direct, bewaart in inbox_verborgen, zet categorie en telt niet mee als ongelezen", async ({ page, open }) => {
     await open(buildMock());
+    await goTo(page, "Inbox");
     const mailTab = page.getByRole("tab", { name: /mail/i });
     await expect(mailTab).toHaveText(/Mail\s*2/);
-    const rij = itemWith(page, "Budget CI-runners Q4");
-    await rij.getByRole("button", { name: /afhandelen/i }).click();
+    // B1: selecteren, dan Afhandelen in de actiebalk; de melding staat in de feedbackbalk.
+    await openItem(page, "Budget CI-runners Q4");
+    await actionBar(page).getByRole("button", { name: /afhandelen/i }).click();
     await expect(page.getByText("Budget CI-runners Q4")).toHaveCount(0);
     await expect(mailTab).toHaveText(/Mail\s*1/);
     const bar = page.getByRole("status").filter({ hasText: "Mail afgehandeld" }).filter({ has: page.getByRole("button", { name: "Ongedaan maken" }) });
@@ -95,7 +104,9 @@ test.describe("Mail afhandelen", () => {
 
   test("Ongedaan maken verwijdert het db-doc en toont de mail weer", async ({ page, open }) => {
     await open(buildMock());
-    await itemWith(page, "Budget CI-runners Q4").getByRole("button", { name: /afhandelen/i }).click();
+    await goTo(page, "Inbox");
+    await openItem(page, "Budget CI-runners Q4");
+    await actionBar(page).getByRole("button", { name: /afhandelen/i }).click();
     await expect.poll(async () => Object.keys(await dbDump(page, "inbox_verborgen/")).length).toBe(1);
     await page.getByRole("button", { name: "Ongedaan maken" }).click();
     await expect(page.getByText("Budget CI-runners Q4").first()).toBeVisible();
@@ -105,7 +116,9 @@ test.describe("Mail afhandelen", () => {
 
   test("categorie-fout: mail blijft verborgen met een kleine melding", async ({ page, open }) => {
     await open(buildMock({ tools: { "Microsoft 365": { outlook_modify_labels: { error: { code: "tool_error", message: "Category failed" } } } } }));
-    await itemWith(page, "Budget CI-runners Q4").getByRole("button", { name: /afhandelen/i }).click();
+    await goTo(page, "Inbox");
+    await openItem(page, "Budget CI-runners Q4");
+    await actionBar(page).getByRole("button", { name: /afhandelen/i }).click();
     await expect(page.getByText("Verborgen, maar categorie in Outlook zetten lukte niet")).toBeVisible();
     await expect(page.getByText("Budget CI-runners Q4")).toHaveCount(0);
     expect(Object.keys(await dbDump(page, "inbox_verborgen/"))).toHaveLength(1);
@@ -115,6 +128,7 @@ test.describe("Mail afhandelen", () => {
     const acties = JSON.parse(JSON.stringify(data.acties));
     delete acties._comment;
     await open(buildMock({ db: { docs: { ...acties, "inbox_verborgen/m-mail-003": { messageId: "mail-003", onderwerp: "Budget CI-runners Q4", van: "Ruben Smit", at: "2026-09-25T08:00:00.000Z" } } } }));
+    await goTo(page, "Inbox");
     await expect(page.getByText("Planning release 26.4").first()).toBeVisible();
     await expect(page.getByText("Budget CI-runners Q4")).toHaveCount(0);
     await expect(page.getByRole("tab", { name: /mail/i })).toHaveText(/Mail\s*1/);
@@ -126,8 +140,9 @@ test.describe("Vraag Claude opent direct het paneel", () => {
   test("Jira-rij: paneel met contextkaart en focus in de chat-invoer, geen inline paneel", async ({ page, open }) => {
     await page.setViewportSize({ width: 1400, height: 900 });
     await open(buildMock());
-    const rij = itemWith(page, "Pipeline faalt op integratietests na upgrade");
-    await rij.getByRole("button", { name: "Vraag Claude" }).click();
+    await goTo(page, "Werk");
+    const rij = await openItem(page, "Pipeline faalt op integratietests na upgrade");
+    await actionBar(page).getByRole("button", { name: "Vraag Claude" }).click();
     await expect(page.getByRole("textbox", { name: "Bericht aan Claude" })).toBeFocused();
     const ctx = page.getByRole("group", { name: "Context voor je vraag" });
     await expect(ctx).toContainText("Over: PCORE-101 Pipeline faalt op integratietests na upgrade");

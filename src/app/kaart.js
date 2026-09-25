@@ -70,7 +70,8 @@ function confirmCard(opts) {
         jira: ["✓ Commentaar geplaatst. ", extLink(link || opts.link, "Open " + (opts.target || ""))],
         actie: ["✓ Actie toegevoegd"]
       };
-      announce(opts.kind === "mail" ? "Concept opgeslagen in Outlook" : opts.kind === "teams" ? "Teams-bericht verstuurd" : opts.kind === "jira" ? "Commentaar geplaatst" : "Actie toegevoegd");
+      var fbText = { mail: "Concept staat in Outlook", teams: "Teams-bericht verzonden", jira: "Commentaar geplaatst" + (opts.target ? " op " + opts.target : ""), actie: "Actie toegevoegd" };
+      feedback({ text: fbText[opts.kind] || "Gelukt", link: opts.kind === "jira" ? (link || opts.link) : link, linkLabel: opts.kind === "mail" ? "Open concept" : "Bekijk" });
       finish("ok", msgs[opts.kind] || "✓ Gelukt");
     } catch (e) {
       state = "fout"; sync();
@@ -128,9 +129,9 @@ function stripDashes(s) { return str(s).replace(/\s*—\s*/g, ", ").replace(/–
 function mountInline(key, anchorBtn, card) {
   inlineCards[key] = card;
   card._opener = anchorBtn;
-  var main = anchorBtn.closest(".row-main");
-  if (main) main.append(card);
-  var row = anchorBtn.closest(".row"); if (row) row.classList.remove("menu-open");
+  // Invulkaart onder de actiebalk in het detail (nooit een popup).
+  var slot = anchorBtn.closest(".detail") ? Shell.inlineSlot() : anchorBtn.closest(".row-main");
+  if (slot) slot.append(card);
 }
 function toggleExisting(key) {
   var c = inlineCards[key];

@@ -1,76 +1,66 @@
-// Vandaag: agenda van vandaag.
+// Vandaag (start): afspraken van nu en straks, acties met Vandaag-markering, nieuwe voorstellen.
 "use strict";
 
-// ---------- Vandaag ----------
-function renderToday() {
-  var body = $("body-vandaag");
-  var inner = stateInto(body, "cal");
-  setFresh("cal");
-  $("cnt-vandaag").textContent = "";
-  if (!inner) return;
-  var evs = calEvents();
-  var unknown = calUnknown();
-  $("cnt-vandaag").textContent = evs.length + unknown.length ? String(evs.length + unknown.length) : "";
-  if (!evs.length && !unknown.length) { inner.append(h("p", { class: "empty", text: "Geen afspraken vandaag." })); return; }
-  if (unknown.length) {
-    try { console.warn("[actiepagina] " + unknown.length + " afspraak/afspraken zonder geldige starttijd"); } catch (x) { /* */ }
-  }
-  var allDay = evs.filter(function (e) { return e.allDay; });
-  var timed = evs.filter(function (e) { return !e.allDay; });
-  if (allDay.length) {
-    inner.append(h("div", { class: "allday" }, h("b", { text: "Hele dag" }), allDay.map(function (e, i) { return (i ? " · " : "") + (str(e.it.subject) || "(geen onderwerp)"); }).join("")));
-  }
-  var nn = nowNext(evs);
+function vandaagParts() {
   var now = Date.now();
-  var ul = h("ul", { class: "list timeline" });
-  var lineDone = false;
-  timed.forEach(function (e) {
-    if (!lineDone && e.start.getTime() > now) {
-      ul.append(h("li", { class: "nowline", "aria-label": "nu " + hhmm(new Date()) }, h("span", { text: "nu " + hhmm(new Date()) })));
-      lineDone = true;
+  var evs = S.cal.hasData ? calEvents() : [];
+  return {
+    evs: evs,
+    meet: evs.filter(function (e) { return !e.allDay && !e.cancelled && e.end.getTime() > now; }),
+    allDay: evs.filter(function (e) { return e.allDay && !e.cancelled; }),
+    acties: cap.db && acties.loaded ? actiesVandaag() : [],
+    voorst: cap.db && voorst.loaded ? voorstNieuw() : []
+  };
+}
+function renderVandaag() {
+  var body = $("body-vandaag");
+  if (!body) return;
+  var p = vandaagParts();
+  clear(body);
+  var n = p.meet.length + p.acties.length + p.voorst.length;
+  $("cnt-vandaag").textContent = n ? String(n) : "";
+  Shell.changed();
+  if (halted || !Shell.shown("vandaag")) return;
+  // 1. Afspraken van nu en straks
+  var g1 = h("div", { class: "vgroup" }, h("h3", { text: "Afspraken" }));
+  var box = h("div");
+  var inner = stateInto(box, "cal");
+  g1.append(box);
+  if (inner) {
+    if (p.allDay.length) inner.append(h("div", { class: "allday" }, h("b", { text: "Hele dag" }), p.allDay.map(function (e, i) { return (i ? " · " : "") + (str(e.it.subject) || "(geen onderwerp)"); }).join("")));
+    if (!p.meet.length) inner.append(h("p", { class: "empty", text: p.evs.length ? "Geen afspraken meer vandaag." : "Geen afspraken vandaag." }));
+    else {
+      var nn = nowNext(p.evs);
+      var ul = h("ul", { class: "list timeline" });
+      p.meet.forEach(function (e) { ul.append(eventRow(e, nn)); });
+      inner.append(ul);
     }
-    ul.append(eventRow(e, nn));
-  });
-  if (!lineDone && timed.length) ul.append(h("li", { class: "nowline" }, h("span", { text: "nu " + hhmm(new Date()) })));
-  inner.append(ul);
-  var remaining = timed.filter(function (e) { return e.end.getTime() > now && !e.cancelled; });
-  if (timed.length && !remaining.length) inner.append(h("p", { class: "done-note", text: "Je agenda is klaar voor vandaag." }));
-  if (!timed.length) ul.remove();
-  if (unknown.length) {
-    var uu = h("ul", { class: "list" });
-    unknown.forEach(function (it) {
-      var subj = str(it.subject) || "(geen onderwerp)", url = safeUrl(it.webLink);
-      var t = url ? h("a", { class: "stretch title", href: url, target: "_blank", rel: "noopener noreferrer" }, subj, h("span", { class: "sr", text: " (opent in nieuw tabblad)" })) : h("span", { class: "title", text: subj });
-      uu.append(h("li", { class: "row" }, h("div", { class: "row-main" }, h("div", { class: "l1" }, t), h("div", { class: "l2", text: [str(it.location), nameFromAddr(it.organizer)].filter(Boolean).join(" · ") }))));
-    });
-    inner.append(h("div", { class: "agroup" }, h("h3", { text: "Tijd onbekend" }), uu));
   }
+  body.append(g1);
+  // 2. Acties voor vandaag
+  if (cap.db && acties.loaded) {
+    var g2 = h("div", { class: "vgroup" }, h("h3", { text: "Acties voor vandaag" }));
+    if (!p.acties.length) g2.append(h("p", { class: "empty", text: "Geen acties voor vandaag. Zet een actie op vandaag met !vandaag." }));
+    else {
+      var ul2 = h("ul", { class: "list" });
+      p.acties.sort(function (a, b) { return (dueDate(a) || Infinity) - (dueDate(b) || Infinity); }).forEach(function (a) { ul2.append(actieRow(a)); });
+      g2.append(ul2);
+    }
+    body.append(g2);
+  }
+  // 3. Nieuwe voorstellen uit de ochtendrun of scan
+  if (p.voorst.length) {
+    var g3 = h("div", { class: "vgroup" }, h("h3", { text: "Nieuwe voorstellen" }));
+    var ul3 = h("ul", { class: "list" });
+    p.voorst.forEach(function (v) { ul3.append(voorstelRow(v)); });
+    g3.append(ul3);
+    body.append(g3);
+  }
+  Shell.changed();
 }
-function eventRow(e, nn) {
-  var it = e.it;
-  var isNow = nn.cur.indexOf(e) >= 0, isNext = nn.next === e;
-  var past = e.end.getTime() <= Date.now();
-  var row = h("li", { class: "row" + (past ? " past" : "") + (e.cancelled ? " cancelled" : "") + (isNow ? " current" : ""), "aria-current": isNow ? "true" : null });
-  var subj = str(it.subject) || "(geen onderwerp)";
-  var url = safeUrl(it.webLink);
-  var titleEl = url ? h("a", { class: "stretch title", href: url, target: "_blank", rel: "noopener noreferrer" }, subj, h("span", { class: "sr", text: " (opent in nieuw tabblad)" })) : h("span", { class: "title", text: subj });
-  var loc = str(it.location);
-  if (/teams/i.test(loc)) loc = "Teams";
-  var l2 = [loc, nameFromAddr(it.organizer)].filter(Boolean).join(" · ");
-  var main = h("div", { class: "row-main" },
-    h("div", { class: "l1" }, h("span", { class: "time", text: hhmm(e.start) + "–" + hhmm(e.end) }), titleEl),
-    l2 ? h("div", { class: "l2", text: l2 }) : null);
-  var acts = h("div", { class: "row-actions" });
-  if (!e.cancelled && cap.sample) acts.append(h("button", { class: "btn text", type: "button", text: "Bereid voor", onclick: function (ev) { prepareMeeting(it, e, ev.currentTarget); } }));
-  add(acts, extLink(it.webLink, "Open"));
-  if (acts.firstChild) main.append(acts);
-  row.append(main);
-  var side = h("div", { class: "row-side" });
-  if (e.cancelled) side.append(h("span", { class: "badge muted", text: "Geannuleerd" }));
-  else if (isNow) side.append(h("span", { class: "badge now", text: "Nu" }));
-  else if (isNext) side.append(h("span", { class: "badge next", text: "Volgende" }));
-  if (acts.firstChild) side.append(moreBtn(row));
-  if (side.firstChild) row.append(side);
-  return row;
-}
-
+Shell.entry("vandaag", {
+  label: "Vandaag",
+  render: renderVandaag,
+  empty: "Kies een afspraak, actie of voorstel om het hier te openen.",
+  count: function () { var p = vandaagParts(); return p.meet.length + p.acties.length + p.voorst.length; }
+});

@@ -15,7 +15,9 @@
  *   tools: { "<server>": { "<tool>": Fixture } },
  *   sample: { rules: [SampleRule], default: SampleRule, error: {code,message}, context: {...},
  *             toolsMax?: number (default 8; 0 = geen tools), allowSameRoleTurns?: boolean },
- *   db: { docs: { "acties/a1": {...} }, failWrites: {code,message} }
+ *   db: { docs: { "acties/a1": {...} }, failWrites: {code,message}, persist?: false }
+ *        // De store overleeft een herlaad binnen dezelfde test (sessionStorage), zoals de echte db;
+ *        // persist: false zet dat uit.
  *   comments: null | { canSend?: "available"|"writers_only"|"no_session"|"off",   // default "available"
  *               canSendError?, anchorError?, sendError?, createError? : {code,message} }
  *             // comments-capability (docs/contract/comments.d.ts); null => use("comments") -> null.
@@ -492,7 +494,13 @@
   }
 
   const store = new Map();
-  for (const [p, d] of Object.entries((cfg().db && cfg().db.docs) || {})) store.set(p, clone(d));
+  const PERSIST_KEY = "__mockDbStore";
+  const persistOn = () => !(cfg().db && cfg().db.persist === false);
+  let saved = null;
+  try { saved = persistOn() ? JSON.parse(sessionStorage.getItem(PERSIST_KEY) || "null") : null; } catch { saved = null; }
+  if (Array.isArray(saved)) for (const [p, d] of saved) store.set(p, d);
+  else for (const [p, d] of Object.entries((cfg().db && cfg().db.docs) || {})) store.set(p, clone(d));
+  function persist() { if (!persistOn()) return; try { sessionStorage.setItem(PERSIST_KEY, JSON.stringify([...store])); } catch { /* vol of geblokkeerd */ } }
   let idSeq = 0;
   const newId = () => "mock" + Date.now().toString(36) + (++idSeq).toString(36);
   const dbErr = (code, message) => ({ code, message });
@@ -539,6 +547,7 @@
         writeGuard();
         LOG.db.push({ op: "set", path, data: clone(data) });
         store.set(path, clone(data));
+        persist();
         notify();
       },
       update: async (data) => {
@@ -548,6 +557,7 @@
         writeGuard();
         LOG.db.push({ op: "update", path, data: clone(data) });
         store.set(path, mergeDeep(clone(store.get(path)), data));
+        persist();
         notify();
       },
       delete: async () => {
@@ -555,6 +565,7 @@
         writeGuard();
         LOG.db.push({ op: "delete", path });
         store.delete(path);
+        persist();
         notify();
       },
       acquire: async (o) => ({ acquired: true, version: 1, holder: o && o.holder,

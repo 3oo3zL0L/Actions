@@ -3,7 +3,8 @@
 // Microcopy-regexen bovenaan volgen docs/UX.md (sectie 5 en 6).
 const { test: base, expect } = require("@playwright/test");
 const { buildMock, emptyMock } = require("./fixtures");
-const { openPage, mockLog, mcpCalls, dbDump, heading, section, itemWith, revealTab, JUNK_TEXT } = require("./helpers");
+const { openPage, mockLog, mcpCalls, dbDump, heading, section, itemWith, revealTab, JUNK_TEXT,
+  goTo, actionBar, openItem, openClaude } = require("./helpers");
 
 // ---- Microcopy-aannames (UI is Nederlands, zie BRIEF.md) ----------------------------------
 const H = {
@@ -24,7 +25,8 @@ const DRAFT_CONFIRM_BTN = /uitvoeren|maak concept|concept (maken|aanmaken|opslaa
 const CANCEL_BTN = /annuleer|annuleren|afwijzen|niet uitvoeren/i;
 const NOISE_TOGGLE = /meldingen|notificaties|ruis|no-?reply|overig/i;
 const REFRESH_BTN = /ververs|vernieuw/i;
-// UX.md 6: "/" of Ctrl/Cmd+K focust de Claude-balk (niet actief in invoervelden, behalve Ctrl+K).
+// UX.md 6: "/" of Ctrl/Cmd+K opent Claude (B1: de Claude-balk bovenaan verviel, het paneel neemt het over;
+// niet actief in invoervelden, behalve Ctrl+K).
 const CLAUDE_SHORTCUTS = ["/", "Control+k"];
 // Tools die de pagina NOOIT mag aanroepen (versturen i.p.v. concept).
 const SEND_TOOLS = /send_mail|send_draft|forward_mail|outlook_send/;
@@ -81,7 +83,8 @@ function claudeInput(page) {
 
 async function askClaude(page, question) {
   const before = (await mockLog(page)).sample.length;
-  const box = claudeInput(page);
+  const box = page.getByRole("textbox", { name: "Bericht aan Claude" });
+  if (!(await box.isVisible())) await openClaude(page); // B1: geen Claude-balk meer, het paneel in de detailkolom
   await box.fill(question);
   await box.press("Enter");
   try {
@@ -101,8 +104,12 @@ async function bodyBg(page) {
 test.describe("Zonder capabilities", () => {
   test("rendert met nette lege staten als elke use() null geeft", async ({ page, open }) => {
     await open(emptyMock());
-    for (const h of [H.agenda, H.inbox, H.jira, H.acties]) await expect(heading(page, h).first()).toBeVisible();
     await expect(page.getByText(/koppel microsoft 365/i).first()).toBeVisible();
+    // B1: één ingang tegelijk; elke ingang toont zijn kop.
+    for (const [entry, h] of [["Agenda", H.agenda], ["Inbox", H.inbox], ["Werk", H.jira], ["Acties", H.acties]]) {
+      await goTo(page, entry);
+      await expect(heading(page, h).first()).toBeVisible();
+    }
     // Zonder mcp geen calls, en geen kapotte weergave.
     expect((await mockLog(page)).mcp).toEqual([]);
     await expectNoJunk(page);
@@ -118,7 +125,10 @@ test.describe("Zonder capabilities", () => {
 
   test("rendert als window.claude ontbreekt (losse kopie van de pagina)", async ({ page, open }) => {
     await open(emptyMock({ noClaude: true }));
-    for (const h of [H.agenda, H.inbox, H.jira, H.acties]) await expect(heading(page, h).first()).toBeVisible();
+    for (const [entry, h] of [["Agenda", H.agenda], ["Inbox", H.inbox], ["Werk", H.jira], ["Acties", H.acties]]) {
+      await goTo(page, entry);
+      await expect(heading(page, h).first()).toBeVisible();
+    }
     await expectNoJunk(page);
   });
 
@@ -136,6 +146,7 @@ test.describe("Zonder capabilities", () => {
 test.describe("Agenda", () => {
   test("toont de afspraken van vandaag met wandkloktijden (niet als UTC)", async ({ page, open }) => {
     await open(buildMock());
+    await goTo(page, "Agenda"); // B1: de hele dag staat onder Agenda; Vandaag toont alleen nu en straks
     for (const s of ["Stand-up Platform Core", "Architectuuroverleg Object Store", "Sync CI Acceleration",
       "OIDC review met security", "Voortgang Jakarta migratie"]) {
       await expect(page.getByText(s).first()).toBeVisible();
@@ -153,6 +164,7 @@ test.describe("Agenda", () => {
 
   test("markeert de lopende afspraak als nu en de eerstvolgende als volgende", async ({ page, open }) => {
     await open(buildMock()); // klok staat op 10:15
+    await goTo(page, "Agenda");
     await expect(page.getByText("Architectuuroverleg Object Store").first()).toBeVisible();
     const nu = await markers(page, "Architectuuroverleg Object Store");
     expect(nu.some((t) => /\bnu\b|aria-current/i.test(t)), `geen "nu"-markering: ${nu}`).toBe(true);
@@ -166,9 +178,10 @@ test.describe("Agenda", () => {
     await open(buildMock({
       sample: { rules: [{ match: "Architectuuroverleg", text: "Voorbereiding: Mark Bakker wil een besluit over de storage-backend." }] },
     }));
-    const item = itemWith(page, "Architectuuroverleg Object Store");
-    await expect(item.getByRole("link").and(page.locator("[href*='itemid=evt-003']")).first()).toBeVisible();
-    await item.getByRole("button", { name: /bereid voor/i }).click();
+    // B1: rij selecteren opent het detail; Open en Bereid voor staan in de actiebalk.
+    await openItem(page, "Architectuuroverleg Object Store");
+    await expect(actionBar(page).getByRole("link", { name: /open in outlook/i })).toHaveAttribute("href", /itemid=evt-003/);
+    await actionBar(page).getByRole("button", { name: /bereid voor/i }).click();
     await expect(page.getByText(/Mark Bakker wil een besluit over de storage-backend/).first()).toBeVisible({ timeout: 8000 });
   });
 });
@@ -177,6 +190,7 @@ test.describe("Agenda", () => {
 test.describe("Inbox", () => {
   test("toont alle mails uit de losse contentblokken, ongelezen eerst", async ({ page, open }) => {
     await open(buildMock());
+    await goTo(page, "Inbox");
     // payload bevat alleen het eerste blok (mail-001); de rest bewijst dat alle blokken geparsed zijn.
     for (const s of ["Planning release 26.4", "Budget CI-runners Q4", "Vraag over OIDC-scope voor partnerportaal"]) {
       await expect(page.getByText(s).first()).toBeVisible();
@@ -196,6 +210,7 @@ test.describe("Inbox", () => {
 
   test("no-reply/notificaties zijn ingeklapt en uit te klappen", async ({ page, open }) => {
     await open(buildMock());
+    await goTo(page, "Inbox");
     await expect(page.getByText("Budget CI-runners Q4").first()).toBeVisible();
     await expect(page.getByText("Je wekelijkse samenvatting")).toBeHidden();
     await expect(page.getByText("[Jira] PCORE-101 is toegewezen aan jou")).toBeHidden();
@@ -209,7 +224,7 @@ test.describe("Inbox", () => {
     await revealTab(page, /teams/i);
     await expect(page.getByText("Heb je de benchmark van de nieuwe storage-backend al gezien?").first()).toBeVisible();
     await expect(page.getByText("Nightly build was gisteren weer groen na de cachefix.").first()).toBeVisible();
-    await expect(page.getByText("Mark Bakker").first()).toBeVisible();
+    await expect(page.getByRole("tabpanel", { name: /teams/i }).getByText("Mark Bakker").first()).toBeVisible();
     await expectNoJunk(page);
   });
 
@@ -217,8 +232,9 @@ test.describe("Inbox", () => {
     await open(buildMock({
       sample: { rules: [{ match: "runner", text: "Dag Ruben, akkoord met de verdubbeling van de runners. Groet, Thomas" }] },
     }));
-    const item = itemWith(page, "Budget CI-runners Q4");
-    await item.getByRole("button", { name: /antwoord/i }).click();
+    await goTo(page, "Inbox");
+    await openItem(page, "Budget CI-runners Q4");
+    await actionBar(page).getByRole("button", { name: /antwoord/i }).click();
     await expect.poll(() => pageContains(page, "akkoord met de verdubbeling"), { timeout: 8000 }).toBe(true);
     expect(await mcpCalls(page, "outlook_create_reply_draft"), "concept al gemaakt zonder bevestiging").toEqual([]);
 
@@ -247,7 +263,9 @@ test.describe("Inbox", () => {
 test.describe("Jira en Confluence", () => {
   test("Jira-issues met link die in een nieuw tabblad opent", async ({ page, open }) => {
     await open(buildMock());
-    const link = page.getByRole("link", { name: /PCORE-101|Pipeline faalt op integratietests/ }).first();
+    await goTo(page, "Werk");
+    await openItem(page, "Pipeline faalt op integratietests na upgrade");
+    const link = actionBar(page).getByRole("link", { name: /open in jira/i });
     await expect(link).toBeVisible();
     await expect(link).toHaveAttribute("href", "https://jira.example.com/browse/PCORE-101");
     await expect(link).toHaveAttribute("target", "_blank");
@@ -262,7 +280,8 @@ test.describe("Jira en Confluence", () => {
   test("Confluence-pagina's met link die in een nieuw tabblad opent", async ({ page, open }) => {
     await open(buildMock());
     await revealTab(page, /confluence/i);
-    const link = page.getByRole("link", { name: /Migratieplan Jakarta EE 10/ }).first();
+    await openItem(page, "Migratieplan Jakarta EE 10");
+    const link = actionBar(page).getByRole("link", { name: /open in confluence/i });
     await expect(link).toBeVisible();
     await expect(link).toHaveAttribute("href", "https://wiki.example.com/spaces/DEV/pages/900101");
     await expect(link).toHaveAttribute("target", "_blank");
@@ -275,6 +294,7 @@ test.describe("Jira en Confluence", () => {
   test("lege Jira-resultaten tonen een fallback-tekst", async ({ page, open }) => {
     await open(buildMock({ tools: { "Atlassian Rovo": {
       searchJiraIssuesUsingJql: { payload: { issues: { nodes: [], pageInfo: { hasNextPage: false } } } } } } }));
+    await goTo(page, "Werk");
     const jira = await section(page, H.jira);
     await expect(jira).toContainText(/geen/i);
     await expectNoJunk(page);
@@ -286,10 +306,13 @@ test.describe("Fouten per sectie", () => {
   test("needs_reauth op Jira: Jira toont herstelactie, rest werkt, geen herhaling", async ({ page, open }) => {
     await open(buildMock({ tools: { "Atlassian Rovo": { searchJiraIssuesUsingJql: {
       error: { code: "needs_reauth", server: "Atlassian Rovo", message: "token expired" } } } } }));
+    await goTo(page, "Werk");
     const jira = await section(page, H.jira);
     await expect(jira).toContainText(/opnieuw|verbind|koppel/i);
     await expect(jira).toContainText(/Atlassian/);
+    await goTo(page, "Vandaag");
     await expect(page.getByText("Architectuuroverleg Object Store").first()).toBeVisible();
+    await goTo(page, "Inbox");
     await expect(page.getByText("Budget CI-runners Q4").first()).toBeVisible();
     await revealTab(page, /confluence/i);
     await expect(page.getByText("Migratieplan Jakarta EE 10").first()).toBeVisible();
@@ -303,6 +326,7 @@ test.describe("Fouten per sectie", () => {
       { error: { code: "server_unavailable", server: "Atlassian Rovo", message: "503", retryable: true, retryAfterMs: 300 } },
       { payload: require("./fixtures/confluence.json") },
     ] } } } }));
+    await goTo(page, "Werk");
     await expect(heading(page, H.confluence).first()).toBeVisible();
     await revealTab(page, /confluence/i);
     const title = page.getByText("Migratieplan Jakarta EE 10").first();
@@ -323,7 +347,9 @@ test.describe("Fouten per sectie", () => {
       error: { code: "tool_error", server: "Microsoft 365", message: "Mailbox tijdelijk niet beschikbaar" } } } } }));
     const agenda = await section(page, H.agenda);
     await expect(agenda).toContainText(/niet|mislukt|fout|kon|beschikbaar/i);
+    await goTo(page, "Werk");
     await expect(page.getByText("Pipeline faalt op integratietests na upgrade").first()).toBeVisible();
+    await goTo(page, "Inbox");
     await expect(page.getByText("Budget CI-runners Q4").first()).toBeVisible();
     await expectNoJunk(page);
   });
@@ -331,6 +357,7 @@ test.describe("Fouten per sectie", () => {
   test("Microsoft 365 niet gekoppeld: koppel-instructie, Atlassian werkt", async ({ page, open }) => {
     await open(buildMock({ connected: ["Atlassian Rovo"] }));
     await expect(page.getByText(/Microsoft 365 is niet gekoppeld|koppel.*Microsoft 365/i).first()).toBeVisible();
+    await goTo(page, "Werk");
     await expect(page.getByText("Pipeline faalt op integratietests na upgrade").first()).toBeVisible();
     await expectNoJunk(page);
   });
@@ -340,6 +367,7 @@ test.describe("Fouten per sectie", () => {
 test.describe("Acties", () => {
   test("prominente link naar de PAF actielijst", async ({ page, open }) => {
     await open(buildMock());
+    await goTo(page, "Acties");
     const link = page.getByRole("link", { name: /PAF/i }).first();
     await expect(link).toBeVisible();
     await expect(link).toHaveAttribute("href", PAF_URL);
@@ -347,11 +375,13 @@ test.describe("Acties", () => {
 
   test("bestaande acties uit db zijn zichtbaar", async ({ page, open }) => {
     await open(buildMock());
+    await goTo(page, "Acties");
     await expect(page.getByText("Akkoord geven op releaseplanning 26.4").first()).toBeVisible();
   });
 
   test("actie toevoegen met Enter schrijft naar db-collectie acties", async ({ page, open }) => {
     await open(buildMock());
+    await goTo(page, "Acties");
     const input = page.getByRole("textbox", { name: ACTIE_INPUT }).first();
     await input.fill("Offerte runners opvragen bij leverancier");
     await input.press("Enter");
@@ -371,6 +401,7 @@ test.describe("Acties", () => {
 
   test("actie afvinken zet status op done", async ({ page, open }) => {
     await open(buildMock());
+    await goTo(page, "Acties");
     const item = itemWith(page, "Akkoord geven op releaseplanning 26.4");
     await item.getByRole("checkbox").first().click();
     await expect.poll(async () => (await dbDump(page, "acties/seed-001"))["acties/seed-001"]?.status).toBe("done");
@@ -394,12 +425,16 @@ test.describe("Claude-paneel", () => {
     expect(call.toolNames.length, "Claude krijgt geen page-tools om context op te halen").toBeGreaterThan(0);
   });
 
-  test("snelknoppen vragen Claude direct", async ({ page, open }) => {
+  // B1: de snelknoppen en de Claude-balk bovenaan vervielen (plan 3a/3c). Vervangend pad: de knop Vraag Claude
+  // bovenaan opent het paneel in de detailkolom; een getypte vraag krijgt antwoord.
+  test("snelknoppen zijn vervangen door Vraag Claude: paneel opent en een getypte vraag krijgt antwoord", async ({ page, open }) => {
     await open(buildMock());
     for (const name of [/wat moet ik vandaag/i, /vat mijn inbox samen/i, /wat (speelt er|is er gebeurd) in teams/i]) {
-      await expect(page.getByRole("button", { name }).first()).toBeVisible();
+      await expect(page.getByRole("button", { name })).toHaveCount(0);
     }
-    await page.getByRole("button", { name: /wat moet ik vandaag/i }).first().click();
+    const box = await openClaude(page);
+    await box.fill("Wat moet ik vandaag?");
+    await box.press("Enter");
     await expect(page.getByText(/je hebt vandaag vijf afspraken/).first()).toBeVisible({ timeout: 8000 });
   });
 
@@ -420,9 +455,11 @@ test.describe("Claude-paneel", () => {
     expect(await mcpCalls(page, /send/)).toEqual([]);
   });
 
-  test("snelknop mag niets schrijven: schrijfactie wordt geweigerd", async ({ page, open }) => {
-    await open(buildMock({ sample: { rules: [WRITE_RULE("inbox samen")] } }));
-    await page.getByRole("button", { name: /vat mijn inbox samen/i }).first().click();
+  // B1: snelknoppen vervielen; Bereid voor is nu het pad waarop Claude zonder eigen getypte vraag werkt.
+  test("Bereid voor mag niets schrijven: schrijfactie wordt geweigerd", async ({ page, open }) => {
+    await open(buildMock({ sample: { rules: [WRITE_RULE("Bereid mijn afspraak voor")] } }));
+    await openItem(page, "Architectuuroverleg Object Store");
+    await actionBar(page).getByRole("button", { name: /bereid voor/i }).click();
     await expect(page.getByText(/Niet uitgevoerd/).first()).toBeVisible({ timeout: 8000 });
     await page.waitForTimeout(300);
     expect(await mcpCalls(page, /create_reply_draft|send|addComment/)).toEqual([]);
@@ -464,13 +501,16 @@ test.describe("Layout, thema en toegankelijkheid", () => {
 
   test("sneltoetsen / en Ctrl+K focussen de Claude-invoer, / niet tijdens typen", async ({ page, open }) => {
     await open(buildMock());
+    await expect(page.getByText("Architectuuroverleg Object Store").first()).toBeVisible();
     const box = claudeInput(page);
-    await expect(box).toBeVisible();
     for (const key of CLAUDE_SHORTCUTS) {
       await page.evaluate(() => document.activeElement && document.activeElement.blur());
       await page.keyboard.press(key);
+      await expect(box, `${key} opent Claude niet`).toBeVisible();
       expect(await box.evaluate((el) => el === document.activeElement), `${key} focust de Claude-invoer niet`).toBe(true);
     }
+    await page.keyboard.press("Escape");
+    await goTo(page, "Acties");
     const actie = page.getByRole("textbox", { name: ACTIE_INPUT }).first();
     await actie.fill("");
     await actie.focus();
@@ -503,6 +543,7 @@ test.describe("Layout, thema en toegankelijkheid", () => {
   test("geen console-errors bij laden en gebruik", async ({ page, open }) => {
     const problems = await open(buildMock());
     await expect(page.getByText("Architectuuroverleg Object Store").first()).toBeVisible();
+    await goTo(page, "Werk");
     await expect(page.getByText("Pipeline faalt op integratietests na upgrade").first()).toBeVisible();
     await revealTab(page, /teams/i);
     await page.waitForTimeout(500);

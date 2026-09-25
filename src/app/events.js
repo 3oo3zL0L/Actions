@@ -16,23 +16,23 @@ if (THEMES.indexOf(theme) < 0) theme = "forest";
 applyTheme(theme);
 $("themeBtn").addEventListener("click", function () {
   theme = THEMES[(THEMES.indexOf(theme) + 1) % 3];
-  applyTheme(theme); lsSet(LS.theme, theme);
+  applyTheme(theme); setLocalPref("theme", LS.theme, theme);
   announce("Thema: " + THEME_LABEL[theme]);
+});
+// Thema uit de voorkeuren (ook van een ander apparaat); localStorage blijft voor de eerste paint.
+onPrefs(function (p) {
+  var t = p.theme;
+  if (THEMES.indexOf(t) < 0 || t === theme || !remoteIsNewer("theme", LS.theme)) return;
+  theme = t; applyTheme(theme); lsSet(LS.theme, theme);
 });
 
 // ---------- Events ----------
 $("refreshAll").addEventListener("click", function () { logEvent("ververs_alles"); refreshAll(); });
-var REFRESH_NAME = { today: "vandaag", inbox: "inbox", work: "werk", acties: "acties" };
+var REFRESH_NAME = { today: "agenda", vandaag: "vandaag", inbox: "inbox", work: "werk", acties: "acties" };
 document.querySelectorAll("[data-refresh]").forEach(function (b) { b.addEventListener("click", function () { var g = b.getAttribute("data-refresh"); logEvent("ververs_" + (REFRESH_NAME[g] || g)); refreshGroup(g); }); });
-document.querySelectorAll(".collapse").forEach(function (b) {
-  b.addEventListener("click", function () {
-    var sec = b.closest(".card"); var c = sec.getAttribute("data-collapsed") === "true";
-    sec.setAttribute("data-collapsed", c ? "false" : "true"); b.setAttribute("aria-expanded", c ? "true" : "false");
-  });
-});
-if (mqMobile.matches) { var w = $("werk"); w.setAttribute("data-collapsed", "true"); w.querySelector(".collapse").setAttribute("aria-expanded", "false"); }
-setupTabs("inbox", ["mail", "teams"], LS.tabInbox);
+var selectInboxTab = setupTabs("inbox", ["mail", "teams"], LS.tabInbox);
 setupTabs("werk", ["jira", "conf"], LS.tabWork);
+onPrefs(function (p) { if ((p.inboxFilter === "mail" || p.inboxFilter === "teams") && p.inboxFilter !== activeTab.inbox) selectInboxTab(p.inboxFilter); });
 $("addForm").addEventListener("submit", onAddSubmit);
 $("jqlToggle").addEventListener("click", function () {
   var f = $("jqlForm"), open = f.hidden;
@@ -48,29 +48,24 @@ $("jqlApply").addEventListener("click", function () {
   $("jqlToggle").focus();
 });
 $("jqlReset").addEventListener("click", function () { lsSet(LS.jql, null); $("jqlInput").value = DEFAULT_JQL; });
+// Nu-strip: links springen naar de ingang.
+$("nowstrip").addEventListener("click", function (e) {
+  var a = e.target.closest("a[data-go]"); if (!a) return;
+  e.preventDefault(); Shell.go(a.getAttribute("data-go"), { user: true, focus: true });
+});
 
-$("barForm").addEventListener("submit", function (e) {
-  e.preventDefault();
-  var v = $("barInput").value.trim();
-  if (!v || !cap.sample) return;
-  $("barInput").value = "";
-  openPanel($("barInput"));
-  userAsk(v);
-});
-$("quick").addEventListener("click", function (e) {
-  var b = e.target.closest("button[data-q]"); if (!b || !cap.sample) return;
-  var q = b.getAttribute("data-q");
-  openPanel(b);
-  logEvent("claude_snelknop_" + q);
-  chat.budget = 0; // snelknop: alleen lezen
-  sendChat(QUICK[q] + "\n\nAlleen lezen: voer geen schrijfacties uit.", QUICK_LABEL[q]);
-});
+// Claude openen zonder item (tot de command bar er is): knop, / en Ctrl+K.
+function openClaude(opener) {
+  if (!cap.sample) return;
+  logEvent("claude_open");
+  openPanel(opener || $("askClaude"));
+}
+$("askClaude").addEventListener("click", function () { openClaude($("askClaude")); });
 $("chatForm").addEventListener("submit", function (e) { e.preventDefault(); var v = chatInput.value; if (chat.busy) return; chatInput.value = ""; chatInput.style.height = ""; userAsk(v); });
 chatInput.addEventListener("keydown", function (e) { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); $("chatForm").requestSubmit(); } });
 chatInput.addEventListener("input", function () { chatInput.style.height = "auto"; chatInput.style.height = Math.min(chatInput.scrollHeight + 2, 160) + "px"; });
 $("chatStop").addEventListener("click", function () { if (activeCtl) activeCtl.abort(); });
 $("chatClose").addEventListener("click", closePanel);
-$("scrim").addEventListener("click", closePanel);
 $("chatNew").addEventListener("click", function () { if (activeCtl) activeCtl.abort(); chat.turns = []; chat.ctx = null; renderCtx(); clear(chatLog); chatInput.focus(); });
 // "+": context van een sectie toevoegen aan de volgende vraag.
 function setPlusMenu(open, focusFirst) {
@@ -94,67 +89,53 @@ $("chatPlusMenu").addEventListener("keydown", function (e) {
   else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); setPlusMenu(false); $("chatPlus").focus(); }
 });
 document.addEventListener("click", function (e) { if (!e.target.closest(".plus-wrap")) setPlusMenu(false); });
-$("fab").addEventListener("click", function () { openPanel($("fab")); });
+$("chatBack").addEventListener("click", function () { Shell.back(); });
 $("helpBtn").addEventListener("click", function () { openKeys(); });
 chatEl.addEventListener("keydown", function (e) {
   if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closePanel(); return; }
-  if (e.key === "Tab" && isOverlayTrap()) {
-    var f = Array.prototype.filter.call(chatEl.querySelectorAll("button, [href], input, textarea, select, [tabindex]:not([tabindex='-1'])"), function (x) { return !x.disabled && !x.hidden && x.offsetParent !== null; });
-    if (!f.length) return;
-    var first = f[0], last = f[f.length - 1];
-    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
-  }
-});
-document.addEventListener("click", function (e) {
-  if (!e.target.closest(".more") && !e.target.closest(".row-actions") && !e.target.closest(".amenu")) closeMenus();
 });
 function openKeys() { var d = $("keys"); try { if (!d.open) d.showModal(); } catch (e) { d.setAttribute("open", ""); } }
 
+// ---------- Sneltoetsen (nooit tijdens typen) ----------
 var gPending = 0;
+var ENTRY_KEYS = { "1": "vandaag", "2": "inbox", "3": "acties", "4": "werk", "5": "agenda" };
 document.addEventListener("keydown", function (e) {
   var t = e.target;
   var typing = t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable);
-  if ((e.ctrlKey || e.metaKey) && (e.key === "k" || e.key === "K")) { e.preventDefault(); focusBar(); return; }
+  if ((e.ctrlKey || e.metaKey) && (e.key === "k" || e.key === "K")) { e.preventDefault(); openClaude(); return; }
   if ($("keys").open) return;
   if (e.key === "Escape") {
     if (closeMenus()) { e.preventDefault(); return; }
     if (!chatEl.hidden) { e.preventDefault(); closePanel(); return; }
+    if (Shell.isPhone() && Shell.screen() === "detail") { e.preventDefault(); Shell.back(); return; }
     return;
   }
   if (typing || e.ctrlKey || e.metaKey || e.altKey) return;
-  if ($("keys").open) return;
+  var inChat = t && t.closest && t.closest("#chat");
   if (gPending && Date.now() - gPending < 1500) {
     gPending = 0;
     var map = { v: "vandaag", i: "inbox", w: "werk", a: "acties" };
     var id = map[e.key.toLowerCase()];
-    if (id) { e.preventDefault(); jumpTo(id); }
+    if (id) { e.preventDefault(); Shell.go(id, { user: true, focus: true }); }
     return;
   }
   gPending = 0;
-  if (e.key === "/") { e.preventDefault(); focusBar(); }
+  if (ENTRY_KEYS[e.key] && !e.shiftKey) { e.preventDefault(); Shell.go(ENTRY_KEYS[e.key], { user: true, focus: true }); }
+  else if (!inChat && (e.key === "j" || e.key === "ArrowDown")) { e.preventDefault(); Shell.move(1); }
+  else if (!inChat && (e.key === "k" || e.key === "ArrowUp")) { e.preventDefault(); Shell.move(-1); }
+  else if (e.key === "/") { e.preventDefault(); openClaude(); }
   else if (e.key === "?") { e.preventDefault(); openKeys(); }
+  else if (e.key === "z") { if (undoLast()) e.preventDefault(); }
   else if (e.key === "g") { gPending = Date.now(); }
-  else if (e.key === "n") { e.preventDefault(); var inp = $("addInput"); if (!inp.disabled) { jumpTo("acties", true); inp.focus(); } }
+  else if (e.key === "n") { e.preventDefault(); var inp = $("addInput"); if (!inp.disabled) { Shell.go("acties", { user: true }); inp.focus(); } }
   else if (e.key === "R") { e.preventDefault(); refreshAll(); }
+  else if (!inChat && e.key.length === 1 && Shell.runKey(e.key)) { e.preventDefault(); }
+  else if (e.key === "c") { e.preventDefault(); openClaude(); }
   else if (e.key === "r") {
     var sec = t && t.closest ? t.closest("section.card") : null;
     if (sec) { e.preventDefault(); var b = sec.querySelector("[data-refresh]"); if (b) refreshGroup(b.getAttribute("data-refresh")); }
   }
 });
-function focusBar() { var b = $("barInput"); if (!b.disabled) { b.focus(); b.select(); } else if (!chatEl.hidden) chatInput.focus(); }
-function jumpTo(id, noFocus) {
-  var sec = $(id);
-  if (sec.getAttribute("data-collapsed") === "true") { sec.setAttribute("data-collapsed", "false"); sec.querySelector(".collapse").setAttribute("aria-expanded", "true"); }
-  sec.scrollIntoView({ block: "start" });
-  if (!noFocus) { sec.setAttribute("tabindex", "-1"); sec.focus({ preventScroll: true }); }
-}
-
-// FAB bij uit beeld gescrolde Claude-balk
-try {
-  var io = new IntersectionObserver(function (en) { $("fab").classList.toggle("show", !en[0].isIntersecting && !!cap.sample); });
-  io.observe($("claudebar"));
-} catch (e) { /* geen IntersectionObserver */ }
 
 // Klok: elke minuut, zonder netwerk
 var lastDay = new Date().getDate();

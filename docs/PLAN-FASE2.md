@@ -149,3 +149,17 @@ Oordeel per criterium: voldoet / bijna / voldoet niet, met concrete verbetering.
   herpoging na 7 dagen.
 - Personen zoeken via eigen adresboek in plaats van Microsoft-personenzoeker.
 - Teams-overzicht van alle teams kan niet; kanalen worden gevonden via recente berichten.
+- B0: splitsing met top-level declaraties (geen namespace-object); enige hernoeming `status` -> `statusEl`
+  (window.status bestaat al). De bos-illustratie blijft inline in index.html: een test controleert de SVG-paden.
+- B1: Vandaag is een eigen lijst (afspraken van nu en straks, acties voor vandaag, nieuwe voorstellen); de hele
+  dag staat onder Agenda. Mail en Teams blijven tot B2 twee tabs in Inbox; de gekozen tab is voorkeur `inboxFilter`.
+- B1: het voorstellenblok in Acties houdt tot B5 de knoppen Op de lijst / Weg per rij (triage); in Vandaag zijn
+  voorstellen gewone rijen met die knoppen in de actiebalk.
+- B1: tot de command bar (B7) openen de knop Vraag Claude bovenaan, / en Ctrl+K het Claude-paneel zonder item.
+  De toetsen e, r, a, c, o (en b, v, x) werken al generiek via de actiebalk; B7 voegt de command bar toe.
+- B1: het lees-alleen-pad zonder eigen vraag van Thomas (vroeger de snelknoppen) is nu Bereid voor; de
+  injectietest gebruikt dat pad.
+- B1: thema en laatste ingang staan ook lokaal (eerste paint) met een tijdstip; bij laden wint de nieuwste,
+  zodat een db-write die nog onderweg was geen verse keuze overschrijft.
+- B1: alleen de actieve ingang heeft rijen in de DOM; bij wisselen roept de schil render() van de ingang aan.
+

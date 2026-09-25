@@ -1,7 +1,7 @@
 // Fase 3: "Send to PO" (comments-capability, docs/contract/comments.d.ts) en het gebruikslog (db `gebruik`).
 const { test: base, expect } = require("@playwright/test");
 const { buildMock } = require("./fixtures");
-const { openPage, mockLog, dbDump } = require("./helpers");
+const { openPage, mockLog, dbDump, goTo, openClaude } = require("./helpers");
 
 const SEND_TOOLS = /send_mail|send_draft|forward_mail|outlook_send/;
 const test = base.extend({
@@ -40,12 +40,15 @@ test.describe("Gebruikslog", () => {
     await open(buildMock());
     await expect(page.getByText("Architectuuroverleg Object Store").first()).toBeVisible();
     await page.getByRole("button", { name: /alles verversen/i }).click();
+    await goTo(page, "Inbox");
     await page.getByRole("tab", { name: /teams/i }).click();
+    await goTo(page, "Acties");
     const input = page.getByRole("textbox", { name: /nieuwe actie/i });
     await input.fill("Log-test actie");
     await input.press("Enter");
-    await page.getByRole("textbox", { name: /vraag claude/i }).first().fill("Wat speelt er rond de release?");
-    await page.getByRole("textbox", { name: /vraag claude/i }).first().press("Enter");
+    const box = await openClaude(page); // B1: geen Claude-balk meer; Vraag Claude opent het paneel
+    await box.fill("Wat speelt er rond de release?");
+    await box.press("Enter");
     await expect.poll(async () => (await mockLog(page)).db.filter((w) => w.path.startsWith("acties/")).length).toBeGreaterThan(0);
     expect(Object.keys(await dbDump(page, "gebruik/"))).toEqual([]); // nog niets geschreven
     await page.clock.fastForward("00:31");
