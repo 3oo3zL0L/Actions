@@ -50,8 +50,8 @@ function noop() { /* bewust leeg */ }
 
 // ---------- Adresboek (naam + e-mail, uit mail, agenda en Teams) ----------
 // In het geheugen plus db-collectie "adresboek" (naam, e-mail, laatst gezien; max 300, oudste eruit).
-// Andere onderdelen: addressBook.search(tekst, max) -> [{name, email}], addressBook.find(email), addressBook.byName(naam).
-var addressBook = (function () {
+// Andere onderdelen: inboxBook.search(tekst, max) -> [{name, email}], inboxBook.find(email), inboxBook.byName(naam).
+var inboxBook = (function () {
   var MAX = 300, DAY = 86400000;
   var book = {}, saved = {}, state = "wacht", timer = null;
   function valid(e) { return /^[^\s@<>()",;:]+@[^\s@<>()",;:]+\.[a-z]{2,}$/i.test(e); }
@@ -140,6 +140,8 @@ var addressBook = (function () {
   }
   return { add: add, search: search, find: find, byName: byName, load: load, size: function () { return list().length; } };
 })();
+// Publiek als addressBook (B4, B8); intern altijd inboxBook, zodat een vervangen window.addressBook de Inbox niet breekt.
+var addressBook = inboxBook;
 var abSig = "";
 function feedAddressBook() {
   var sig = [S.mail.sig, S.cal.sig, S.teams.sig, me.email].join("|").length + ":" + hashStr([S.mail.sig, S.cal.sig, S.teams.sig, me.email].join("|"));
@@ -147,16 +149,16 @@ function feedAddressBook() {
   abSig = sig;
   S.mail.items.forEach(function (m) {
     var at = (parseDate(m.receivedDateTime) || new Date()).getTime();
-    if (!isNotification(m)) { var p = personOf(m.sender || m.from); addressBook.add(p.name, p.email, at); }
+    if (!isNotification(m)) { var p = personOf(m.sender || m.from); inboxBook.add(p.name, p.email, at); }
     if (me.email) (Array.isArray(m.recipients) ? m.recipients : []).concat(Array.isArray(m.toRecipients) ? m.toRecipients : [])
-      .forEach(function (r) { var q = personOf(r); addressBook.add(q.name, q.email, at); });
+      .forEach(function (r) { var q = personOf(r); inboxBook.add(q.name, q.email, at); });
   });
   S.cal.items.forEach(function (e) {
     var at = (zonedDate(e.start) || new Date()).getTime();
     (Array.isArray(e.attendees) ? e.attendees : []).concat(e.organizer ? [e.organizer] : [])
-      .forEach(function (a) { var p = personOf(a); addressBook.add(p.name, p.email, at); });
+      .forEach(function (a) { var p = personOf(a); inboxBook.add(p.name, p.email, at); });
   });
-  teamsItems().forEach(function (t) { var p = personOf(t.from); addressBook.add(p.name, p.email, (parseDate(t.createdDateTime) || new Date()).getTime()); });
+  teamsItems().forEach(function (t) { var p = personOf(t.from); inboxBook.add(p.name, p.email, (parseDate(t.createdDateTime) || new Date()).getTime()); });
 }
 
 // ---------- Teams: chats, kanalen, afzenders ----------
@@ -351,7 +353,7 @@ function toggleVip(p) {
 function vipExtra(p) {
   if (!p || !(p.name || p.email) || (me.email && p.email === me.email)) return null;
   var pinned = isPinned(p);
-  return { label: pinned ? "Niet meer bovenaan" : "Zet " + (p.name || p.email) + " bovenaan", key: "b",
+  return { slot: "more", label: pinned ? "Niet meer bovenaan" : "Zet " + (p.name || p.email) + " bovenaan", key: "b",
     title: pinned ? (p.name || p.email) + " niet meer bovenaan zetten" : "Berichten van " + (p.name || p.email) + " altijd bovenaan", run: function () { toggleVip(p); } };
 }
 
@@ -617,7 +619,7 @@ function loadBody(it, at) {
     var ppl = function (x) { return (Array.isArray(x) ? x : []).map(personOf).filter(function (p) { return p.email || p.name; }); };
     var out = { text: text, to: ppl(v && v.toRecipients), cc: ppl(v && v.ccRecipients), from: personOf(v && (v.from || v.sender)),
       attachments: (v && Array.isArray(v.attachments) ? v.attachments : []).map(function (a) { return str(a && (a.name || a.fileName || a)); }).filter(Boolean) };
-    out.to.concat(out.cc, [out.from]).forEach(function (p) { addressBook.add(p.name, p.email, at); });
+    out.to.concat(out.cc, [out.from]).forEach(function (p) { inboxBook.add(p.name, p.email, at); });
     return out;
   });
   c.catch(function () { if (fullBodies[uri] === c) delete fullBodies[uri]; });
@@ -826,7 +828,7 @@ function recipientField(initial) {
   function hide() { list.hidden = true; inp.setAttribute("aria-expanded", "false"); inp.removeAttribute("aria-activedescendant"); active = -1; }
   function show() {
     var q = lastToken();
-    opts = q && !/<[^>]+>$/.test(q) ? addressBook.search(q, 6) : [];
+    opts = q && !/<[^>]+>$/.test(q) ? inboxBook.search(q, 6) : [];
     clear(list); active = -1;
     opts.forEach(function (p, i) {
       list.append(h("li", { role: "option", id: id + "-o" + i, "aria-selected": "false", class: "rcp-opt",
@@ -870,11 +872,11 @@ function resolveRecipients(v) {
   var out = [], seen = {};
   for (var i = 0; i < toks.length; i++) {
     var p = personOf(toks[i]);
-    if (!p.email) { var hit = addressBook.byName(toks[i]); if (hit) p = hit; }
+    if (!p.email) { var hit = inboxBook.byName(toks[i]); if (hit) p = hit; }
     if (!p.email || !/^[^\s@<>]+@[^\s@<>]+\.[a-z]{2,}$/i.test(p.email)) return { error: "Onbekende ontvanger: " + toks[i] + ". Kies iemand uit de suggesties of typ een e-mailadres." };
     if (seen[p.email]) continue;
     seen[p.email] = true;
-    var known = addressBook.find(p.email);
+    var known = inboxBook.find(p.email);
     out.push({ name: known ? known.name : (p.name || nameFromAddr(p.email)), email: p.email });
   }
   return { list: out };
@@ -1116,14 +1118,6 @@ function guessProg(text) {
   }
   return null;
 }
-function feedbackWithView(o, run) {
-  var fh = feedback(o);
-  var box = $("feedback"), close = box.querySelector(".fb-close");
-  var btn = h("button", { class: "btn text", type: "button", text: "Bekijk", title: "Open de nieuwe actie in Acties", onclick: function () { fh.close(); run(); } });
-  var sep = h("span", { class: "fb-sep", "aria-hidden": "true", text: "·" });
-  if (close) { box.insertBefore(sep, close); box.insertBefore(btn, close); } else box.append(sep, btn);
-  return fh;
-}
 function inboxMakeActie(kind, it) {
   logEvent("maak_actie", kind);
   if (!cap.db) { announce("Acties opslaan kan hier niet."); return; }
@@ -1135,44 +1129,21 @@ function inboxMakeActie(kind, it) {
   addActie(f).then(function (r) {
     logEvent("actie_toegevoegd", kind);
     var id = r && r.id;
-    feedbackWithView({ text: "Actie toegevoegd bij " + f.prog }, function () {
+    feedback({ text: "Actie toegevoegd bij " + f.prog, action: id ? { label: "Bekijk", title: "Open de nieuwe actie in Acties", run: function () {
       Shell.go("acties", { user: true });
       var tries = 0;
       (function sel() { if (!Shell.select("actie:" + id, { user: true, focus: true, scroll: true }) && tries++ < 20) setTimeout(sel, 100); })();
-    });
+    } } : null });
     if (!prog && id) suggestProg(id, text);
   }, function () { feedback({ icon: "⚠", text: "Actie niet opgeslagen. Probeer het opnieuw" }); });
 }
 
-// ---------- Meer: extra acties compact onder de actiebalk ----------
-// De balk toont vijf vaste knoppen plus één extra; zijn er meer extra's, dan opent "Meer" (m) ze hier.
-// Hun eigen toetsen (l, f, b, s) werken altijd, ook zonder Meer te openen.
-function moreAction(extras) {
-  extras = extras.filter(Boolean);
-  if (!extras.length) return null;
-  if (extras.length === 1) { var x = extras[0]; return { slot: "extra", label: x.label, key: x.key, title: x.title || x.label, run: function () { x.run(); } }; }
-  return { slot: "extra", label: "Meer", key: "m", title: "Meer: " + extras.map(function (e) { return e.label + " (" + e.key + ")"; }).join(", "),
-    run: function (it, btn) { toggleMore(extras, btn); } };
-}
-function toggleMore(extras, btn) {
-  var slot = Shell.inlineSlot(), ex = slot.querySelector(".more-card");
-  if (ex && !ex.hidden) { ex.remove(); if (btn) { btn.setAttribute("aria-expanded", "false"); btn.focus(); } return; }
-  if (ex) ex.remove(); // met Esc verborgen (closeMenus): opnieuw openen
-  var card = h("div", { class: "amenu more-card", role: "group", "aria-label": "Meer acties" });
-  extras.forEach(function (x) {
-    card.append(h("button", { class: "btn", type: "button", title: (x.title || x.label) + " (" + x.key + ")", "aria-keyshortcuts": x.key, text: x.label,
-      onclick: function () { card.remove(); if (btn) btn.setAttribute("aria-expanded", "false"); x.run(); } }));
-  });
-  card.addEventListener("keydown", function (e) { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); card.remove(); if (btn) { btn.setAttribute("aria-expanded", "false"); btn.focus(); } } });
-  slot.insertBefore(card, slot.firstChild);
-  if (btn) btn.setAttribute("aria-expanded", "true");
-  card.querySelector("button").focus();
-}
+// ---------- Extra acties (slot "more"): geen eigen knop, wel in "Meer ▾" van de schil, via hun toets en de command bar ----------
 function mailExtras(m) {
   var p = personOf(m.sender || m.from);
   return [
-    { label: "Allen beantwoorden", key: "l", title: "Antwoord aan iedereen in de mail", run: function () { openMailComposer(m, "all"); } },
-    { label: "Doorsturen", key: "f", title: "Doorsturen, met suggesties uit je adresboek", run: function () { openMailComposer(m, "fwd"); } },
+    { slot: "more", label: "Allen beantwoorden", key: "l", title: "Antwoord aan iedereen in de mail", run: function () { openMailComposer(m, "all"); } },
+    { slot: "more", label: "Doorsturen", key: "f", title: "Doorsturen, met suggesties uit je adresboek", run: function () { openMailComposer(m, "fwd"); } },
     vipExtra(p)
   ].filter(Boolean);
 }
@@ -1181,12 +1152,13 @@ function teamsExtras(t) {
   var out = [vipExtra(personOf(t.from))];
   if (c) {
     var f = isFollowed(c), n = channelName(c);
-    out.push({ label: f ? "Kanaal niet meer volgen" : "Volg kanaal", key: "s", title: f ? "Stop met volgen van " + n : "Volg " + n + ": nieuwe berichten komen in je Inbox",
+    out.push({ slot: "more", label: f ? "Kanaal niet meer volgen" : "Volg kanaal", key: "s", title: f ? "Stop met volgen van " + n : "Volg " + n + ": nieuwe berichten komen in je Inbox",
       run: function () { toggleFollow({ teamId: c.teamId, channelId: c.channelId }); } });
   }
   return out.filter(Boolean);
 }
-// Toetsen van de Inbox: t (filter wisselen), v (afgehandeld tonen) en de toetsen van de extra acties.
+// Toetsen van de Inbox (alleen in deze ingang, en nooit als het open item zelf een actie met die toets heeft):
+// t wisselt het filter, v toont ook wat je afhandelde. De extra acties (l, f, b, s) lopen via de schil (slot "more").
 document.addEventListener("keydown", function (e) {
   if (!Shell.shown("inbox") || e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented) return;
   var t = e.target;
@@ -1194,16 +1166,10 @@ document.addEventListener("keydown", function (e) {
   if ($("keys").open || !$("chat").hidden) return;
   if (typeof gPending !== "undefined" && gPending && Date.now() - gPending < 1500) return;
   var k = e.key, done = false;
+  if (k !== "t" && k !== "v" && k !== "V") return;
+  if (Shell.actions().some(function (a) { return a && a.key === k; })) return; // het item gaat voor
   if (k === "t") { cycleFilter(); done = true; }
-  else if (k === "v" || k === "V") { toggleHandledView(); done = true; }
-  else if ("lfbs".indexOf(k) >= 0 && k.length === 1) {
-    var cur = Shell.current();
-    if (cur && cur.entry === "inbox" && !(Shell.isPhone() && Shell.screen() !== "detail")) {
-      var ex = cur.type === "mail" ? mailExtras(cur.item) : cur.type === "teams" ? teamsExtras(cur.item) : [];
-      var hit = ex.filter(function (x) { return x.key === k; })[0];
-      if (hit) { hit.run(); done = true; }
-    }
-  }
+  else { toggleHandledView(); done = true; }
   if (done) { e.preventDefault(); e.stopImmediatePropagation(); }
 });
 
@@ -1266,8 +1232,7 @@ Shell.type("mail", {
       { slot: "make", label: "Maak actie", key: "a", title: "Maak een actie van deze mail", run: function (x) { inboxMakeActie("mail", x); } },
       Shell.act.ask("mail", m),
       Shell.act.open(m.webLink, "Outlook"),
-      moreAction(mailExtras(m))
-    ];
+    ].concat(mailExtras(m));
   }
 });
 Shell.type("teams", {
@@ -1299,8 +1264,7 @@ Shell.type("teams", {
       { slot: "make", label: "Maak actie", key: "a", title: "Maak een actie van dit bericht", run: function (x) { inboxMakeActie("teams", x); } },
       Shell.act.ask("teams", t),
       Shell.act.open(t.webUrl || t.webLink, "Teams"),
-      moreAction(teamsExtras(t))
-    ];
+    ].concat(teamsExtras(t));
   }
 });
 Shell.type("kanaal", {

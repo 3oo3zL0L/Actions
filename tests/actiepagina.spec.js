@@ -25,8 +25,8 @@ const DRAFT_CONFIRM_BTN = /uitvoeren|maak concept|concept (maken|aanmaken|opslaa
 const CANCEL_BTN = /annuleer|annuleren|afwijzen|niet uitvoeren/i;
 const NOISE_TOGGLE = /meldingen|notificaties|ruis|no-?reply|overig/i;
 const REFRESH_BTN = /ververs|vernieuw/i;
-// UX.md 6: "/" of Ctrl/Cmd+K opent Claude (B1: de Claude-balk bovenaan verviel, het paneel neemt het over;
-// niet actief in invoervelden, behalve Ctrl+K).
+// UX.md 6: "/" of Ctrl/Cmd+K opent de invoer voor vragen aan Claude (B7: de command bar, waarin elke niet-commando-tekst
+// als vraag naar Claude gaat; niet actief in invoervelden, behalve Ctrl+K).
 const CLAUDE_SHORTCUTS = ["/", "Control+k"];
 // Tools die de pagina NOOIT mag aanroepen (versturen i.p.v. concept).
 const SEND_TOOLS = /send_mail|send_draft|forward_mail|outlook_send/;
@@ -376,6 +376,7 @@ test.describe("Acties", () => {
   test("actie toevoegen met Enter schrijft naar db-collectie acties", async ({ page, open }) => {
     await open(buildMock());
     await goTo(page, "Acties");
+    await page.getByRole("button", { name: "Nieuwe actie" }).click(); // B5: Nieuwe actie opent een formulier bovenaan het detail
     const input = page.getByRole("textbox", { name: ACTIE_INPUT }).first();
     await input.fill("Offerte runners opvragen bij leverancier");
     await input.press("Enter");
@@ -390,7 +391,9 @@ test.describe("Acties", () => {
     expect(typeof doc.createdAt === "string" || typeof doc.createdAt === "number", "createdAt ontbreekt").toBe(true);
     if ("prog" in doc && doc.prog) expect(PROGRAMMAS).toContain(doc.prog);
     await expect(page.getByText("Offerte runners opvragen bij leverancier").first()).toBeVisible();
-    await expect(input).toHaveValue("");
+    // B5: het formulier sluit en de nieuwe actie is geselecteerd (detail rechts).
+    await expect(page.getByRole("textbox", { name: "Nieuwe actie" })).toHaveCount(0);
+    await expect(detail(page).getByRole("heading", { level: 2 })).toHaveText("Offerte runners opvragen bij leverancier");
   });
 
   test("actie afvinken zet status op done", async ({ page, open }) => {
@@ -493,18 +496,26 @@ test.describe("Layout, thema en toegankelijkheid", () => {
     expect(await bodyBg(page), "data-theme=dark werkt niet in light scheme").toBe(dark);
   });
 
-  test("sneltoetsen / en Ctrl+K focussen de Claude-invoer, / niet tijdens typen", async ({ page, open }) => {
+  test("sneltoetsen / en Ctrl+K focussen de invoer (command bar) die een vraag naar Claude stuurt, / niet tijdens typen", async ({ page, open }) => {
     await open(buildMock());
     await expect(page.getByText("Architectuuroverleg Object Store").first()).toBeVisible();
-    const box = claudeInput(page);
+    const box = page.getByRole("combobox", { name: /vraag Claude/i });
     for (const key of CLAUDE_SHORTCUTS) {
       await page.evaluate(() => document.activeElement && document.activeElement.blur());
       await page.keyboard.press(key);
-      await expect(box, `${key} opent Claude niet`).toBeVisible();
-      expect(await box.evaluate((el) => el === document.activeElement), `${key} focust de Claude-invoer niet`).toBe(true);
+      await expect(box, `${key} opent de invoer niet`).toBeVisible();
+      expect(await box.evaluate((el) => el === document.activeElement), `${key} focust de invoer niet`).toBe(true);
+      await page.keyboard.press("Escape");
+      await expect(box).toBeHidden();
     }
-    await page.keyboard.press("Escape");
+    // Een vraag via de invoer komt bij Claude aan.
+    await page.keyboard.press("Control+k");
+    await box.fill("Wat speelt er vandaag?");
+    await box.press("Enter");
+    await expect(claudeInput(page)).toBeVisible();
+    await expect.poll(async () => (await mockLog(page)).sample.length).toBeGreaterThan(0);
     await goTo(page, "Acties");
+    await page.getByRole("button", { name: "Nieuwe actie" }).click(); // B5: Nieuwe actie opent een formulier bovenaan het detail
     const actie = page.getByRole("textbox", { name: ACTIE_INPUT }).first();
     await actie.fill("");
     await actie.focus();

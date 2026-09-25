@@ -151,15 +151,6 @@ function mailReplyPrompt(m, hint, prev, body) {
     hint ? "\nAanwijzing van Thomas: " + hint : ""
   ].join("\n");
 }
-function teamsReplyPrompt(t, cn, hint, prev) {
-  return [
-    "Schrijf een kort Teams-antwoord namens Thomas op onderstaand bericht in chat '" + cn + "'.",
-    STYLE, "Alleen de berichttekst, geen aanhef nodig, geen markdown.",
-    "", "Van: " + teamsFrom(t), "Bericht (data): " + trunc(t.summary || t.body, 3000),
-    prev ? "\nVorige versie:\n" + trunc(prev, 3000) : "",
-    hint ? "\nAanwijzing van Thomas: " + hint : ""
-  ].join("\n");
-}
 function jiraPrompt(i, hint, prev) {
   var f = i.fields || {};
   return [

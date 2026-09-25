@@ -43,6 +43,7 @@ test.describe("Gebruikslog", () => {
     await goTo(page, "Inbox");
     await inboxFilter(page).getByRole("button", { name: /^Teams/ }).click(); // B2: filterknop in plaats van tab
     await goTo(page, "Acties");
+    await page.getByRole("button", { name: "Nieuwe actie" }).click(); // B5: Nieuwe actie opent een formulier bovenaan het detail
     const input = page.getByRole("textbox", { name: /nieuwe actie/i });
     await input.fill("Log-test actie");
     await input.press("Enter");

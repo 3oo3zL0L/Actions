@@ -98,24 +98,9 @@ function renderVoorstellenBlok() {
   box.append(h("div", { class: "vhead" }, h("h3", { id: "h-voorstellen", text: "Voorstellen (" + list.length + ")" }), scanBtn("Scan mail en Teams")));
   add(box, scanMsg);
   if (voorst.error) box.append(h("p", { class: "errmsg", role: "alert", text: "Opslaan van je besluit lukte niet. Probeer het opnieuw." }));
+  // B5: rijen zonder knoppen; Op de lijst, Weg en Open bron staan in de actiebalk van het detail.
   var ul = h("ul", { class: "list", "aria-labelledby": "h-voorstellen" });
-  list.forEach(function (v) {
-    var src = [v.van, v.onderwerp, v.prog].filter(Boolean).join(" · ");
-    var icon = v.bron === "teams" ? "💬" : "✉";
-    var what = v.bron === "teams" ? "Teams-bericht" : "mail";
-    var row = h("li", { class: "row" });
-    var main = h("div", { class: "row-main" },
-      h("div", { class: "title", style: "white-space:normal", text: v.text }),
-      v.why ? h("div", { class: "l3", text: v.why }) : null,
-      h("div", { class: "l2" }, src,
-        v.link ? h("a", { href: v.link, target: "_blank", rel: "noopener noreferrer", class: "btn text", style: "min-height:0;padding:0 4px", title: "Open " + what }, icon, h("span", { class: "sr", text: " Open " + what + " (opent in nieuw tabblad)" }))
-          : h("span", { title: v.bron === "teams" ? "Uit Teams" : "Uit mail", text: " " + icon })),
-      h("div", { class: "vbtns" },
-        h("button", { class: "btn primary", type: "button", text: "Op de lijst", onclick: function () { voorst.error = null; acceptVoorstel(v); } }),
-        h("button", { class: "btn", type: "button", text: "Weg", onclick: function () { voorst.error = null; rejectVoorstel(v); } })));
-    row.append(main);
-    ul.append(row);
-  });
+  list.forEach(function (v) { ul.append(voorstelRow(v)); });
   if (list.length) box.append(ul);
 
 }
@@ -216,14 +201,17 @@ Shell.type("voorstel", {
   label: "Voorstel",
   title: function (v) { return v.text; },
   detail: function (v, body) {
-    add(body, metaList([["Van", v.van], ["Onderwerp", v.onderwerp], ["Programma", v.prog], ["Bron", v.bron === "teams" ? "Teams" : "mail"]]));
+    add(body, metaList([["Van", v.van], ["Onderwerp", v.onderwerp], ["Programma", v.prog], ["Bron", v.bron === "teams" ? "Teams" : "mail"],
+      ["Uit", v.run]]));
     if (v.why) body.append(h("p", { class: "detail-text", text: v.why }));
+    if (voorst.error) body.append(h("p", { class: "errmsg", role: "alert", text: "Opslaan van je besluit lukte niet. Probeer het opnieuw." }));
   },
   actions: function (v) {
+    if (!cap.db) return [Shell.act.open(v.link, v.bron === "teams" ? "Teams" : "Outlook")];
     return [
       { slot: "primary", label: "Op de lijst", key: "a", title: "Als actie op je lijst zetten", run: function (x) { voorst.error = null; acceptVoorstel(x); } },
-      { slot: "done", label: "Weg", key: "e", title: "Voorstel wegleggen", run: function (x) { voorst.error = null; rejectVoorstel(x); } },
-      Shell.act.open(v.link, v.bron === "teams" ? "Teams" : "Outlook")
+      { slot: "done", label: "Weg", key: "e", title: "Voorstel wegleggen (Ongedaan maken kan)", run: function (x) { voorst.error = null; rejectVoorstel(x); } },
+      { slot: "open", label: "Open bron", key: "o", title: "Open " + (v.bron === "teams" ? "het Teams-bericht" : "de mail") + " in een nieuw tabblad", href: safeUrl(v.link) }
     ];
   }
 });

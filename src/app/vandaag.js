@@ -8,6 +8,8 @@ function vandaagParts() {
     evs: evs,
     meet: evs.filter(function (e) { return !e.allDay && !e.cancelled && e.end.getTime() > now; }),
     allDay: evs.filter(function (e) { return e.allDay && !e.cancelled; }),
+    // Dag voorbij: de eerste afspraak van morgen, zodat je ziet waar de dag morgen mee begint.
+    morgen: S.cal.hasData ? calTomorrow().filter(function (e) { return !e.allDay && !e.cancelled; })[0] || null : null,
     acties: cap.db && acties.loaded ? actiesVandaag() : [],
     voorst: cap.db && voorst.loaded ? voorstNieuw() : []
   };
@@ -28,8 +30,10 @@ function renderVandaag() {
   g1.append(box);
   if (inner) {
     if (p.allDay.length) inner.append(h("div", { class: "allday" }, h("b", { text: "Hele dag" }), p.allDay.map(function (e, i) { return (i ? " · " : "") + (str(e.it.subject) || "(geen onderwerp)"); }).join("")));
-    if (!p.meet.length) inner.append(h("p", { class: "empty", text: p.evs.length ? "Geen afspraken meer vandaag." : "Geen afspraken vandaag." }));
-    else {
+    if (!p.meet.length) {
+      inner.append(h("p", { class: "empty", text: p.evs.length ? "Geen afspraken meer vandaag." : "Geen afspraken vandaag." }));
+      if (p.morgen) inner.append(h("p", { class: "vsub", text: "Morgen als eerste" }), h("ul", { class: "list timeline" }, eventRow(p.morgen)));
+    } else {
       var nn = nowNext(p.evs);
       var ul = h("ul", { class: "list timeline" });
       p.meet.forEach(function (e) { ul.append(eventRow(e, nn)); });
@@ -40,7 +44,7 @@ function renderVandaag() {
   // 2. Acties voor vandaag
   if (cap.db && acties.loaded) {
     var g2 = h("div", { class: "vgroup" }, h("h3", { text: "Acties voor vandaag" }));
-    if (!p.acties.length) g2.append(h("p", { class: "empty", text: "Geen acties voor vandaag. Zet een actie op vandaag met !vandaag." }));
+    if (!p.acties.length) g2.append(h("p", { class: "empty", text: "Geen acties voor vandaag. Open een actie en kies Maak vandaag (v)." }));
     else {
       var ul2 = h("ul", { class: "list" });
       p.acties.sort(function (a, b) { return (dueDate(a) || Infinity) - (dueDate(b) || Infinity); }).forEach(function (a) { ul2.append(actieRow(a)); });

@@ -12,3 +12,78 @@
 .allday { background: var(--surface-2); border-radius: var(--r-md); padding: 8px 12px; margin-bottom: var(--sp-3); font-size: var(--fs-sm); }
 .allday b { font-weight: 600; margin-right: 6px; }
 .done-note { color: var(--text-3); font-size: var(--fs-sm); margin: var(--sp-3) 0 0; }
+/* B4: dagen, uitnodigingen, antwoordveld. */
+.aday + .aday { margin-top: var(--sp-4); }
+.aday h3 { font-size: var(--fs-sm); font-weight: 600; margin: 0 0 4px; color: var(--text-2); display: flex; gap: 8px; align-items: baseline; }
+.aday h3 .n { color: var(--text-3); font-weight: 400; }
+.badge.invite { background: var(--info-soft); color: var(--info); }
+.vsub { margin: var(--sp-2) 0 2px; font-size: var(--fs-xs); font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: .05em; }
+.plan-btn { white-space: nowrap; }
+.card-head .fresh:empty + .plan-btn { margin-left: auto; }
+.respond { display: flex; flex-direction: column; gap: 4px; }
+.respond label { font-size: var(--fs-sm); color: var(--text-2); }
+.respond input { min-height: 36px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--bg); padding: 6px 10px; }
+.respond .resp-status:empty { display: none; }
+.respond .resp-status { font-size: var(--fs-sm); color: var(--text-2); display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+
+/* Paneel bovenaan de detailkolom (Plan een vergadering, Nieuwe actie): geen popup, bedekt niets. */
+.dpane { order: 0; border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: var(--r-md); background: var(--bg);
+  padding: var(--sp-3) var(--sp-4); display: flex; flex-direction: column; gap: var(--sp-3); }
+.dpane[hidden] { display: none; }
+.detail.has-pane .abar { margin-top: 0; }
+.detail.has-pane .detail-empty { display: none; }
+.dpane-head { display: flex; align-items: center; gap: 8px; margin: -4px -8px -4px 0; }
+.dpane-head h3 { margin: 0; font-size: var(--fs-md); font-weight: 700; flex: 1; }
+.dpane .btns { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.fld { display: flex; flex-direction: column; gap: 4px; min-width: 0; position: relative; }
+.fld > label, .fld-label, .fld-row > label { font-size: var(--fs-sm); color: var(--text-2); font-weight: 500; }
+.fld-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.fld-row2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--sp-3); }
+.fld input[type="text"], .fld input[type="date"], .fld select, .fld textarea, .chips {
+  min-height: 36px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface); padding: 6px 10px; width: 100%; min-width: 0; }
+.fld textarea { resize: vertical; line-height: var(--lh); }
+.fld-hint { margin: 0; font-size: var(--fs-xs); color: var(--text-3); }
+.fld-hint.err { color: var(--danger); }
+.fld-hint:empty { display: none; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; padding: 3px 4px; cursor: text; }
+.chips input[type="text"] { border: 0; background: transparent; flex: 1 1 140px; min-height: 28px; padding: 2px 6px; width: auto; }
+.chips input[type="text"]:focus { outline: none; }
+.chips:focus-within { outline: 2px solid var(--focus); outline-offset: -1px; }
+.chip { display: inline-flex; align-items: center; gap: 2px; background: var(--accent-soft); color: var(--text); border-radius: var(--r-pill); padding: 1px 2px 1px 10px; font-size: var(--fs-sm); max-width: 100%; }
+.chip > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chip-x { border: 0; background: transparent; color: var(--text-2); width: 26px; height: 26px; border-radius: 50%; cursor: pointer; font-size: 12px; }
+.chip-x:hover { background: rgb(128 128 128 / .2); color: var(--text); }
+.sugg { list-style: none; margin: 2px 0 0; padding: 4px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface); box-shadow: var(--shadow-2); }
+.sugg[hidden] { display: none; }
+.sugg li { padding: 6px 8px; border-radius: var(--r-sm); cursor: pointer; display: flex; gap: 8px; align-items: baseline; min-width: 0; }
+.sugg li .sub { color: var(--text-3); font-size: var(--fs-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sugg li[aria-selected="true"], .sugg li:hover { background: var(--accent-soft); }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: var(--r-sm); overflow: hidden; align-self: flex-start; }
+.seg label { position: relative; cursor: pointer; }
+.seg input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.seg span { display: inline-flex; align-items: center; min-height: 32px; padding: 4px 14px; font-size: var(--fs-sm); }
+.seg label + label span { border-left: 1px solid var(--border); }
+.seg input:checked + span { background: var(--accent); color: var(--on-accent); font-weight: 600; }
+.seg input:focus-visible + span { outline: 2px solid var(--focus); outline-offset: -2px; }
+.pl-result:empty { display: none; }
+.pl-result { display: flex; flex-direction: column; gap: 8px; }
+.pl-msg { margin: 0; font-size: var(--fs-sm); color: var(--text-2); }
+.pl-msg:empty { display: none; }
+.slots { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
+.btn.slot { flex-direction: column; align-items: flex-start; gap: 0; min-height: 52px; padding: 6px 12px; border-color: var(--accent); }
+.slot-day { font-weight: 600; }
+.slot-time { font-family: var(--mono); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
+.slot-note { font-size: var(--fs-xs); color: var(--warn); }
+@media (max-width: 700px) {
+  .fld-row2 { grid-template-columns: minmax(0, 1fr); }
+  .plan-btn { min-height: 40px; }
+}
+@container (max-width: 400px) { .plan-btn { margin-left: auto; } }
+/* Smalle lijstkolom: "bijgewerkt" op een eigen regel, zodat knop en verversen samen rechts blijven. */
+@container (max-width: 560px) {
+  #agenda .card-head .fresh, #acties .card-head .fresh { order: 10; flex-basis: 100%; margin-left: 0; padding-left: 2px; font-size: var(--fs-xs); }
+  #agenda .card-head .fresh:empty, #acties .card-head .fresh:empty { display: none; }
+  .card-head .plan-btn { margin-left: auto; }
+}
+/* Primaire actie als link (Deelnemen ↗) krijgt dezelfde nadruk als een primaire knop. */
+.abar a.btn[data-slot="primary"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }

@@ -165,8 +165,10 @@ Oordeel per criterium: voldoet / bijna / voldoet niet, met concrete verbetering.
 
 - B2: rijen tonen nieuwste eerst (niet meer ongelezen eerst); VIP-groep "Bovenaan" erboven. Vergaderingen met meer
   dan 15 deelnemers tellen niet mee voor VIP (anders maakt een all-hands iedereen VIP).
-- B2: extra acties (Allen beantwoorden l, Doorsturen f, Zet <naam> bovenaan b, Volg kanaal s) staan achter één knop
-  "Meer" (m) onder de actiebalk; hun toetsen werken ook zonder Meer te openen. Is er maar één extra, dan staat die direct.
+- B2: extra acties (Allen beantwoorden l, Doorsturen f, Zet <naam> bovenaan b, Volg kanaal s) hebben slot "more":
+  geen eigen knop, wel toets, command bar en "Meer ▾" van de schil. De schil toont "Meer ▾" altijd zodra er
+  more-acties zijn en zet ze daar met hun toets in het label ("Doorsturen (f)"), zodat wie alleen klikt ze vindt.
+  Inbox-toetsen t (filter) en v (afgehandeld) gelden alleen in de Inbox en wijken voor een itemactie met die toets.
 - B2: verzenduitstel met een eigen timer per mail, los van de feedbackbalk: een nieuwe melding annuleert of versnelt
   niets; een wachtende mail is ook te annuleren via de kaart "Wordt zo verzonden" in het detail van die mail.
   Sluiten van het tabblad tijdens het wachten vraagt eerst bevestiging (beforeunload).
@@ -177,3 +179,22 @@ Oordeel per criterium: voldoet / bijna / voldoet niet, met concrete verbetering.
 - B3: kanalen staan als ingeklapte groep "Teams-kanalen (n)" onderaan de Inbox, als gewone selecteerbare rijen;
   Volgen/Niet meer volgen (s) zit in de actiebalk van het kanaaldetail (geen vinkjes in de rij, PO-regel: geen knoppen
   in rijen). Kanaalnamen komen uit teams_list_channels (Channel.ReadBasic.All is toegekend), één keer per team.
+- B6: actiebalk Jira = Reageer · Maak actie · Vraag Claude · Open in Jira + één extra (Status, s). Toewijzen (t) en
+  Nieuw Jira-issue (i, op mail, Teams en actie) hebben geen knop (slot "more" in de schil): toets en command bar,
+  zodat de balk op 1280px op één regel past.
+- B6: "Aan mij" gebruikt de accountId uit `context.atlassianAccountId` die elk Rovo-antwoord meestuurt
+  (atlassianUserInfo staat niet in het manifest); terugval lookupJiraAccountId met het e-mailadres uit get_me.
+  `lookupJiraAccountId` geeft `{data:{users:{users:[{accountId, displayName, html}]}}}` (e-mail alleen in `html`).
+- B6: getJiraIssue geeft zonder `fields: [..., "comment"]` geen commentaar; de app vraagt de velden expliciet op, met
+  `responseContentFormat: "markdown"`. getVisibleJiraProjects: `{values:[{key,name}], isLast}`, max 50 per pagina.
+- B6: Confluence-markdown bevat tabellen (lege kopregel), backslash-escapes en HTML-resten. Werk rendert die met een
+  eigen voorbewerking bovenop renderMarkdown (tabellen, scheidingslijn, afbeelding als link); renderMarkdown zelf is
+  ongewijzigd. Nog steeds geen HTML-injectie: alles via textContent.
+- B6: commentaarstijl via `werkFinishComment` in werk.js; die gebruikt `finishChat` zodra groep A die levert.
+- B7: de knop bovenaan heet "Zoek of vraag… Ctrl K" (id askClaude) en opent de command bar; een aparte
+  Claude-knop is er niet meer. "Vraag Claude" zonder tekst in de bar = paneel zonder item (het oude pad).
+  Zonder Claude verbergt claude.js deze knop nog; Ctrl+K en / werken dan wel.
+- B7: een vraag uit de bar krijgt het geselecteerde item als context (ook een automatisch geselecteerde rij); de
+  suggestie noemt dat ("over <item>"), en bij een lopend gesprek blijft de context van dat gesprek.
+- B7: Enter voert de primaire actie uit vanaf de geselecteerde rij of een neutrale plek; op een andere knop of link
+  doet Enter gewoon zijn eigen klik.

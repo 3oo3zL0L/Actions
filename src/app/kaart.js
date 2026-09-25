@@ -143,8 +143,6 @@ function toggleExisting(key) {
 function cleanupLater(key) { return function () { setTimeout(function () { var c = inlineCards[key]; if (c && c.classList.contains("collapsed")) { if (c.parentNode) c.parentNode.removeChild(c); delete inlineCards[key]; } }, 8000); }; }
 
 // Schrijfacties (alleen na klik op Uitvoeren)
-function doMailDraft(messageId, text) { return cap.mcp.callTool(M365, "outlook_create_reply_draft", { messageId: messageId, body: text, bodyType: "text" }); }
-function doTeamsSend(chatId, text) { return cap.mcp.callTool(M365, "teams_send_chat_message", { chatId: chatId, body: text }); }
 function doJiraComment(key, text) {
   return cap.mcp.callTool(ATL, "addCommentToJiraIssue", { cloudId: CLOUD_ID, issueIdOrKey: key, commentBody: text, contentFormat: "markdown" }).then(function (r) {
     if (cap.mcp && typeof cap.mcp.invalidate === "function") cap.mcp.invalidate(ATL, "searchJiraIssuesUsingJql").catch(function () {});
@@ -153,44 +151,7 @@ function doJiraComment(key, text) {
 }
 function needMcp() { if (!cap.mcp) return Promise.reject({ code: "not_granted", message: "mcp niet beschikbaar" }); return null; }
 
-function openMailDraft(m, btn) {
-  var key = "mail:" + m.id;
-  if (toggleExisting(key)) return;
-  logEvent("antwoord_concept_open");
-  var who = nameFromAddr(m.sender || m.from);
-  var card = confirmCard({
-    kind: "mail", title: "Concept-antwoord in Outlook", okEvent: "antwoord_concept_uitgevoerd", postProcess: finishMail,
-    meta: "Aan: " + who + " · Re: " + (str(m.subject) || "(geen onderwerp)"),
-    text: "", autoGenerate: !!cap.sample,
-    generate: cap.sample ? function (hint, prev, onText, signal) {
-      return fullOrSummary(m, signal).then(function (body) {
-        if (signal && signal.aborted) throw { code: "cancelled" };
-        return runSample(mailReplyPrompt(m, hint, prev, body), { onText: onText, signal: signal, cache: hint || prev ? false : undefined });
-      });
-    } : null,
-    execute: function (text) { return needMcp() || doMailDraft(m.id, text); },
-    onClose: cleanupLater(key)
-  });
-  mountInline(key, btn, card);
-  if (!cap.sample) card.querySelector("textarea").focus(); else card.querySelector("textarea").focus();
-}
-function openTeamsReply(t, btn) {
-  var key = "teams:" + t.id;
-  if (toggleExisting(key)) return;
-  var cn = chatName(t.chatId) || teamsFrom(t);
-  var card = confirmCard({
-    kind: "teams", title: "Teams-bericht naar " + cn, target: cn, okEvent: "teams_antwoord_uitgevoerd",
-    meta: "Op: " + trunc(t.summary, 120),
-    text: "", autoGenerate: !!cap.sample,
-    generate: cap.sample ? function (hint, prev, onText, signal) {
-      return runSample(teamsReplyPrompt(t, cn, hint, prev), { onText: onText, signal: signal, cache: hint || prev ? false : undefined });
-    } : null,
-    execute: function (text) { return needMcp() || doTeamsSend(t.chatId, text); },
-    onClose: cleanupLater(key)
-  });
-  mountInline(key, btn, card);
-  card.querySelector("textarea").focus();
-}
+// Mail beantwoorden en Teams-antwoord: inline invulkaarten in inbox.js (B2).
 function openJiraComment(i, btn) {
   var k = str(i.key);
   var key = "jira:" + k;

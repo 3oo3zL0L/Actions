@@ -29,12 +29,12 @@ const test = base.extend({
 });
 
 const lijst = (page) => page.locator("#inbox-list");
-/** Selectieknop van een rij: "<wie>, <bron>[, ongelezen][, bovenaan]" (de schil zet de extra tekst in een sr-span). */
-const rowButton = (page, who, rest) => lijst(page).getByRole("button", { name: new RegExp("^" + who + "\\s?, " + rest + "$") });
+/** Selectieknop van een rij: naam "<wie>, <bron>[, ongelezen][, bovenaan]". */
+const rowButton = (page, who, rest) => lijst(page).getByRole("button", { name: new RegExp("^" + who + ", " + rest + "$") });
 const rowTexts = (page) => lijst(page).getByRole("listitem").filter({ visible: true }).allInnerTexts();
 const prefsDoc = async (page) => (await dbDump(page, "prefs/thomas"))["prefs/thomas"] || {};
 const SEND = /outlook_create_reply|outlook_send|outlook_forward|teams_send|teams_reply/;
-const barLabels = (page) => actionBar(page).locator("button, a").evaluateAll((els) => els.map((e) => e.textContent.replace(/\s*↗.*$/, "").trim()));
+const barLabels = (page) => actionBar(page).locator("[data-slot]").evaluateAll((els) => els.map((e) => e.childNodes[0].textContent.trim()));
 const composerText = (page) => detail(page).getByRole("textbox", { name: "Tekst" });
 /** De open invulkaart (antwoord, allen beantwoorden, doorsturen) in het detail. */
 const composer = (page) => detail(page).getByRole("group", { name: /^(Antwoord|Allen beantwoorden|Doorsturen)/ });
@@ -169,10 +169,10 @@ test.describe("VIP", () => {
     await open(inboxMock());
     await inbox(page);
     await openItem(page, "Contractverlenging Object Store");
-    await actionBar(page).getByRole("button", { name: "Meer" }).click();
-    const meer = detail(page).getByRole("group", { name: "Meer acties" });
-    await expect(meer.getByRole("button", { name: "Zet Femke Bos bovenaan" })).toHaveAttribute("title", /\(b\)$/);
-    await meer.getByRole("button", { name: "Zet Femke Bos bovenaan" }).click();
+    await actionBar(page).getByRole("button", { name: "Meer acties" }).click();
+    const meer = actionBar(page).getByRole("menu", { name: "Meer acties" });
+    await expect(meer.getByRole("menuitem", { name: "Zet Femke Bos bovenaan (b)" })).toHaveAttribute("title", /\(b\)$/);
+    await meer.getByRole("menuitem", { name: "Zet Femke Bos bovenaan (b)" }).click();
     await expect(feedbackBar(page)).toContainText("Femke Bos staat voortaan bovenaan");
     let texts = await rowTexts(page);
     expect(indexOf(texts, "Contractverlenging")).toBeLessThan(indexOf(texts, "Kun je de demo"));
@@ -241,23 +241,26 @@ test.describe("Maildetail", () => {
     await expect(detail(page)).toContainText("Nu wel de volledige tekst.");
   });
 
-  test("actiebalk: Beantwoord · Afhandelen · Maak actie · Vraag Claude · Open in Outlook · Meer, elk met toets in de tooltip", async ({ page, open }) => {
+  test("actiebalk op één regel: Beantwoord · Afhandelen · Maak actie · Vraag Claude · Open in Outlook · Meer ▾, elk met toets in de tooltip", async ({ page, open }) => {
     await open(inboxMock());
     await inbox(page);
     await openItem(page, "Offerte licenties buildserver");
-    expect(await barLabels(page)).toEqual(["Beantwoord", "Afhandelen", "Maak actie", "Vraag Claude", "Open in Outlook", "Meer"]);
-    const keys = { Beantwoord: "r", Afhandelen: "e", "Maak actie": "a", "Vraag Claude": "c", Meer: "m" };
+    expect(await barLabels(page)).toEqual(["Beantwoord", "Afhandelen", "Maak actie", "Vraag Claude", "Open in Outlook"]);
+    const tops = await actionBar(page).evaluate((bar) => [...bar.children].map((c) => Math.round(c.getBoundingClientRect().top)));
+    expect(new Set(tops).size, "actiebalk op één regel bij 1280px").toBe(1);
+    const keys = { Beantwoord: "r", Afhandelen: "e", "Maak actie": "a", "Vraag Claude": "c" };
     for (const [name, k] of Object.entries(keys)) await expect(actionBar(page).getByRole("button", { name, exact: true })).toHaveAttribute("title", new RegExp("\\(" + k + "\\)$"));
     await expect(actionBar(page).getByRole("link", { name: /Open in Outlook/ })).toHaveAttribute("title", /\(o\)$/);
-    await page.locator("body").press("m");
-    const meer = detail(page).getByRole("group", { name: "Meer acties" });
-    await expect(meer.getByRole("button")).toHaveText(["Allen beantwoorden", "Doorsturen", "Zet Joost Kramer bovenaan"]);
-    await expect(meer.getByRole("button", { name: "Allen beantwoorden" })).toHaveAttribute("title", /\(l\)$/);
-    await expect(meer.getByRole("button", { name: "Doorsturen" })).toHaveAttribute("title", /\(f\)$/);
+    // Extra acties hebben geen eigen knop (slot "more"): ze staan in "Meer ▾" van de schil, met hun toets.
+    await actionBar(page).getByRole("button", { name: "Meer acties" }).click();
+    const meer = actionBar(page).getByRole("menu", { name: "Meer acties" });
+    await expect(meer.getByRole("menuitem")).toHaveText(["Allen beantwoorden (l)", "Doorsturen (f)", "Zet Joost Kramer bovenaan (b)", "Nieuw Jira-issue (i)"]);
     await page.keyboard.press("Escape");
     await expect(meer).toBeHidden();
-    await page.locator("body").press("m"); // na Esc gaat Meer gewoon weer open
+    await actionBar(page).getByRole("button", { name: "Meer acties" }).click(); // na Esc gaat Meer gewoon weer open
     await expect(meer).toBeVisible();
+    await meer.getByRole("menuitem", { name: "Doorsturen (f)" }).click();
+    await expect(detail(page).getByRole("combobox", { name: "Aan" })).toBeFocused();
   });
 });
 
@@ -510,7 +513,10 @@ test.describe("Teams-bericht", () => {
     await expect(d.getByRole("heading", { name: "Mark Bakker in Object Store kernteam" })).toBeVisible();
     await expect(d).toContainText("Heeft iemand de benchmarkcijfers van gisteren?");
     await expect(d.getByRole("definition").filter({ hasText: "Object Store kernteam" })).toBeVisible();
-    expect(await barLabels(page)).toEqual(["Antwoord", "Afhandelen", "Maak actie", "Vraag Claude", "Open in Teams", "Zet Mark Bakker bovenaan"]);
+    expect(await barLabels(page)).toEqual(["Antwoord", "Afhandelen", "Maak actie", "Vraag Claude", "Open in Teams"]);
+    await actionBar(page).getByRole("button", { name: "Meer acties" }).click();
+    await expect(actionBar(page).getByRole("menuitem", { name: "Zet Mark Bakker bovenaan (b)" })).toBeVisible();
+    await page.keyboard.press("Escape");
     await expect(actionBar(page).getByRole("button", { name: "Antwoord" })).toHaveAttribute("title", /\(r\)$/);
     await expect(actionBar(page).getByRole("link", { name: /Open in Teams/ })).toHaveAttribute("href", `https://teams.example.com/l/message/${encodeURIComponent(GROUP_CHAT)}/ib-t2`);
   });

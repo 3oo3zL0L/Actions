@@ -31,7 +31,7 @@ const test = base.extend({
 });
 
 const lijst = (page) => page.locator("#inbox-list");
-const kanaal = (page, name) => lijst(page).getByRole("button", { name: new RegExp("^" + name + "\\s?, (gevolgd )?kanaal$") });
+const kanaal = (page, name) => lijst(page).getByRole("button", { name: new RegExp("^" + name + ", (gevolgd )?kanaal$") });
 const channelCalls = (page) => mcpCalls(page, "teams_list_channel_messages");
 const prefsDoc = async (page) => (await dbDump(page, "prefs/thomas"))["prefs/thomas"] || {};
 const composerText = (page) => detail(page).getByRole("textbox", { name: "Tekst" });
@@ -63,7 +63,7 @@ test.describe("Kanalen vinden en volgen", () => {
     await kanaal(page, "Architectuur").click();
     await expect(detail(page).getByRole("heading", { name: "Architectuur" })).toBeVisible();
     await expect(detail(page)).toContainText("Volg dit kanaal om nieuwe berichten in je Inbox te krijgen.");
-    const labels = await actionBar(page).locator("button, a").evaluateAll((els) => els.map((e) => e.textContent.replace(/\s*↗.*$/, "").trim()));
+    const labels = await actionBar(page).locator("[data-slot]").evaluateAll((els) => els.map((e) => e.childNodes[0].textContent.trim()));
     expect(labels).toEqual(["Volgen", "Vraag Claude", "Open in Teams"]);
     await expect(actionBar(page).getByRole("button", { name: "Volgen" })).toHaveAttribute("title", /\(s\)$/);
     await page.locator("body").press("s");
@@ -111,8 +111,8 @@ test.describe("Kanalen vinden en volgen", () => {
     await open(inboxMock());
     await goTo(page, "Inbox");
     await openItem(page, "Release 26.4 staat klaar", "Daan de Vries in Releases");
-    await actionBar(page).getByRole("button", { name: "Meer" }).click();
-    await expect(detail(page).getByRole("group", { name: "Meer acties" }).getByRole("button", { name: "Volg kanaal" })).toHaveAttribute("title", /\(s\)$/);
+    await actionBar(page).getByRole("button", { name: "Meer acties" }).click();
+    await expect(actionBar(page).getByRole("menuitem", { name: "Volg kanaal (s)" })).toHaveAttribute("title", /\(s\)$/);
     await page.keyboard.press("Escape");
     await page.locator("body").press("s");
     await expect(feedbackBar(page)).toContainText("Je volgt Releases");

@@ -18,6 +18,8 @@
  *   db: { docs: { "acties/a1": {...} }, failWrites: {code,message}, persist?: false }
  *        // De store overleeft een herlaad binnen dezelfde test (sessionStorage), zoals de echte db;
  *        // persist: false zet dat uit.
+ *   werk: { … }                        // B6: staat voor Jira-detail/transities/personen/projecten/Confluence
+ *                                        // (tests/fixtures/werk.js, werkState()); zie blok "B6 Werk" hieronder.
  *   comments: null | { canSend?: "available"|"writers_only"|"no_session"|"off",   // default "available"
  *               canSendError?, anchorError?, sendError?, createError? : {code,message} }
  *             // comments-capability (docs/contract/comments.d.ts); null => use("comments") -> null.
@@ -107,6 +109,205 @@
     if (tool === "searchConfluenceUsingCql") return { payload: { content: { totalCount: 0, nodes: [] } } };
     return { payload: {} };
   }
+
+  // ======================= B6 Werk: Jira-detail en Confluence (begin) ================  // Staat per pagina uit __MOCK__.werk (tests/fixtures/werk.js). Alleen actief als er voor de tool geen
+  // eigen fixture in __MOCK__.tools staat. Vormen zoals de echte Atlassian Rovo-connector.
+  const WERK_TOOLS = new Set(["getJiraIssue", "getTransitionsForJiraIssue", "transitionJiraIssue", "addCommentToJiraIssue",
+    "editJiraIssue", "lookupJiraAccountId", "getVisibleJiraProjects", "getJiraProjectIssueTypesMetadata", "createJiraIssue", "getConfluencePage"]);
+  let werkState = null;
+  function werkS() { if (!werkState) werkState = clone(cfg().werk); return werkState; }
+  const toolErr = (message) => ({ error: { code: "tool_error", message } });
+  function werkPerson(W, id) {
+    const u = (W.users || []).find((x) => x.accountId === id);
+    return u ? { accountId: u.accountId, displayName: u.displayName, emailAddress: u.email, active: true, accountType: "atlassian" } : null;
+  }
+  function werkIssue(W, key) {
+    const i = W.issues[key];
+    if (!i) return null;
+    return {
+      expand: "renderedFields,names,schema", id: i.id, key, self: "https://api.example.com/rest/api/3/issue/" + i.id,
+      fields: {
+        summary: i.summary, description: i.description || null, status: clone(i.status), assignee: werkPerson(W, i.assignee),
+        reporter: werkPerson(W, i.reporter), priority: i.priority ? { name: i.priority } : null, issuetype: { name: i.issuetype },
+        project: { key: i.project[0], name: i.project[1] }, created: i.created, updated: i.updated,
+        comment: { comments: (i.comments || []).map((c) => ({ id: c.id, author: werkPerson(W, c.author), body: c.body, created: c.created, updated: c.created })),
+          total: (i.comments || []).length, startAt: 0, maxResults: (i.comments || []).length },
+      },
+      webUrl: W.site + "/browse/" + key,
+    };
+  }
+  function werkFixture(tool, input) {
+    const W = werkS();
+    const inp = input || {};
+    const key = inp.issueIdOrKey;
+    const ctx = { atlassianAccountId: W.me, cloudId: inp.cloudId, toolName: tool };
+    if (["getJiraIssue", "getTransitionsForJiraIssue", "transitionJiraIssue", "addCommentToJiraIssue", "editJiraIssue"].includes(tool) && !W.issues[key])
+      return toolErr("Issue does not exist or you do not have permission to see it.");
+    switch (tool) {
+      case "getJiraIssue": {
+        const f = inp.fields || [];
+        const issue = werkIssue(W, key);
+        if (!f.includes("comment")) delete issue.fields.comment; // zoals echt: commentaar alleen op verzoek
+        return { payload: { issues: { nodes: [issue] }, context: ctx } };
+      }
+      case "getTransitionsForJiraIssue":
+        return { payload: { transitions: clone(W.transitionsByStatus[W.issues[key].status.name] || []) } };
+      case "transitionJiraIssue": {
+        const id = inp.transition && inp.transition.id;
+        const t = (W.transitionsByStatus[W.issues[key].status.name] || []).find((x) => x.id === id);
+        if (!t) return toolErr("Transition id '" + id + "' is not valid for this issue.");
+        W.issues[key].status = clone(t.to);
+        W.issues[key].updated = new Date().toISOString();
+        return { payload: { success: true, issueIdOrKey: key } };
+      }
+      case "addCommentToJiraIssue": {
+        if (inp.contentFormat !== "markdown") violation("addCommentToJiraIssue zonder contentFormat markdown");
+        if (!inp.commentBody || !String(inp.commentBody).trim()) return toolErr("commentBody is required");
+        const c = { id: "c" + (Date.now() % 100000), author: W.me, created: new Date().toISOString(), body: String(inp.commentBody) };
+        W.issues[key].comments.push(c);
+        return { payload: { id: c.id, self: "https://api.example.com/rest/api/3/issue/" + W.issues[key].id + "/comment/" + c.id, body: c.body, created: c.created, author: werkPerson(W, W.me) } };
+      }
+      case "editJiraIssue": {
+        const a = inp.fields && inp.fields.assignee;
+        if (a !== undefined) {
+          if (a && !(W.users || []).some((u) => u.accountId === a.accountId)) return toolErr("User '" + (a && a.accountId) + "' does not exist.");
+          W.issues[key].assignee = a ? a.accountId : null;
+        }
+        W.issues[key].updated = new Date().toISOString();
+        return { payload: { success: true, key } };
+      }
+      case "lookupJiraAccountId": {
+        const q = String(inp.searchString || "").toLowerCase();
+        const hits = (W.users || []).filter((u) => q && (u.displayName.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)));
+        return { payload: { data: { users: { users: hits.map((u) => ({ accountId: u.accountId, accountType: "atlassian", displayName: u.displayName,
+          html: "<strong>" + u.displayName + "</strong> - " + u.email })), total: hits.length, header: "Showing " + hits.length + " of " + hits.length + " matching users" },
+          groups: { header: "Showing 0 of 0 matching groups", total: 0, groups: [] } }, statusCode: 200 } };
+      }
+      case "getVisibleJiraProjects": {
+        const max = inp.maxResults == null ? 50 : inp.maxResults, start = inp.startAt || 0;
+        if (max > 50) { violation("getVisibleJiraProjects: maxResults " + max + " > 50"); return toolErr("maxResults must be <= 50"); }
+        const q = String(inp.searchString || "").toLowerCase();
+        const all = W.projects.filter((p) => !q || p.name.toLowerCase().includes(q) || p.key.toLowerCase().includes(q));
+        const page = all.slice(start, start + max);
+        return { payload: { self: "https://api.example.com/rest/api/3/project/search", maxResults: max, startAt: start, total: all.length, isLast: start + max >= all.length,
+          values: page.map((p) => ({ expand: "description,lead,issueTypes", self: "https://api.example.com/rest/api/3/project/" + p.id, id: p.id, key: p.key, name: p.name,
+            issueTypes: inp.expandIssueTypes === false ? undefined : clone(W.issueTypes), projectTypeKey: "software" })) } };
+      }
+      case "getJiraProjectIssueTypesMetadata": {
+        if (!W.projects.some((p) => p.key === inp.projectIdOrKey || p.id === inp.projectIdOrKey)) return toolErr("No project could be found with key '" + inp.projectIdOrKey + "'.");
+        return { payload: { startAt: 0, maxResults: 50, total: W.issueTypes.length, issueTypes: clone(W.issueTypes) } };
+      }
+      case "createJiraIssue": {
+        if (inp.contentFormat !== "markdown") violation("createJiraIssue zonder contentFormat markdown");
+        const p = W.projects.find((x) => x.key === inp.projectKey);
+        if (!p) return toolErr("Project '" + inp.projectKey + "' does not exist.");
+        if (!W.issueTypes.some((t) => t.name === inp.issueTypeName)) return toolErr("Issue type '" + inp.issueTypeName + "' is not valid for this project.");
+        if (!inp.summary || !String(inp.summary).trim()) return toolErr("summary is required");
+        W.created = (W.created || 0) + 1;
+        const newKey = p.key + "-" + (900 + W.created), id = String(30000 + W.created);
+        W.issues[newKey] = { id, summary: inp.summary, description: inp.description || "", status: clone(W.transitionsByStatus["Done"][0].to), assignee: null,
+          reporter: W.me, priority: "Major", issuetype: inp.issueTypeName, project: [p.key, p.name], created: new Date().toISOString(), updated: new Date().toISOString(), comments: [] };
+        return { payload: { id, key: newKey, self: "https://api.example.com/rest/api/3/issue/" + id } };
+      }
+      case "getConfluencePage": {
+        if (inp.contentFormat !== "markdown") violation("getConfluencePage zonder contentFormat markdown");
+        const pg = W.pages[inp.pageId];
+        if (!pg) return toolErr("Page not found: " + inp.pageId);
+        return { payload: { content: { totalCount: 1, nodes: [{ id: inp.pageId, type: "page", status: "current", title: pg.title, lastModified: pg.lastModified,
+          space: clone(pg.space), author: { displayName: pg.author }, body: pg.body,
+          _links: { webui: "/spaces/" + pg.space.key + "/pages/" + inp.pageId }, webUrl: W.wiki + "/spaces/" + pg.space.key + "/pages/" + inp.pageId }] } } };
+      }
+    }
+    return null;
+  }
+  // Zoekresultaat met de actuele status/toewijzing uit de werk-staat (zoals Jira na een transitie).
+  function werkSearch(fx) {
+    const W = werkS(), out = clone(fx);
+    const nodes = out.payload && out.payload.issues && out.payload.issues.nodes;
+    (Array.isArray(nodes) ? nodes : []).forEach((n) => {
+      const i = n && W.issues[n.key];
+      if (!i || !n.fields) return;
+      n.fields.status = clone(i.status);
+      n.fields.assignee = i.assignee ? { displayName: werkPerson(W, i.assignee).displayName, accountId: i.assignee } : null;
+    });
+    return out;
+  }
+  // ======================= B6 Werk: Jira-detail en Confluence (einde) ========================
+  // ==== B4 Agenda (additief, begin) =====================================================================
+  // Echte vormen en invoergrenzen van outlook_find_available_time, outlook_respond_to_event en
+  // outlook_create_event (schema's van de Microsoft 365-connector), plus read_resource per uri.
+  //   Fixture per invoer (zelfde vorm als groep A): { byInput: [{ when: { uri: "…" }, ...Fixture }], otherwise?: Fixture }.
+  //   Na de merge van groep A doet hun fixtureByInput() dit al vóór deze regel; deze regel is dan een no-op.
+  //   Zonder fixture: find_available_time geeft vrije sloten op werkdagen (09:30, 11:00, 14:00, 16:00,
+  //   wandklok "W. Europe Standard Time") binnen [afterDateTime, beforeDateTime); respond geeft een tekstblok;
+  //   create_event geeft {id, webLink, onlineMeeting?}. Ongeldige invoer zonder fixture = contractschending.
+  const AG_WALL = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,7})?)?$/;
+  const AG_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
+  const AG_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const AG_EVENT_ID = /^[A-Za-z0-9+/=_-]+$/;
+  const AG_CREATE_KEYS = ["subject", "start", "end", "attendees", "body", "bodyType", "calendarId", "importance", "isOnlineMeeting", "location",
+    "responseRequested", "sensitivity", "showAs"];
+  function agendaInputError(tool, i) {
+    i = i || {};
+    if (tool === "outlook_find_available_time") {
+      if (!AG_UTC.test(i.afterDateTime || "") || !AG_UTC.test(i.beforeDateTime || "")) return "afterDateTime/beforeDateTime must be ISO 8601 UTC (YYYY-MM-DDTHH:mm:ssZ)";
+      if (Date.parse(i.beforeDateTime) <= Date.parse(i.afterDateTime)) return "beforeDateTime must be after afterDateTime";
+      if (i.durationMinutes != null && !(Number.isInteger(i.durationMinutes) && i.durationMinutes >= 15 && i.durationMinutes <= 480)) return "durationMinutes must be 15..480";
+      if (i.participants != null && (!Array.isArray(i.participants) || i.participants.length > 50 || !i.participants.every((x) => AG_EMAIL.test(String(x))))) return "participants must be email addresses (max 50)";
+      if (i.maxCandidates != null && !(Number.isInteger(i.maxCandidates) && i.maxCandidates >= 1 && i.maxCandidates <= 50)) return "maxCandidates must be 1..50";
+    } else if (tool === "outlook_respond_to_event") {
+      if (!AG_EVENT_ID.test(i.eventId || "") || String(i.eventId).length > 512) return "eventId invalid";
+      if (!["accept", "decline", "tentative"].includes(i.response)) return "response must be accept|decline|tentative";
+      if (i.comment != null && (typeof i.comment !== "string" || i.comment.length > 1024)) return "comment must be a string (max 1024)";
+      if (i.comment && i.sendResponse === false) return "comment requires sendResponse";
+      if (i.proposedNewTime && i.response === "accept") return "proposedNewTime only with decline or tentative";
+    } else if (tool === "outlook_create_event") {
+      const extra = Object.keys(i).filter((k) => !AG_CREATE_KEYS.includes(k));
+      if (extra.length) return "unknown field(s) " + extra.join(", ");
+      if (typeof i.subject !== "string" || !i.subject || i.subject.length > 255) return "subject required (max 255)";
+      for (const k of ["start", "end"]) {
+        const t = i[k];
+        if (!t || typeof t !== "object" || !AG_WALL.test(t.dateTime || "") || !t.timeZone) return k + " must be {dateTime (no offset), timeZone}";
+      }
+      if (i.start.timeZone === i.end.timeZone && i.end.dateTime <= i.start.dateTime) return "end must be after start";
+      if (i.attendees != null && (!Array.isArray(i.attendees) || i.attendees.length > 50 ||
+        !i.attendees.every((a) => a && AG_EMAIL.test(a.email || "") && (!a.type || ["required", "optional", "resource"].includes(a.type)) && (a.name == null || String(a.name).length <= 256))))
+        return "attendees must be [{email, name?, type?}] (max 50)";
+      if (i.bodyType != null && !["text", "html"].includes(i.bodyType)) return "bodyType must be text|html";
+    }
+    return null;
+  }
+  const agendaPad = (n) => String(n).padStart(2, "0");
+  const agendaWall = (d) => d.getFullYear() + "-" + agendaPad(d.getMonth() + 1) + "-" + agendaPad(d.getDate()) + "T" + agendaPad(d.getHours()) + ":" + agendaPad(d.getMinutes()) + ":00.0000000";
+  function agendaDefaultFixture(tool, i) {
+    i = i || {};
+    if (tool === "outlook_find_available_time") {
+      // De testbrowser draait in Europe/Amsterdam: lokale tijd = wandklok W. Europe Standard Time.
+      const from = new Date(i.afterDateTime), to = new Date(i.beforeDateTime), dur = i.durationMinutes || 60, max = i.maxCandidates || 10;
+      const out = [];
+      const day = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+      for (let n = 0; n < 60 && day < to && out.length < max; n++, day.setDate(day.getDate() + 1)) {
+        if (day.getDay() === 0 || day.getDay() === 6) continue;
+        for (const [hh, mm, conf] of [[9, 30, 100], [11, 0, 100], [14, 0, 80], [16, 0, 50]]) {
+          const st = new Date(day.getFullYear(), day.getMonth(), day.getDate(), hh, mm);
+          const en = new Date(st.getTime() + dur * 60000);
+          if (st < from || en > to || out.length >= max) continue;
+          out.push({ start: { dateTime: agendaWall(st), timeZone: "W. Europe Standard Time" }, end: { dateTime: agendaWall(en), timeZone: "W. Europe Standard Time" },
+            confidence: conf, organizerAvailability: "free",
+            attendeeAvailability: (i.participants || []).map((email) => ({ email, availability: conf === 100 ? "free" : "tentative" })) });
+        }
+      }
+      return { payload: { nowDateTime: new Date().toISOString(), availableTimes: out, unavailableParticipants: [] } };
+    }
+    if (tool === "outlook_respond_to_event") return { text: "Responded '" + i.response + "' to event " + i.eventId + "." };
+    if (tool === "outlook_create_event") {
+      const id = "mock-event-" + (LOG.mcp.length + 1);
+      return { payload: { id, webLink: "https://outlook.example.com/owa/?itemid=" + id, subject: i.subject,
+        onlineMeeting: i.isOnlineMeeting ? { joinUrl: "https://teams.example.com/l/meetup-join/" + id } : null } };
+    }
+    return null;
+  }
+  // ==== B4 Agenda (additief, einde) =====================================================================
 
   function tryParse(text) { try { return JSON.parse(text); } catch { return text; } }
 
@@ -202,9 +403,18 @@
         const n = countPrior(server, tool);
         fx = fx.sequence[Math.min(n, fx.sequence.length - 1)];
       }
+      if (!fx && c.werk && server === "Atlassian Rovo" && WERK_TOOLS.has(tool)) fx = werkFixture(tool, input); // B6 Werk
+      if (fx && c.werk && tool === "searchJiraIssuesUsingJql" && fx.payload) fx = werkSearch(fx); // B6: zoeken volgt de werk-staat
       fx = fixtureByInput(fx, input); // groep A
       const guardErr = groupAGuard(c, server, tool, input, explicitFx); // groep A
       if (guardErr) { await sleep(5); throw guardErr; } // groep A
+      // ---- B4 Agenda (additief): invoercontrole (per-invoer-fixtures: fixtureByInput, groep A) en standaardvormen agenda-tools ----
+      if (!fx && server === "Microsoft 365") {
+        const bad = agendaInputError(tool, input);
+        if (bad) { violation(`${tool}: ${bad}`); throw mcpErr("tool_error", "Input validation error: " + bad, { server }); }
+        fx = agendaDefaultFixture(tool, input);
+      }
+      // ---- B4 Agenda (einde) ----
       if (!fx) fx = defaultFixture(server, tool);
       await sleep(fx.delayMs || 5);
       if (signal && signal.aborted) throw mcpErr("cancelled", "aborted");

@@ -105,13 +105,15 @@ test.describe("Voorstellen uit mail en Teams", () => {
     await goTo(page, "Acties");
     const blok = page.locator("#voorstellen");
     await expect(blok.getByRole("heading", { name: "Voorstellen (2)" })).toBeVisible();
+    // B5: bronicoon in de rij, de link zelf in de actiebalk van het detail (geen links of knoppen in rijen).
     const trij = itemWith(page, "Benchmark storage-backend beoordelen");
-    const tlink = trij.getByRole("link", { name: /teams-bericht/i });
-    await expect(tlink).toHaveAttribute("href", TEAMS0);
-    await expect(tlink).toContainText("💬");
-    await expect(itemWith(page, "Akkoord geven op budget").getByRole("link", { name: /mail/i })).toContainText("✉");
+    await expect(trij).toContainText("💬");
+    await expect(itemWith(page, "Akkoord geven op budget")).toContainText("✉");
+    await expect(trij.getByRole("link")).toHaveCount(0);
+    await openItem(page, "Benchmark storage-backend beoordelen");
+    await expect(actionBar(page).getByRole("link", { name: /open bron/i })).toHaveAttribute("href", TEAMS0);
 
-    await trij.getByRole("button", { name: "Op de lijst" }).click();
+    await actionBar(page).getByRole("button", { name: "Op de lijst" }).click();
     await expect.poll(async () => (await dbDump(page, "voorstellen/t1"))["voorstellen/t1"]?.status).toBe("ja");
     expect((await dbDump(page, "acties/v-t1"))["acties/v-t1"]).toMatchObject({ bron: "teams", bronUrl: TEAMS0, text: "Benchmark storage-backend beoordelen" });
   });

@@ -3,7 +3,8 @@
 
 // ---------- Vraag Claude per item ----------
 var ASK_NOUN = { mail: "deze mail", teams: "dit Teams-bericht", kanaal: "dit Teams-kanaal", actie: "deze actie", jira: "dit Jira-issue",
-  vandaag: "mijn agenda van vandaag", inbox: "mijn inbox", acties: "mijn acties" };
+  conf: "deze Confluence-pagina", event: "deze afspraak", voorstel: "dit voorstel",
+  vandaag: "mijn agenda van vandaag", inbox: "mijn inbox", acties: "mijn acties", item: "dit item" };
 var SECTION_TITLE = { vandaag: "Vandaag (agenda)", inbox: "Inbox (mail en Teams)", acties: "Acties (open acties)" };
 function itemId(type, it) { return type === "jira" ? str(it.key) : str(it.id); }
 function itemTitle(type, it) {
@@ -12,11 +13,14 @@ function itemTitle(type, it) {
   if (type === "teams") return trunc(it.summary || it.body, 60) || "Teams-bericht";
   if (type === "jira") return str(it.key) + " " + str(it.fields && it.fields.summary);
   if (type === "kanaal") return "Teams-kanaal " + str(it.name);
+  if (type === "item") return str(it.title);
+  if (type === "conf") return str(it.title) || "Confluence-pagina";
   return str(it.text);
 }
 // Context voor de chat in de pagina (met ids voor voer_uit).
 function itemContext(type, it, body) {
   if (SECTION_TITLE[type]) return sectionContext(type, true);
+  if (type === "item") return str(it.context); // generieke context uit de schil (Shell.act.askDefault)
   var L = [];
   if (type === "mail") {
     L.push("Mail", "messageId: " + str(it.id), "uri: " + str(it.uri), "Van: " + nameFromAddr(it.sender || it.from), "Onderwerp: " + str(it.subject),
@@ -31,7 +35,14 @@ function itemContext(type, it, body) {
   } else if (type === "jira") {
     var f = it.fields || {};
     L.push("Jira-issue", "issueKey: " + str(it.key), "Samenvatting: " + str(f.summary), "Status: " + str(f.status && f.status.name),
-      "Prioriteit: " + str(f.priority && f.priority.name), "Project: " + str(f.project && f.project.name), "Assignee: " + str(f.assignee && f.assignee.displayName));
+      "Prioriteit: " + str(f.priority && f.priority.name), "Project: " + str(f.project && f.project.name), "Assignee: " + str(f.assignee && f.assignee.displayName),
+      typeof f.description === "string" && f.description ? "Beschrijving: " + trunc(f.description, 2000) : "",
+      Array.isArray(it.laatsteCommentaar) && it.laatsteCommentaar.length ? "Laatste commentaar:\n- " + it.laatsteCommentaar.join("\n- ") : "");
+  } else if (type === "conf") {
+    L.push("Confluence-pagina", "pageId: " + str(it.id), "Titel: " + str(it.title), "Space: " + str(it.space && (it.space.name || it.space.key)),
+      it.webUrl ? "Link: " + str(it.webUrl) : "", it.tekst ? "Inhoud (markdown, data):\n" + str(it.tekst) : "Samenvatting: " + trunc(it.excerpt || it.summary, 1500));
+  } else if (type === "voorstel") {
+    L.push("Voorstel voor een actie (nog niet op de lijst)", "Tekst: " + str(it.text), "Van: " + str(it.van), "Onderwerp: " + str(it.onderwerp), "Programma: " + str(it.prog), it.why ? "Waarom: " + str(it.why) : "");
   } else {
     L.push("Actie van Thomas", "Tekst: " + str(it.text), "Wie: " + str(it.who), "Deadline: " + str(it.due), "Programma: " + str(it.prog), "Status: " + str(it.status),
       it.why ? "Waarom: " + str(it.why) : "", it.extra ? "Notities: " + str(it.extra) : "", it.onderwerp ? "Bron: " + str(it.bron) + ", " + str(it.onderwerp) : "");
@@ -41,11 +52,14 @@ function itemContext(type, it, body) {
 // Context voor claude.ai/new: kort, zonder e-mailadressen of ids.
 function itemContextShort(type, it) {
   if (SECTION_TITLE[type]) return sectionContext(type, false);
+  if (type === "item") return trunc(it.short || it.context, 900);
   var L = [];
   if (type === "mail") L.push("Mail van " + nameFromAddr(it.sender || it.from) + ", onderwerp: " + str(it.subject), trunc(it.summary, 900));
   else if (type === "teams") L.push("Teams-bericht van " + teamsFrom(it) + (chatName(it.chatId) ? " in chat " + chatName(it.chatId) : ""), trunc(it.summary || it.body, 900));
   else if (type === "jira") { var f = it.fields || {}; L.push("Jira-issue " + str(it.key) + ": " + str(f.summary) + " (status " + str(f.status && f.status.name) + ")"); }
   else if (type === "kanaal") L.push("Teams-kanaal " + str(it.name));
+  else if (type === "conf") L.push("Confluence-pagina: " + str(it.title) + (it.webUrl ? " " + str(it.webUrl) : ""));
+  else if (type === "voorstel") L.push("Voorstel: " + str(it.text));
   else L.push("Actie: " + str(it.text) + (it.prog ? " (" + it.prog + ")" : "") + (it.due ? ", deadline " + it.due : ""), it.why ? "Waarom: " + trunc(it.why, 300) : "", it.extra ? "Notities: " + trunc(it.extra, 300) : "");
   return L.filter(Boolean).join("\n");
 }

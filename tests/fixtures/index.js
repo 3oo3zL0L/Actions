@@ -9,6 +9,7 @@ const jira = require("./jira.json");
 const confluence = require("./confluence.json");
 const me = require("./me.json");
 const acties = require("./acties.json");
+const { werkState } = require("./werk"); // B6: Jira-detail en Confluence-pagina's
 
 const TZ = "Europe/Amsterdam";
 const REF_HOUR = 10;
@@ -138,6 +139,7 @@ function buildMock(overrides = {}) {
       default: { text: "Mock-antwoord van Claude: je hebt vandaag vijf afspraken." },
     },
     db: { docs: JSON.parse(JSON.stringify(acties)) },
+    werk: werkState(), // B6: staat van de werk-mock (null = uit)
   };
   const out = { ...base, ...overrides };
   if (overrides.tools) {

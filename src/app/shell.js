@@ -36,6 +36,10 @@
  *        ]; }
  *      });
  *    Knoppen die niet kunnen, laat je weg (return null of geen run/href): nooit grijze knoppen.
+ *    Vraag Claude (slot ask, toets c) voegt de schil zelf toe als een type hem niet levert, met als context
+ *    label, titel en de tekst van het detail; eigen context via `context: function (it) { return "…"; }`,
+ *    uitzetten met `ask: false`. Maximaal 5 vaste knoppen + 1 extra: wat niet op één regel past (op mobiel
+ *    twee regels) gaat vanaf achteren in "Meer"; toetsen blijven werken.
  *    Elke knop krijgt tooltip "<title of label> (<key>)" en aria-keyshortcuts; de toets werkt zolang het
  *    detail zichtbaar is en je niet typt. Helpers: Shell.act.ask(type, item), Shell.act.open(url, "Outlook").
  *
@@ -47,9 +51,24 @@
  *    herrendering opnieuw en rendert het detail alleen opnieuw als het item echt veranderde.
  *
  * 4. Overig: Shell.go(id), Shell.select(key), Shell.current(), Shell.showDetail(), Shell.refreshDetail(),
- *    Shell.changed(), Shell.inlineSlot(). Feedback: feedback({text, undo, undoLabel, countdown,
+ *    Shell.changed(), Shell.inlineSlot(), Shell.focusSoon() (na een actie die de rij weghaalt of terugzet: focus
+ *    naar de dan geselecteerde rij; actiebalk, z en de feedbackbalk doen dit zelf). Tellers: count() van de
+ *    ingang vult zowel de navigatie (nc-<id>) als de kop van de lijst (cnt-<id>). Feedback: feedback({text, undo, undoLabel, countdown,
  *    onCountdownDone, link, linkLabel, note}); toets z = laatste Ongedaan maken. Voorkeuren: getPref/setPref
  *    (app/prefs.js). Het Claude-paneel (#chat) vervangt de detailkolom: openPanel()/closePanel() in claude.js.
+ *
+ * 5. Extra acties op het type van een andere module (B6/B7), zonder die module te wijzigen:
+ *      Shell.extraActions("mail", function (m) { return { slot: "extra", label: "Nieuw Jira-issue", key: "i", run: … }; });
+ *    fn(item) geeft één actie, een lijst of null; ze komen na de acties van het type zelf in de actiebalk.
+ *    Slot "more" (voor elk type): geen knop in de balk (max 5 vaste knoppen + 1 extra), wel via de toets en de
+ *    command bar. Shell.runAction(a) voert een actie uit Shell.actions() uit.
+ *    Een type dat later geregistreerd wordt, krijgt ze ook. Shell.actions() geeft de acties die nu in de
+ *    actiebalk staan (label, key, slot, title, el); de command bar (app/commandbar.js) gebruikt die.
+ *    Shell.runPrimary() voert de primaire actie van het open detail uit (toets Enter).
+ *
+ * 6. Command bar (B7): een ingang mag `search: function () { return [{ key, title, hint }] }` meegeven. Dan
+ *    zoekt de command bar (Ctrl+K) in die items; Enter springt naar de ingang en selecteert Shell.select(key).
+ *    Zonder search() gebruikt de command bar zijn eigen bronnen (mail, Teams, Jira, Confluence, acties, agenda).
  */
 
 // Open invulkaarten per item (bv. "mail:<id>"), blijven bestaan als je van selectie wisselt.
@@ -57,7 +76,7 @@ var inlineCards = {};
 
 var Shell = (function () {
   var ORDER = ["vandaag", "inbox", "acties", "werk", "agenda"];
-  var entries = {}, types = {};
+  var entries = {}, types = {}, extras = {};
   // sel: per ingang de geselecteerde sleutel; auto: selectie kwam van de schil (niet van Thomas) en volgt de eerste rij.
   var st = { entry: null, sel: {}, auto: {}, cur: null, sig: "", screen: "list", userNav: false, pending: false };
   var mqPhone = window.matchMedia("(max-width: 700px)");
@@ -65,6 +84,12 @@ var Shell = (function () {
 
   function entry(id, spec) { spec.id = id; entries[id] = spec; }
   function type(t, spec) { types[t] = spec; }
+  function extraActions(t, fn) { (extras[t] = extras[t] || []).push(fn); }
+  function actionsOf(t, it) {
+    var spec = types[t], list = spec && spec.actions ? spec.actions(it) || [] : [];
+    (extras[t] || []).forEach(function (fn) { var r = null; try { r = fn(it); } catch (e) { r = null; } list = list.concat(r || []); });
+    return list;
+  }
 
   function sections(id) { return Array.prototype.slice.call(document.querySelectorAll('#lijst section[data-entry="' + id + '"]')); }
   function navBtn(id) { return document.querySelector('#nav [data-entry="' + id + '"]'); }
@@ -88,7 +113,8 @@ var Shell = (function () {
   }
 
   function selTitle(text, srExtra) {
-    return h("button", { class: "stretch title sel", type: "button" }, text, srExtra ? h("span", { class: "sr", text: srExtra }) : null);
+    // aria-label i.p.v. een sr-span: een absoluut gepositioneerde span gaf een losse spatie in de naam ("Naam , mail").
+    return h("button", { class: "stretch title sel", type: "button", "aria-label": srExtra ? str(text) + srExtra : null }, text);
   }
 
   function row(li, t, key, item) {
@@ -124,6 +150,9 @@ var Shell = (function () {
   function sync() {
     renderCounts();
     if (!st.entry) return;
+    try { syncSel(); } finally { checkFocus(); }
+  }
+  function syncSel() {
     var keysNow = rows().map(function (r) { return r._sel.key; });
     var lastKeys = st.lastKeys;
     if (keysNow.length) st.lastKeys = keysNow;
@@ -179,6 +208,7 @@ var Shell = (function () {
     document.querySelectorAll("#lijst .row.is-sel").forEach(function (r) { if (r !== li) mark(r, false); });
     mark(li, true);
     if (!same || opts.user) renderDetail();
+    checkFocus();
     if (opts.user) {
       if (!$("chat").hidden) closePanel(true);
       if (opts.focus) { var b = li.querySelector(".sel"); if (b) b.focus({ preventScroll: true }); }
@@ -202,7 +232,7 @@ var Shell = (function () {
   }
 
   // ---- Detail en actiebalk ----
-  var SLOTS = ["primary", "done", "make", "ask", "open", "extra"];
+  var SLOTS = ["primary", "done", "make", "ask", "open", "extra", "more"];
   var curActions = [];
   function inlineSlot() { return $("detailInline"); }
   function renderDetail() {
@@ -220,8 +250,13 @@ var Shell = (function () {
       return;
     }
     var it = cur.item;
-    var acts = (spec.actions ? spec.actions(it) : []).filter(function (a) { return a && (a.run || safeUrl(a.href)); });
+    var acts = actionsOf(cur.type, it).filter(Boolean);
+    if (spec.ask !== false && !acts.some(function (a) { return a.slot === "ask"; })) acts.push(askDefault(cur.type, spec));
+    acts = acts.filter(function (a) { return a && (a.run || safeUrl(a.href)); });
     acts.sort(function (a, b) { return SLOTS.indexOf(a.slot || "extra") - SLOTS.indexOf(b.slot || "extra"); });
+    // slot "more": geen knop (de balk past zo op één regel), wel bereikbaar met de toets en via de command bar.
+    var more = acts.filter(function (a) { return a.slot === "more" && a.run; });
+    acts = acts.filter(function (a) { return a.slot !== "more"; });
     bar.hidden = !acts.length;
     acts.forEach(function (a) {
       var tip = (a.title || a.label) + (a.key ? " (" + a.key + ")" : "");
@@ -232,17 +267,93 @@ var Shell = (function () {
         el.addEventListener("click", function () { logEvent("detail_open_" + cur.type); });
       } else {
         el = h("button", { class: "btn" + (a.slot === "primary" ? " primary" : ""), type: "button", title: tip, "aria-keyshortcuts": a.key || null, "data-slot": a.slot || "extra", text: a.label });
-        el.addEventListener("click", function () { if (st.cur) st.auto[st.cur.entry] = false; a.run(st.cur ? st.cur.item : it, el); });
+        el.addEventListener("click", function () { if (st.cur) st.auto[st.cur.entry] = false; focusSoon(); a.run(st.cur ? st.cur.item : it, el); });
       }
       a.el = el;
       curActions.push(a);
       bar.append(el);
     });
+    more.forEach(function (a) { a.el = null; curActions.push(a); });
     body.append(h("p", { class: "detail-type", text: spec.label || "" }), h("h2", { class: "detail-title", id: "detailTitle", text: spec.title ? spec.title(it) : "" }));
     if (spec.detail) spec.detail(it, body);
     var ik = spec.inline ? spec.inline(it) : null;
     if (ik && inlineCards[ik]) slot.append(inlineCards[ik]);
     $("detailView").scrollTop = 0;
+    fitBar();
+  }
+  // Vraag Claude voor elk type: context = label, titel en de zichtbare tekst van het detail (of spec.context).
+  function askDefault(t, spec) {
+    if (!cap.sample) return null;
+    return { slot: "ask", label: "Vraag Claude", key: "c", title: "Vraag Claude over dit item", run: function (x, btn) {
+      var title = spec.title ? spec.title(x) : "";
+      var text = spec.context ? spec.context(x) : [spec.label || "Item", title, ($("detailBody").innerText || "").split("\n").slice(2).join("\n")].join("\n");
+      openAsk("item", { title: title, context: trunc(text, 4000).replace(/ \n/g, "\n") }, btn);
+    } };
+  }
+  // Actiebalk op één regel (mobiel: twee): extra knoppen die niet passen gaan vanaf achteren in "Meer".
+  // Acties met slot "more" (geen eigen knop) staan altijd in "Meer", met hun toets erbij: zo vindt wie alleen klikt ze ook.
+  var moreOpen = false;
+  function fitBar() {
+    var bar = $("abar");
+    var old = bar.querySelector(".abar-more");
+    if (old) { old.querySelectorAll("[data-slot]").forEach(function (x) { bar.insertBefore(x, old); }); old.remove(); }
+    if (bar.hidden || !bar.offsetParent) return;
+    var first = bar.firstElementChild; if (!first) return;
+    var lineH = first.offsetHeight, maxRows = isPhone() ? 2 : 1;
+    var fits = function () { return bar.scrollHeight - parseFloat(getComputedStyle(bar).paddingTop) - parseFloat(getComputedStyle(bar).paddingBottom) <= lineH * maxRows + 6 * (maxRows - 1) + 2; };
+    var moreActs = curActions.filter(function (a) { return a.slot === "more" && a.run && !a.el; });
+    if (fits() && !moreActs.length) return;
+    var menu = h("div", { class: "abar-menu", role: "menu", "aria-label": "Meer acties", hidden: !moreOpen });
+    var btn = h("button", { class: "btn", type: "button", "aria-haspopup": "menu", "aria-expanded": moreOpen ? "true" : "false", "aria-label": "Meer acties", title: "Meer acties" }, "Meer", h("span", { "aria-hidden": "true", text: " ▾" }));
+    var wrap = h("div", { class: "abar-more" }, btn, menu);
+    btn.addEventListener("click", function () { moreOpen = menu.hidden; menu.hidden = !moreOpen; btn.setAttribute("aria-expanded", moreOpen ? "true" : "false"); if (moreOpen) { var f = menu.querySelector("button, a"); if (f) f.focus(); } });
+    menu.addEventListener("keydown", function (e) { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); moreOpen = false; menu.hidden = true; btn.setAttribute("aria-expanded", "false"); btn.focus(); } });
+    bar.append(wrap);
+    moreActs.forEach(function (a) {
+      menu.append(h("button", { class: "btn", type: "button", role: "menuitem", title: (a.title || a.label) + (a.key ? " (" + a.key + ")" : ""), "aria-keyshortcuts": a.key || null,
+        text: a.label + (a.key ? " (" + a.key + ")" : ""), onclick: function () { closeMore(); runAction(a); } }));
+    });
+    var extras = Array.prototype.filter.call(bar.children, function (x) { return x.getAttribute && x.getAttribute("data-slot") === "extra"; });
+    while (extras.length && !fits()) { var x = extras.pop(); x.setAttribute("role", "menuitem"); menu.insertBefore(x, menu.firstChild); }
+    if (!menu.firstChild) wrap.remove();
+  }
+  function closeMore() { var m = document.querySelector("#abar .abar-menu"); if (m && !m.hidden) { moreOpen = false; m.hidden = true; var b = m.previousSibling; if (b) b.setAttribute("aria-expanded", "false"); return true; } return false; }
+  var fitTimer = null;
+  window.addEventListener("resize", function () { clearTimeout(fitTimer); fitTimer = setTimeout(fitBar, 100); });
+  document.addEventListener("click", function (e) { if (!e.target.closest(".abar-more")) closeMore(); });
+
+  // Focus na een actie die de rij weghaalt of terugzet (e, z, afvinken): naar de dan geselecteerde rij, niet body.
+  var wantFocus = 0, lastFocus = null;
+  // Onthoud of de focus in de lijst, de actiebalk of de feedbackbalk stond: verdwijnt dat element bij een
+  // herrendering, dan komt de focus terug op de geselecteerde rij.
+  document.addEventListener("focusin", function (e) { var t = e.target; lastFocus = t && t.closest && t.closest("#lijst .row, #abar, #feedback") ? t : null; });
+  function focusSoon() { wantFocus = Date.now(); setTimeout(checkFocus, 50); setTimeout(checkFocus, 400); }
+  function focusLost() { var a = document.activeElement; return !a || a === document.body || a === document.documentElement || !document.contains(a); }
+  function checkFocus() {
+    var fromRemoved = lastFocus && !document.contains(lastFocus);
+    if (wantFocus && Date.now() - wantFocus > 1500) wantFocus = 0;
+    if (!wantFocus && !fromRemoved) return;
+    if (!focusLost()) { if (!fromRemoved) wantFocus = 0; return; }
+    var target = null;
+    if (isPhone() && st.screen === "detail") target = $("abar").querySelector("button, a") || $("detailBack");
+    else { var key = st.sel[st.entry], li = key && rowFor(key); target = li && li.querySelector(".sel"); }
+    if (target && target.offsetParent !== null) { target.focus({ preventScroll: true }); wantFocus = 0; lastFocus = target; }
+  }
+  // Esc in een tekstveld van de pagina: veld verlaten, focus terug naar de geselecteerde rij (sneltoetsen werken weer).
+  function leaveField(el) {
+    if (el && el.blur) el.blur();
+    var key = st.sel[st.entry], li = key && rowFor(key), b = li && li.querySelector(".sel");
+    if (isPhone() && st.screen === "detail") b = $("abar").querySelector("button, a") || $("detailBack");
+    if (b && b.offsetParent !== null) b.focus({ preventScroll: true });
+    else { var l = $("lijst"); l.focus({ preventScroll: true }); }
+  }
+  function runPrimary() {
+    if (!$("chat").hidden || !st.cur) return false;
+    for (var i = 0; i < curActions.length; i++) {
+      var a = curActions[i];
+      if (a.slot === "primary" && a.el && document.contains(a.el)) { a.el.click(); return true; }
+    }
+    return false;
   }
   function refreshDetail() { if (st.cur) st.sig = sigOf(st.cur); renderDetail(); }
   function runKey(k) {
@@ -250,8 +361,16 @@ var Shell = (function () {
     if (isPhone() && st.screen !== "detail") return false;
     for (var i = 0; i < curActions.length; i++) {
       var a = curActions[i];
-      if (a.key === k && a.el && document.contains(a.el)) { a.el.click(); return true; }
+      if (a.key === k && a.el && document.contains(a.el)) { closeMore(); a.el.click(); return true; }
+      if (a.key === k && a.slot === "more" && a.run) { runAction(a); return true; }
     }
+    return false;
+  }
+  // Voer een actie uit de actiebalk uit (knop klikken, of bij slot "more" direct run).
+  function runAction(a) {
+    if (!a) return false;
+    if (a.el && document.contains(a.el)) { a.el.click(); return true; }
+    if (a.run && st.cur) { st.auto[st.cur.entry] = false; a.run(st.cur.item, null); return true; }
     return false;
   }
 
@@ -286,6 +405,8 @@ var Shell = (function () {
       var n = "";
       try { n = e.count ? e.count() : ""; } catch (x) { n = ""; }
       el.textContent = n ? String(n) : "";
+      var head = document.getElementById("cnt-" + id); // kop van de lijst telt hetzelfde als de navigatie
+      if (head) head.textContent = n ? String(n) : "";
     });
   }
 
@@ -297,7 +418,7 @@ var Shell = (function () {
     if (s === "detail") listScroll = window.scrollY;
     st.screen = s;
     document.body.classList.toggle("m-detail", s === "detail");
-    if (s === "detail") window.scrollTo(0, 0);
+    if (s === "detail") { window.scrollTo(0, 0); fitBar(); }
     else window.scrollTo(0, listScroll);
   }
   function showDetail() { if (isPhone()) showScreen("detail"); }
@@ -329,12 +450,16 @@ var Shell = (function () {
 
   return { ORDER: ORDER, entry: entry, type: type, row: row, selTitle: selTitle, changed: changed, go: go, select: select, move: move,
     current: function () { return st.cur; }, active: function () { return st.entry; }, shown: function (id) { return st.entry === id; }, isPhone: isPhone, showDetail: showDetail, back: back,
+    focusSoon: focusSoon, leaveField: leaveField, closeMore: closeMore,
     screen: function () { return st.screen; }, refreshDetail: refreshDetail, revalidate: revalidate, inlineSlot: inlineSlot, runKey: runKey, init: init, restore: restore,
-    act: act, renderCounts: renderCounts };
+    act: act, renderCounts: renderCounts, extraActions: extraActions, runPrimary: runPrimary, runAction: runAction,
+    actions: function () { return st.cur ? curActions.slice() : []; }, entrySpec: function (id) { return entries[id] || null; },
+    typeSpec: function (t) { return types[t] || null; } };
 })();
 
 // ---------- Feedbackbalk: één balk onderaan voor alles ----------
-// feedback({text, undo?: fn, undoLabel?, countdown?: seconden, onCountdownDone?: fn, link?, linkLabel?, note?})
+// feedback({text, undo?: fn, undoLabel?, countdown?: seconden, onCountdownDone?: fn, link?, linkLabel?, note?,
+//           action?: {label, title?, run}})  action: een tweede knop in de app zelf (bv. "Bekijk": naar het nieuwe item).
 // Toont "✓ <text> · <undoLabel> (Ns) · Bekijk ↗". Geeft {update(opts), close()} terug. Toets z = undo.
 // Met countdown is undo een annuleer-knop: onCountdownDone loopt na N seconden (bv. mail echt versturen),
 // of direct als er een nieuwe melding komt of de balk gesloten wordt (een uitstel wordt nooit stil geannuleerd).
@@ -346,7 +471,8 @@ function feedback(o) {
   clearTimeout(fb.timer); clearInterval(fb.tick);
   var cur = { text: o.text, undo: o.undo || null, undoLabel: o.undoLabel || (o.countdown ? "Annuleer" : "Ongedaan maken"),
     countdown: o.countdown || 0, left: o.countdown || 0, onCountdownDone: o.onCountdownDone || null, link: safeUrl(o.link), linkLabel: o.linkLabel || "Bekijk",
-    note: o.note || "", settled: false, icon: o.icon == null ? "✓" : o.icon, btn: null };
+    note: o.note || "", settled: false, icon: o.icon == null ? "✓" : o.icon, btn: null,
+    action: o.action && typeof o.action.run === "function" ? o.action : null };
   fb.cur = cur;
   function label() { return cur.undoLabel + (cur.countdown && !cur.settled ? " (" + cur.left + "s)" : ""); }
   function paint() {
@@ -360,15 +486,21 @@ function feedback(o) {
       box.append(h("span", { class: "fb-sep", "aria-hidden": "true", text: "·" }), cur.btn);
     }
     if (cur.link) box.append(h("span", { class: "fb-sep", "aria-hidden": "true", text: "·" }), extLink(cur.link, cur.linkLabel, "btn text"));
+    if (cur.action) box.append(h("span", { class: "fb-sep", "aria-hidden": "true", text: "·" }),
+      h("button", { class: "btn text", type: "button", title: cur.action.title || cur.action.label, text: cur.action.label, onclick: function () { var a = cur.action; try { a.run(); } catch (e) { /* */ } } }));
     box.append(h("button", { class: "icon-btn fb-close", type: "button", "aria-label": "Melding sluiten", title: "Sluiten", text: "✕", onclick: close }));
     if (cur.note) box.append(h("span", { class: "fb-note", text: cur.note }));
     if (hadFocus && cur.btn) cur.btn.focus();
+    fbSpace();
   }
+  // Mobiel: de balk zweeft boven de tabbalk; de pagina houdt er ruimte voor vrij (--fb-h), zodat hij niets bedekt.
+  function fbSpace() { document.documentElement.style.setProperty("--fb-h", box.hidden ? "0px" : (box.offsetHeight + 8) + "px"); document.body.classList.toggle("fb-open", !box.hidden); }
   function runUndo() {
     if (!cur.undo || cur.settled) return;
     cur.settled = true;
     clearInterval(fb.tick);
     var u = cur.undo; cur.undo = null;
+    Shell.focusSoon();
     paint();
     try { u(); } catch (e) { /* */ }
     if (fb.cur === cur) hideLater(4000);
@@ -377,6 +509,7 @@ function feedback(o) {
     if (fb.cur !== cur) return;
     if (cur.countdown && !cur.settled) { cur.settled = true; try { if (cur.onCountdownDone) cur.onCountdownDone(); } catch (e) { /* */ } }
     box.hidden = true; clear(box); fb.cur = null; clearTimeout(fb.timer); clearInterval(fb.tick);
+    fbSpace();
   }
   function hideLater(ms) {
     clearTimeout(fb.timer);
