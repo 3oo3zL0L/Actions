@@ -30,7 +30,7 @@ Lees dit als je (Claude, als PO) in een nieuwe sessie verdergaat met de Actiepag
 ## Lessen
 - Microsoft 365-zoektools accepteren `limit` maximaal 25. De mock dwingt dit af.
 - M365 geeft één contentblok per item; `read_resource` geeft één JSON-blok met `body.content` (HTML).
-- Schrijfacties alleen na klik op Uitvoeren. Mail nooit versturen, alleen concept.
+- Claude-paneel werkt als Cowork-taak: schrijfacties direct, alleen via allowlist, alleen op eigen vraag van Thomas (budget 5), nooit verwijderen of instellingen.
 
 ## Bij een nieuwe sessie
 1. Lees dit bestand en `git log --oneline | head`.

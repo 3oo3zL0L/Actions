@@ -45,15 +45,21 @@
   "use strict";
   const cfg = () => window.__MOCK__ || {};
 
+  // Default-manifest = de allowlists van de Claude-taakmodus (ronde 7), zoals de PO publiceert.
+  const M365_READ = ["outlook_calendar_search", "outlook_email_search", "chat_message_search", "teams_list_chats", "teams_list_teams",
+    "teams_list_channels", "teams_list_channel_messages", "read_resource", "get_me", "search_people", "find_meeting_availability", "outlook_find_available_time"];
+  const M365_WRITE = ["teams_send_chat_message", "teams_create_chat", "teams_send_channel_message", "teams_reply_channel_message", "outlook_create_event",
+    "outlook_update_event", "outlook_respond_to_event", "outlook_send_mail", "outlook_create_draft", "outlook_create_reply_draft", "outlook_create_reply_all_draft",
+    "outlook_update_draft", "outlook_send_draft", "outlook_forward_mail", "outlook_modify_labels"];
+  const ATL_READ = ["searchJiraIssuesUsingJql", "searchConfluenceUsingCql", "getJiraIssue", "getConfluencePage", "getConfluenceSpaces", "getPagesInConfluenceSpace",
+    "getVisibleJiraProjects", "getTransitionsForJiraIssue", "lookupJiraAccountId", "getJiraProjectIssueTypesMetadata", "search"];
+  const ATL_WRITE = ["addCommentToJiraIssue", "createJiraIssue", "editJiraIssue", "transitionJiraIssue", "createConfluencePage", "updateConfluencePage", "createConfluenceFooterComment"];
   const DEFAULT_MANIFEST = {
-    "Microsoft 365": [
-      "outlook_calendar_search", "outlook_email_search", "chat_message_search",
-      "teams_list_chats", "read_resource", "outlook_create_reply_draft",
-      "teams_send_chat_message", "get_me", "outlook_modify_labels",
-    ],
-    "Atlassian Rovo": ["searchJiraIssuesUsingJql", "searchConfluenceUsingCql", "addCommentToJiraIssue"],
+    "Microsoft 365": [...M365_READ, ...M365_WRITE],
+    "Atlassian Rovo": [...ATL_READ, ...ATL_WRITE],
   };
-  const WRITE_TOOLS = new Set(["outlook_create_reply_draft", "teams_send_chat_message", "addCommentToJiraIssue", "outlook_modify_labels"]);
+  const WRITE_TOOLS = new Set([...M365_WRITE, ...ATL_WRITE]);
+  window.__MOCK_MANIFEST__ = { read: { "Microsoft 365": M365_READ, "Atlassian Rovo": ATL_READ }, write: { "Microsoft 365": M365_WRITE, "Atlassian Rovo": ATL_WRITE } };
 
   const LOG = (window.__MOCK_LOG__ = {
     mcp: [],          // {via, server, tool, input, t, outcome}
@@ -259,7 +265,17 @@
     invalidate,
     listTools,
     server: serverHandle,
-    describeTool: () => Promise.reject(mcpErr("bad_request", "describeTool is not answered for connectors")),
+    // Contract: voor connectors rejects describeTool met bad_request. Met __MOCK__.describeSchemas = true
+    // geeft de mock een simpel schema (om die tak van de pagina te testen).
+    describeTool: (server, tool) => {
+      const c = cfg();
+      const manifest = c.manifest || DEFAULT_MANIFEST;
+      if (c.describeSchemas && (manifest[server] || []).includes(tool)) {
+        return Promise.resolve({ name: tool, description: "Mock-beschrijving van " + tool,
+          inputSchema: { type: "object", properties: { voorbeeld: { type: "string" } } } });
+      }
+      return Promise.reject(mcpErr("bad_request", "describeTool is not answered for connectors"));
+    },
   });
 
   // --------------------------------------------------------------- sample

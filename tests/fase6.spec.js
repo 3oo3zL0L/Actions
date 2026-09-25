@@ -58,7 +58,7 @@ test.describe("Claude geeft antwoord", () => {
       expect(c.outcome).not.toBe("invalid_request");
     }
     const last = calls.at(-1);
-    expect(last.input[0].content).toMatch(/^Je bent Claude, collega van Thomas/);
+    expect(last.input[0].content).toMatch(/^Je bent Claude in Thomas' Actiepagina/);
     expect(last.input[0].content).toContain("\n\n---\n\n");
     expect(last.input.at(-1).content).toContain("Dit is de tweede vraag"); // samengevoegd met de derde
     expect(last.input.at(-1).content).toContain("Dit is de derde vraag");
@@ -69,17 +69,16 @@ test.describe("Claude geeft antwoord", () => {
     await page.getByRole("button", { name: /wat moet ik vandaag/i }).click();
     await expect(page.getByText("Ok.").first()).toBeVisible({ timeout: 8000 });
     const [call] = await chatCalls(page);
-    expect(call.toolNames).toEqual(["stel_actie_voor", "mail_zoeken", "agenda", "teams_zoeken"]);
+    expect(call.toolNames).toEqual(["voer_uit", "lees", "schema", "acties_lijst"]); // ronde 7: generieke tools
     await expect.poll(async () => (await chatCalls(page))[0].outcome).toBe("ok");
   });
 
-  test("standaard mock-limiet 8: de minst belangrijke tool valt weg", async ({ page, open }) => {
+  test("standaard mock-limiet 8: alle vijf generieke tools passen", async ({ page, open }) => {
     await open(buildMock());
     await page.getByRole("button", { name: /wat moet ik vandaag/i }).click();
     await expect(page.getByText(/Mock-antwoord van Claude/).first()).toBeVisible({ timeout: 8000 });
     const [call] = await chatCalls(page);
-    expect(call.toolNames).toHaveLength(8);
-    expect(call.toolNames).not.toContain("voorstellen_lijst");
+    expect(call.toolNames).toEqual(["voer_uit", "lees", "schema", "acties_lijst", "actie_toevoegen"]);
   });
 
   test("invalid_request met tools: één terugval zonder tools, met pagina-context", async ({ page, open }) => {
@@ -157,7 +156,9 @@ test.describe("Claude/Cowork-look", () => {
   test("kleuren, bubbel, serif-antwoord, tool-regels, Kopieer/Opnieuw, verzend- en stopknop", async ({ page, open }) => {
     await page.setViewportSize({ width: 1400, height: 900 });
     await open(buildMock({ sample: { rules: [{ match: "vandaag", chunkDelayMs: 60,
-      toolCalls: [{ tool: "agenda" }, { tool: "mail_zoeken", input: { zoek: "budget" } }],
+      toolCalls: [
+        { tool: "^lees$", input: { server: "Microsoft 365", tool: "outlook_calendar_search", input: { query: "*", afterDateTime: "today", beforeDateTime: "tomorrow" } } },
+        { tool: "^lees$", input: { server: "Microsoft 365", tool: "outlook_email_search", input: { query: "budget", order: "newest" } } }],
       text: "## Je dag\n\nEerst **Ruben** antwoorden.\n\n- punt een\n- punt twee\n\n```\nnpm test\n```\n\nZie `code` en [plan](https://wiki.example.com/x)." }] } }));
     await page.getByRole("button", { name: /wat moet ik vandaag/i }).click();
     // Tijdens streamen: vierkante stopknop.
@@ -208,10 +209,10 @@ test.describe("Claude/Cowork-look", () => {
     // Tool-regels inklapbaar met details
     const toolLine = panel(page).locator("details.tool").filter({ hasText: "Agenda bekeken" });
     await expect(toolLine).toBeVisible();
-    await expect(toolLine.getByText(/afspraken/)).toBeHidden();
+    await expect(toolLine.getByText(/outlook_calendar_search/)).toBeHidden();
     await toolLine.locator("summary").click();
-    await expect(toolLine.getByText(/afspraken/)).toBeVisible();
-    await expect(panel(page).locator("details.tool").filter({ hasText: "Mail doorzocht" })).toContainText("zoekterm: budget");
+    await expect(toolLine.getByText(/outlook_calendar_search/)).toBeVisible();
+    await expect(panel(page).locator("details.tool").filter({ hasText: "Mail doorzocht" })).toContainText('"query": "budget"');
 
     // Kopieer onder elk antwoord, Opnieuw alleen bij het laatste
     await expect(ans.getByRole("button", { name: "Kopieer antwoord" })).toBeVisible();

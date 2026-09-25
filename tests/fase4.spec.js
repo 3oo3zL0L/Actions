@@ -57,17 +57,19 @@ test.describe("Mailstijl van Thomas", () => {
     await expect.poll(async () => (await textareaValues(page)).includes("Hi Ruben,\n\nAkkoord.\n\nKR\nThomas"), { timeout: 8000 }).toBe(true);
   });
 
-  test("chat: rules noemen EMAIL_STYLE en een mail_concept-voorstel krijgt KR/Thomas", async ({ page, open }) => {
+  // Ronde 7: geen bevestigkaart meer; Claude maakt het concept direct via voer_uit en de pagina past EMAIL_STYLE toe.
+  test("chat: rules noemen EMAIL_STYLE en een mailconcept via voer_uit krijgt KR/Thomas", async ({ page, open }) => {
     await open(buildMock({ sample: { rules: [{ match: "maak een mailconcept", text: "Klaargezet.",
-      toolCalls: [{ tool: "stel_actie_voor", input: { soort: "mail_concept", messageId: "mail-003", tekst: "Hi Ruben,\n\nPrima — doen we.\n\nMet vriendelijke groet,\nThomas" } }] }] } }));
+      toolCalls: [{ tool: "^voer_uit$", input: { server: "Microsoft 365", tool: "outlook_create_reply_draft",
+        input: { messageId: "mail-003", bodyType: "text", body: "Hi Ruben,\n\nPrima — doen we.\n\nMet vriendelijke groet,\nThomas" } } }] }] } }));
     const box = page.getByRole("textbox", { name: /vraag claude/i }).first();
     await box.fill("Maak een mailconcept voor Ruben");
     await box.press("Enter");
-    await expect(page.getByRole("button", { name: "Uitvoeren" }).first()).toBeVisible({ timeout: 8000 });
+    await expect.poll(async () => (await mcpCalls(page, "outlook_create_reply_draft")).length, { timeout: 8000 }).toBe(1);
     const call = (await mockLog(page)).sample.at(-1);
-    expect(inputText(call)).toContain("Mailteksten voor stel_actie_voor soort mail_concept volgen altijd EMAIL_STYLE");
+    expect(inputText(call)).toContain("Mail: volgt altijd EMAIL_STYLE");
     expect(inputText(call)).toContain("Nooit MVG/Groet.");
-    expect(await textareaValues(page)).toContain("Hi Ruben,\n\nPrima, doen we.\n\nKR\nThomas");
+    expect((await mcpCalls(page, "outlook_create_reply_draft"))[0].input.body).toBe("Hi Ruben,\n\nPrima, doen we.\n\nKR\nThomas");
   });
 });
 
@@ -175,7 +177,7 @@ test.describe("Vraag Claude per item", () => {
     expect(prompt).toContain("Vat samen");
     expect(prompt).toContain("messageId: mail-003");
     expect(prompt).toContain("Volledige mail over runners.");
-    expect(call.toolNames).toContain("stel_actie_voor");
+    expect(call.toolNames).toContain("voer_uit");
     expect((await mcpCalls(page, "read_resource"))[0].input).toEqual({ uri: "mail:///messages/mail-003" });
     await expect(ctxCard(page)).toBeHidden(); // context is gebruikt
   });

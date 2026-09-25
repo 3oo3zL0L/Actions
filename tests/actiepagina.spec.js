@@ -403,29 +403,28 @@ test.describe("Claude-paneel", () => {
     await expect(page.getByText(/je hebt vandaag vijf afspraken/).first()).toBeVisible({ timeout: 8000 });
   });
 
-  const PROPOSE_RULE = { match: "antwoord-concept", text: "Ik heb een concept klaargezet; bevestig om het aan te maken.",
-    toolCalls: [{ tool: "reply|draft|concept|antwoord", hints: { messageId: "mail-003", body: "Dag Ruben, prima voorstel." } }] };
+  // Ronde 7 (klantbesluit): het Claude-paneel werkt als een Cowork-taak. Vraagt Thomas zelf om een schrijfactie,
+  // dan voert Claude die direct uit via voer_uit (geen bevestigkaart meer in de chat). Snelknoppen mogen niets schrijven.
+  const WRITE_RULE = (match) => ({ match, text: "Concept-antwoord staat klaar in Outlook.",
+    toolCalls: [{ tool: "^voer_uit$", input: { server: "Microsoft 365", tool: "outlook_create_reply_draft",
+      input: { messageId: "mail-003", body: "Dag Ruben, prima voorstel.", bodyType: "text" }, samenvatting: "aan Ruben Smit" } }] });
 
-  test("schrijfactie van Claude vraagt bevestiging, pas na Uitvoeren de schrijftool", async ({ page, open }) => {
-    await open(buildMock({ sample: { rules: [PROPOSE_RULE] } }));
+  test("schrijfactie waar Thomas om vraagt voert Claude direct uit, met ✓-regel en zonder bevestigkaart", async ({ page, open }) => {
+    await open(buildMock({ sample: { rules: [WRITE_RULE("antwoord-concept")] } }));
     await askClaude(page, "Maak een antwoord-concept voor de mail over het runnerbudget");
-    await expect(page.getByRole("button", { name: CONFIRM_BTN }).first()).toBeVisible({ timeout: 8000 });
-    const log = await mockLog(page);
-    expect(log.sampleTools.filter((t) => t.name), `pagina biedt Claude geen voorstel-tool voor concepten (${JSON.stringify(log.sample.at(-1).toolNames)})`).not.toEqual([]);
-    expect(await mcpCalls(page, "outlook_create_reply_draft"), "schrijftool aangeroepen voor bevestiging").toEqual([]);
-    await page.getByRole("button", { name: CONFIRM_BTN }).first().click();
-    await expect.poll(async () => (await mcpCalls(page, "outlook_create_reply_draft")).length).toBe(1);
+    await expect.poll(async () => (await mcpCalls(page, "outlook_create_reply_draft")).length, { timeout: 8000 }).toBe(1);
     const [draft] = await mcpCalls(page, "outlook_create_reply_draft");
     expect(draft.input.messageId).toBe("mail-003");
+    await expect(page.getByText(/Concept-antwoord gemaakt aan Ruben Smit/).first()).toBeVisible();
+    await expect(page.getByRole("button", { name: CONFIRM_BTN })).toHaveCount(0);
     expect(await mcpCalls(page, /send/)).toEqual([]);
   });
 
-  test("schrijfactie annuleren roept geen schrijftool aan", async ({ page, open }) => {
-    await open(buildMock({ sample: { rules: [PROPOSE_RULE] } }));
-    await askClaude(page, "Maak een antwoord-concept voor de mail over het runnerbudget");
-    await expect(page.getByRole("button", { name: CONFIRM_BTN }).first()).toBeVisible({ timeout: 8000 });
-    await page.getByRole("button", { name: CANCEL_BTN }).first().click();
-    await page.waitForTimeout(800);
+  test("snelknop mag niets schrijven: schrijfactie wordt geweigerd", async ({ page, open }) => {
+    await open(buildMock({ sample: { rules: [WRITE_RULE("inbox samen")] } }));
+    await page.getByRole("button", { name: /vat mijn inbox samen/i }).first().click();
+    await expect(page.getByText(/Niet uitgevoerd/).first()).toBeVisible({ timeout: 8000 });
+    await page.waitForTimeout(300);
     expect(await mcpCalls(page, /create_reply_draft|send|addComment/)).toEqual([]);
     await expect(page.getByRole("button", { name: CONFIRM_BTN })).toHaveCount(0);
   });
