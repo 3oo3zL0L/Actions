@@ -192,17 +192,38 @@ function deleteActie(a) {
   var copy = {}; for (var k in a) if (k !== "id" && k.charAt(0) !== "_") copy[k] = a[k];
   queueWrite(a.id, function () { return actiesCol().doc(a.id).delete(); }).then(function () {
     feedback({ text: "Actie weggehaald" + (a.text ? ": " + trunc(a.text, 60) : ""), undo: function () {
-      queueWrite(a.id, function () { return actiesCol().doc(a.id).set(copy); }).then(function () { feedback({ text: "Actie terug" }); }, function () { feedback({ text: "Terugzetten lukte niet", icon: "⚠" }); });
+      queueWrite(a.id, function () { return actiesCol().doc(a.id).set(copy); }).then(function () { feedback({ text: "Actie terug" + (a.text ? ": " + trunc(a.text, 60) : "") }); }, function () { feedback({ text: "Terugzetten lukte niet", icon: "⚠" }); });
     } });
   }, function () { feedback({ text: "Verwijderen mislukt", icon: "⚠" }); });
 }
 // Afvinken of heropenen, met Ongedaan maken in de feedbackbalk.
 function setDone(a, done) {
   if (!cap.db || a._pending) return;
-  var before = a.status;
+  var before = a.status, next = done ? nextRowKey("actie:" + a.id) : null;
   updateActie(a, { status: done ? "done" : "open" });
-  if (done) logEvent("actie_afgevinkt");
-  feedback({ text: (done ? "Actie afgevinkt: " : "Actie heropend: ") + trunc(a.text, 60), undo: function () { updateActie(a, { status: before }); refreshActieDetail(a.id); } });
+  if (done) { logEvent("actie_afgevinkt"); moveOn("actie:" + a.id, next); }
+  feedback({ text: (done ? "Actie afgevinkt: " : "Actie heropend: ") + trunc(a.text, 60),
+    undoText: (done ? "Terug op de lijst: " : "Weer afgevinkt: ") + trunc(a.text, 60),
+    undo: function () { updateActie(findActie(a.id) || a, { status: before }); refreshActieDetail(a.id); } });
+}
+// Na afvinken of laten vervallen verdwijnt de rij uit beeld (naar het ingeklapte Klaar of N.v.t.): selectie en focus
+// naar de volgende zichtbare rij, anders de vorige.
+function nextRowKey(key) {
+  var c = Shell.current();
+  if (!c || c.key !== key) return null;
+  var keys = Array.prototype.slice.call(document.querySelectorAll("#lijst [data-sel-key]"))
+    .filter(rowInView).map(function (li) { return li.getAttribute("data-sel-key"); });
+  var i = keys.indexOf(key);
+  return i < 0 ? null : keys[i + 1] || keys[i - 1] || null;
+}
+// Zichtbaar in de lijst: niet in een ingeklapte groep (Klaar, N.v.t.; offsetParent is daar niet betrouwbaar).
+function rowInView(li) { return li.offsetParent !== null && !li.closest("details:not([open])"); }
+function moveOn(key, next) {
+  if (!next) return;
+  var li = null;
+  document.querySelectorAll("#lijst [data-sel-key]").forEach(function (x) { if (x.getAttribute("data-sel-key") === key && rowInView(x)) li = x; });
+  if (li) return; // staat nog in beeld (bv. in een uitgeklapte groep)
+  Shell.select(next, { user: true, focus: true, scroll: true });
 }
 function suggestProg(id, text) {
   if (!cap.sample || !cap.sample.json) return;
@@ -266,7 +287,8 @@ function newActieEl(src) {
     var auto = !prog.value && !p.prog;
     closePane("acties", true);
     addActie(f, false, id).then(function () {
-      feedback({ text: "Actie toegevoegd bij " + f.prog + ": " + trunc(f.text, 50), undo: function () { deleteActie(findActie(id) || { id: id }); } });
+      feedback({ text: "Actie toegevoegd bij " + f.prog + ": " + trunc(f.text, 50), undoText: "Actie weggehaald: " + trunc(f.text, 50),
+        undo: function () { deleteActie(findActie(id) || { id: id }); } });
       logEvent("actie_toegevoegd", f.bron);
       if (auto) suggestProg(id, f.text);
     }, function () { announce("Actie niet opgeslagen."); });
@@ -389,7 +411,8 @@ function actieForm(a) {
     if (same) return;
     updateActie(cur, patch);
     if (patch.text != null) { var t = $("detailTitle"); if (t && Shell.current() && Shell.current().key === "actie:" + id) t.textContent = patch.text; }
-    feedback({ text: label + " aangepast: " + trunc(doc().text, 50), undo: function () { updateActie(doc(), before); refreshActieDetail(id); } });
+    feedback({ text: label + " aangepast: " + trunc(doc().text, 50), undoText: label + " teruggezet: " + trunc(doc().text, 50),
+      undo: function () { updateActie(doc(), before); refreshActieDetail(id); } });
     logEvent("actie_bewerkt");
   }
   function ctl(el, name) {
@@ -458,13 +481,15 @@ Shell.type("actie", {
       open && (a.vandaag || !todayByDue) ? { slot: "make", label: a.vandaag ? "Haal van vandaag" : "Maak vandaag", key: "v",
         title: a.vandaag ? "Niet meer op je lijst voor vandaag" : "Op je lijst voor vandaag zetten", run: function (x) {
           logEvent("actie_vandaag"); var was = !!x.vandaag; updateActie(x, { vandaag: !was });
-          feedback({ text: (was ? "Van vandaag gehaald: " : "Op vandaag gezet: ") + trunc(x.text, 60), undo: function () { updateActie(findActie(x.id) || x, { vandaag: was }); } });
+          feedback({ text: (was ? "Van vandaag gehaald: " : "Op vandaag gezet: ") + trunc(x.text, 60), undoText: (was ? "Weer op vandaag: " : "Niet meer op vandaag: ") + trunc(x.text, 60),
+            undo: function () { updateActie(findActie(x.id) || x, { vandaag: was }); refreshActieDetail(x.id); } });
         } } : null,
       Shell.act.ask("actie", a),
       { slot: "open", label: "Open bron", key: "o", title: "Open de bron" + (where ? " in " + where : ""), href: safeUrl(a.bronUrl) },
       open ? { slot: "extra", label: "Laten vervallen", key: "x", title: "Niet meer nodig: naar N.v.t. (Heropen zet hem terug)", run: function (x) {
-        logEvent("actie_vervallen"); updateActie(x, { status: "dropped" });
-        feedback({ text: "Actie vervallen: " + trunc(x.text, 60), undo: function () { updateActie(findActie(x.id) || x, { status: "open" }); } });
+        logEvent("actie_vervallen"); var next = nextRowKey("actie:" + x.id); updateActie(x, { status: "dropped" }); moveOn("actie:" + x.id, next);
+        feedback({ text: "Actie vervallen: " + trunc(x.text, 60), undoText: "Terug op de lijst: " + trunc(x.text, 60),
+          undo: function () { updateActie(findActie(x.id) || x, { status: "open" }); refreshActieDetail(x.id); } });
       } } : null
     ];
   }
@@ -473,5 +498,13 @@ Shell.entry("acties", {
   label: "Acties",
   render: function () { renderActiesList(); renderVoorstellenBlok(); },
   empty: "Kies een actie om hem hier te openen. Nieuwe actie: n.",
-  count: function () { return cap.db && acties.loaded ? actieList().filter(function (a) { return a.status === "open"; }).length : ""; }
+  count: function () { return cap.db && acties.loaded ? actieList().filter(function (a) { return a.status === "open"; }).length : ""; },
+  // Command bar (Ctrl+K): open acties en nieuwe voorstellen; Enter selecteert het item in Acties.
+  search: function () {
+    var out = [];
+    if (!cap.db) return out;
+    if (acties.loaded) actieList().forEach(function (a) { if (a.status === "open") out.push({ key: "actie:" + a.id, title: str(a.text), hint: str(a.prog), tag: "Actie", words: [str(a.who)] }); });
+    voorstNieuw().forEach(function (v) { out.push({ key: "voorstel:" + v.id, title: v.text, hint: "voorstel" + (v.van ? " van " + v.van : ""), tag: "Voorstel", words: [v.van, v.onderwerp, "voorstel"] }); });
+    return out;
+  }
 });

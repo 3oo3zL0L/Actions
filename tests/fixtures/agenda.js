@@ -34,10 +34,25 @@ const EXTRA = [
     attendees: ["ruben.smit@example.com", "thomas@example.com", "lotte.visser@example.com"], location: "Kamer 3.02", summary: "Demo van de gedeelde build-cache.", invite: true },
 ];
 
+/** De volgende werkdag zoals de app hem toont: offset, kop ("Morgen" of "Maandag"), korte dag ("morgen" of "ma 28 sep"). */
+function nextDay(ref) {
+  const offset = nextWorkdays(ref, 1)[0];
+  const d = new Date(ref + offset * 86400000);
+  const DAYS = ["zondag", "maandag", "dinsdag", "woensdag", "donderdag", "vrijdag", "zaterdag"];
+  const MONTHS_S = ["jan", "feb", "mrt", "apr", "mei", "jun", "jul", "aug", "sep", "okt", "nov", "dec"];
+  const p = amsParts(ref + offset * 86400000);
+  const wdIdx = new Date(Date.UTC(p.y, p.mo - 1, p.d)).getUTCDay();
+  const after = amsParts(ref + (offset + 1) * 86400000);
+  return { offset, title: offset === 1 ? "Morgen" : DAYS[wdIdx][0].toUpperCase() + DAYS[wdIdx].slice(1),
+    label: offset === 1 ? "morgen" : DAYS[wdIdx].slice(0, 2) + " " + p.d + " " + MONTHS_S[p.mo - 1],
+    afterIso: `${after.y}-${pad(after.mo)}-${pad(after.d)}`, date: d };
+}
+// day 1 in EXTRA = de volgende werkdag (op vrijdag maandag), zoals de app "Morgen" toont.
+const dayOf = (ref, e) => (e.day === 1 ? nextWorkdays(ref, 1)[0] : e.day || 0);
 function calItem(ref, e) {
   return {
     uri: `calendar:///events/${e.id}`, id: e.id, subject: e.subject, organizer: e.organizer, attendees: e.attendees,
-    start: { dateTime: wall(ref, e.start, e.day), timeZone: WIN_TZ }, end: { dateTime: wall(ref, e.end, e.day), timeZone: WIN_TZ },
+    start: { dateTime: wall(ref, e.start, dayOf(ref, e)), timeZone: WIN_TZ }, end: { dateTime: wall(ref, e.end, dayOf(ref, e)), timeZone: WIN_TZ },
     location: e.location, summary: e.summary, importance: "normal", showAs: e.invite ? "tentative" : "busy", isAllDay: false, isCancelled: false,
     isOrganizer: false, recurrence: null, webLink: `https://outlook.example.com/owa/?itemid=${e.id}`, categories: null,
     ...(e.invite ? { responseStatus: { response: "notResponded", time: "0001-01-01T00:00:00Z" } } : {}),
@@ -51,7 +66,7 @@ function fullEvent(ref, e, { invite = false } = {}) {
     body: { contentType: "html", content: `<html><body><p>${e.summary}</p><p>Agenda:<br>1. Stand van zaken<br>2. Besluit</p>` +
       `<p><a href="https://teams.microsoft.com/l/meetup-join/19%3ameeting_${e.id}%40thread.v2/0?context=x">Deelnemen aan de vergadering</a></p></body></html>` },
     organizer: who(e.organizer), attendees: e.attendees.map((a) => ({ ...who(a), type: "required", status: { response: "none", time: "0001-01-01T00:00:00Z" } })),
-    start: { dateTime: wall(ref, e.start, e.day || 0), timeZone: WIN_TZ }, end: { dateTime: wall(ref, e.end, e.day || 0), timeZone: WIN_TZ },
+    start: { dateTime: wall(ref, e.start, dayOf(ref, e)), timeZone: WIN_TZ }, end: { dateTime: wall(ref, e.end, dayOf(ref, e)), timeZone: WIN_TZ },
     location: { displayName: e.location }, isOnlineMeeting: /teams/i.test(e.location),
     onlineMeeting: /teams/i.test(e.location) ? { joinUrl: `https://teams.example.com/l/meetup-join/${e.id}` } : null,
     responseStatus: { response: invite ? "notResponded" : "accepted", time: "2026-09-20T08:00:00Z" },
@@ -95,4 +110,4 @@ function buildAgendaMock(overrides = {}) {
   return buildMock({ ...overrides, tools: { ...(overrides.tools || {}), "Microsoft 365": merged } });
 }
 
-module.exports = { buildAgendaMock, freeSlots, nextWorkdays, wall, EXTRA };
+module.exports = { buildAgendaMock, freeSlots, nextWorkdays, nextDay, wall, EXTRA };

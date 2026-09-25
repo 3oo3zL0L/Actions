@@ -196,7 +196,7 @@ test.describe("Vraag Claude per item", () => {
     expect(prompt).toContain("messageId: mail-003");
     expect(prompt).toContain("Volledige mail over runners.");
     expect(call.toolNames).toContain("voer_uit");
-    // B2: het detail laadt de volledige inhoud ook (eerst het automatisch geselecteerde item); de mail-uri moet erbij zijn.
+    // B2/B4: het detail laadt de volledige inhoud (ook van het automatisch geselecteerde item, mail of afspraak); de mail-uri moet erbij zijn.
     expect((await mcpCalls(page, "read_resource")).map((c) => c.input)).toContainEqual({ uri: "mail:///messages/mail-003" });
     // B8: de kaart blijft staan (hij volgt de selectie); een vervolgvraag stuurt de itemdata niet opnieuw.
     await expect(ctxCard(page)).toContainText("Over: Budget CI-runners Q4");

@@ -65,9 +65,12 @@ function evFromItem(it) {
   var st = zonedDate(it.start), en = zonedDate(it.end);
   return { it: it, start: st, end: en || st, allDay: !!it.isAllDay, cancelled: !!it.isCancelled };
 }
-// Afspraken van morgen (calEvents() in bronnen.js blijft vandaag).
+// "Morgen" is de eerstvolgende werkdag: op vrijdag (en in het weekend) is dat maandag.
+function nextDayOffset() { var n = 1; while (n < 4 && [0, 6].indexOf(dayOffset(n).getDay()) >= 0) n++; return n; }
+function nextDayTitle() { var n = nextDayOffset(); if (n === 1) return "Morgen"; var w = DAYS[dayOffset(n).getDay()]; return w.charAt(0).toUpperCase() + w.slice(1); }
+// Afspraken van de volgende werkdag (calEvents() in bronnen.js blijft vandaag).
 function calTomorrow() {
-  var day = dayOffset(1), next = dayOffset(2);
+  var n = nextDayOffset(), day = dayOffset(n), next = dayOffset(n + 1);
   return S.cal.items.map(evFromItem).filter(function (e) {
     if (!e.start) return false;
     if (e.allDay) return e.start < next && e.end > day;
@@ -79,8 +82,6 @@ function calTomorrow() {
 // Lokaal gegeven antwoorden (id -> accept|tentative|decline) en lopende antwoorden (id -> response).
 var agResp = {}, agBusy = {};
 var agFull = {}; // uri -> {state, data}: volledige afspraak via read_resource (join-link, tekst, antwoordstatus)
-var agLastInput = 0;
-["click", "keydown"].forEach(function (t) { document.addEventListener(t, function () { agLastInput = Date.now(); }, true); });
 function respState(e) {
   var it = e.it, id = str(it.id);
   if (agResp[id]) return agResp[id] === "accept" ? "accepted" : agResp[id] === "tentative" ? "tentativelyAccepted" : "declined";
@@ -110,6 +111,7 @@ function agendaHead() {
 }
 function renderToday() {
   var body = $("body-agenda");
+  addPlanned();
   agendaHead();
   syncPanes();
   var inner = stateInto(body, "cal");
@@ -125,7 +127,7 @@ function renderToday() {
   if (unknown.length) {
     try { console.warn("[actiepagina] " + unknown.length + " afspraak/afspraken zonder geldige starttijd"); } catch (x) { /* */ }
   }
-  inner.append(dayBlock("Vandaag", new Date(), evs, true), dayBlock("Morgen", dayOffset(1), calTomorrow(), false));
+  inner.append(dayBlock("Vandaag", new Date(), evs, true), dayBlock(nextDayTitle(), dayOffset(nextDayOffset()), calTomorrow(), false));
   if (unknown.length) {
     var uu = h("ul", { class: "list" });
     unknown.forEach(function (it) {
@@ -143,7 +145,7 @@ function dayBlock(title, day, evs, today) {
   if (allDay.length) {
     g.append(h("div", { class: "allday" }, h("b", { text: "Hele dag" }), allDay.map(function (e, i) { return (i ? " · " : "") + (str(e.it.subject) || "(geen onderwerp)"); }).join("")));
   }
-  if (!evs.length) { g.append(h("p", { class: "empty", text: today ? "Geen afspraken vandaag." : "Geen afspraken morgen." })); return g; }
+  if (!evs.length) { g.append(h("p", { class: "empty", text: today ? "Geen afspraken vandaag." : "Geen afspraken " + title.toLowerCase() + "." })); return g; }
   if (!timed.length) return g;
   var nn = today ? nowNext(evs) : { cur: [], next: null };
   var now = Date.now(), nowLabel = "nu " + hhmm(new Date());
@@ -190,7 +192,7 @@ function metaList(pairs) {
   return dl.firstChild ? dl : null;
 }
 function evHtmlText(s) {
-  return str(s).replace(/<(script|style)[\s\S]*?<\/\1>/gi, " ").replace(/<br\s*\/?>|<\/p>|<\/div>|<\/li>/gi, "\n").replace(/<[^>]+>/g, " ")
+  return str(s).replace(/<a[^>]*meetup-join[^>]*>[\s\S]*?<\/a>/gi, "").replace(/<(script|style)[\s\S]*?<\/\1>/gi, " ").replace(/<br\s*\/?>|<\/p>|<\/div>|<\/li>/gi, "\n").replace(/<[^>]+>/g, " ")
     .replace(/&nbsp;/g, " ").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, "\"").replace(/&#39;/g, "'").replace(/&amp;/g, "&")
     .replace(/\r/g, "").replace(/[ \t]+/g, " ").replace(/ ?\n ?/g, "\n").replace(/\n{3,}/g, "\n\n").replace(/_{8,}/g, "").trim();
 }
@@ -241,9 +243,7 @@ Shell.type("event", {
   inline: function (e) { return "event:" + str(e.it.id); },
   detail: function (e, body) {
     var it = e.it;
-    // Volledige afspraak alleen ophalen in Agenda of als Thomas zelf net klikte/typte (niet bij de automatische
-    // selectie in Vandaag bij het openen van de pagina).
-    if (Shell.active() === "agenda" || Date.now() - agLastInput < 1500) eventFull(e);
+    eventFull(e); // volledige afspraak (Teams-link, tekst, antwoord), ook bij de automatische selectie in Vandaag
     var f = agFull[str(it.uri)], d = (f && f.data) || {};
     var ppl = (Array.isArray(d.attendees) && d.attendees.length ? d.attendees : Array.isArray(it.attendees) ? it.attendees : []).map(evPersonName).filter(Boolean);
     var loc = str(d.location && (d.location.displayName || d.location)) || str(it.location);
@@ -273,6 +273,8 @@ Shell.type("event", {
       acts.push({ slot: "primary", label: "Accepteer", key: "r", title: "Uitnodiging accepteren, met je bericht als je er een typte (r of Enter in het berichtveld)", run: function (x) { respondEvent(x, "accept"); } });
       acts.push({ slot: "done", label: "Voorlopig", key: "t", title: "Voorlopig accepteren", run: function (x) { respondEvent(x, "tentative"); } });
       acts.push({ slot: "done", label: "Afwijzen", key: "x", title: "Uitnodiging afwijzen (de afspraak verdwijnt uit je agenda)", run: function (x) { respondEvent(x, "decline"); } });
+      acts.push({ slot: "more", label: "Bericht aan de organisator", key: "m", title: "Naar het berichtveld; Enter accepteert met je bericht", run: function (x) {
+        var c = inlineCards["event:" + str(x.it.id)], inp = c && c._input; if (inp) { inp.focus(); inp.scrollIntoView({ block: "nearest" }); } } });
     } else if (!e.cancelled && e.start && joinUrl(e) && e.end.getTime() > Date.now()) {
       acts.push({ slot: "primary", label: "Deelnemen", key: "d", title: "Deelnemen aan de Teams-vergadering", href: joinUrl(e) });
     }
@@ -307,7 +309,7 @@ function respondBox(e) {
     else if (ev.key === "Escape") { ev.preventDefault(); ev.stopPropagation(); inp.blur(); }
   });
   var box = h("div", { class: "respond", role: "group", "aria-label": "Antwoord op de uitnodiging" },
-    h("label", { for: id, text: "Bericht aan " + org + " (optioneel)" }), inp, h("div", { class: "resp-status", "aria-live": "polite" }));
+    h("label", { for: id, text: "Bericht aan " + org + " (optioneel, toets m)" }), inp, h("div", { class: "resp-status", "aria-live": "polite" }));
   box._input = inp;
   return box;
 }
@@ -381,7 +383,8 @@ function eventActie(e) {
     onderwerp: subj, why: "Na " + subj };
   logEvent("maak_actie", "agenda");
   addActie(f).then(function (r) {
-    feedback({ text: "Actie toegevoegd bij " + f.prog + ": " + trunc(f.text, 50), undo: function () { deleteActie(findActie(r.id) || { id: r.id }); },
+    feedback({ text: "Actie toegevoegd bij " + f.prog + ": " + trunc(f.text, 50), undo: function () { deleteActie(findActie(r.id) || { id: r.id }, true); },
+      undoText: "Actie weggehaald: " + trunc(f.text, 50),
       action: { label: "Bekijk", title: "Naar de actie in Acties", run: function () { showActie(r.id); } } });
     if (!prog && r) suggestProg(r.id, f.text);
   }, function () { feedback({ icon: "⚠", text: "Actie niet opgeslagen. Probeer het opnieuw." }); });
@@ -442,7 +445,13 @@ function plannerEl(pre) {
   var who = h("input", { type: "text", role: "combobox", "aria-autocomplete": "list", "aria-expanded": "false", "aria-controls": "pl-sug", autocomplete: "off",
     placeholder: "Naam of e-mailadres", title: "Typ een naam; Enter kiest, Backspace haalt de laatste weg" });
   var sug = h("ul", { id: "pl-sug", role: "listbox", class: "sugg", "aria-label": "Suggesties", hidden: true });
-  var subj = h("input", { type: "text", maxlength: "255", autocomplete: "off", placeholder: "Waar gaat het over?", title: "Enter zoekt tijd" });
+  var subj = h("input", { type: "text", maxlength: "255", autocomplete: "off", placeholder: "Waar gaat het over?", title: "Verplicht. Enter zoekt tijd", required: true, "aria-required": "true" });
+  var subjAuto = !pre.subject; // zolang Thomas het niet zelf typte, volgt het onderwerp de deelnemers
+  function autoSubject() {
+    if (!subjAuto) return;
+    var n = people.map(function (x) { return x.name.split(" ")[0]; });
+    subj.value = n.length ? "Overleg met " + (n.length > 1 ? n.slice(0, -1).join(", ") + " en " + n[n.length - 1] : n[0]) : "";
+  }
   subj.value = str(pre.subject);
   var note = h("textarea", { rows: "3", maxlength: "4000", placeholder: "Doel of agenda, in je eigen woorden" });
   note.value = str(pre.note);
@@ -462,7 +471,7 @@ function plannerEl(pre) {
     people.forEach(function (p, i) {
       chips.append(h("span", { class: "chip" }, h("span", { text: p.name, title: p.email }),
         h("button", { class: "chip-x", type: "button", "aria-label": "Haal " + p.name + " weg", title: "Weghalen (Backspace in het lege veld haalt de laatste weg)", text: "✕",
-          onclick: function () { people.splice(i, 1); paintChips(); resetSlots(); who.focus(); } })));
+          onclick: function () { people.splice(i, 1); paintChips(); resetSlots(); autoSubject(); who.focus(); } })));
     });
     chips.append(who);
   }
@@ -470,7 +479,7 @@ function plannerEl(pre) {
     var n = planPerson(p);
     if (!n || n.email === me.email) return false;
     if (!people.some(function (x) { return x.email === n.email; })) people.push(n);
-    who.value = ""; closeSug(); paintChips(); resetSlots(); who.focus();
+    who.value = ""; closeSug(); paintChips(); resetSlots(); autoSubject(); who.focus();
     return true;
   }
   function closeSug() { sug.hidden = true; who.setAttribute("aria-expanded", "false"); who.removeAttribute("aria-activedescendant"); st.active = -1; }
@@ -516,11 +525,11 @@ function plannerEl(pre) {
         });
       }
     } else if (ev.key === "Enter" && !who.value.trim()) { ev.preventDefault(); subj.focus(); }
-    else if (ev.key === "Backspace" && !who.value && people.length) { people.pop(); paintChips(); resetSlots(); }
+    else if (ev.key === "Backspace" && !who.value && people.length) { people.pop(); paintChips(); resetSlots(); autoSubject(); }
     else if (ev.key === "Escape" && !sug.hidden) { ev.preventDefault(); ev.stopPropagation(); closeSug(); }
   });
   subj.addEventListener("keydown", function (ev) { if (ev.key === "Enter" && !ev.isComposing) { ev.preventDefault(); findTime(); } });
-  subj.addEventListener("input", function () { if (st.slots.length) resetSlots(); });
+  subj.addEventListener("input", function () { subjAuto = false; if (st.slots.length) resetSlots(); });
   note.addEventListener("keydown", function (ev) { if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); findTime(); } });
   go.addEventListener("click", function () { findTime(); });
   if (gen) gen.addEventListener("click", function () { writeNote(); });
@@ -581,6 +590,8 @@ function plannerEl(pre) {
     });
     result.append(list, h("div", { class: "btns" }, more));
     if (unk.length) result.append(h("p", { class: "fld-hint", text: "Agenda niet te zien van " + unk.join(", ") + "; hun beschikbaarheid is niet zeker." }));
+    var first = list.querySelector("button");
+    if (first) { first.focus({ preventScroll: true }); result.scrollIntoView({ block: "nearest" }); }
   }
   function createAt(s) {
     if (st.busy) return;
@@ -600,6 +611,11 @@ function plannerEl(pre) {
     Promise.resolve().then(function () { return cap.mcp.callTool(M365, "outlook_create_event", input); }).then(function (r) {
       st.busy = false;
       closePane("agenda", true);
+      var made = items(r, { first: true })[0] || {};
+      agPlanned.push({ id: str(made.id) || "gepland-" + Date.now(), uri: "", subject: input.subject, organizer: me.email || "", isOrganizer: true,
+        attendees: people.map(function (x) { return x.email; }), start: input.start, end: input.end, location: "Microsoft Teams Meeting",
+        webLink: findLink(r) || "", onlineMeeting: made.onlineMeeting || null, _gepland: true });
+      renderToday();
       feedback({ text: "Vergadering gepland op " + dayTime + ": " + trunc(input.subject, 50), link: findLink(r), linkLabel: "Bekijk" });
       if (!halted) refresh("cal");
       if (planBtn && planBtn.offsetParent !== null) planBtn.focus();
@@ -642,7 +658,7 @@ function plannerEl(pre) {
     h("div", { class: "dpane-head" }, h("h3", { id: "pl-t", text: "Plan een vergadering" }),
       h("button", { class: "icon-btn", type: "button", "aria-label": "Planner sluiten", title: "Sluiten (Esc)", text: "✕", onclick: function () { closePane("agenda"); } })),
     h("div", { class: "fld" }, h("label", { for: "pl-who", text: "Deelnemers" }), chips, sug),
-    formField("Onderwerp", subj, "pl-subj"),
+    formField("Onderwerp", subj, "pl-subj", "Verplicht. Wordt voorgesteld op basis van de deelnemers."),
     h("div", { class: "fld" }, h("span", { class: "fld-label", id: "pl-dur-l", text: "Duur" }), durBox),
     h("div", { class: "fld" }, h("div", { class: "fld-row" }, h("label", { for: "pl-note", text: "Notitie (optioneel)" }), gen), note,
       h("p", { class: "fld-hint", text: "Komt in de uitnodiging. Het wordt een Teams-vergadering." })),
@@ -651,6 +667,16 @@ function plannerEl(pre) {
   note.id = "pl-note"; who.id = "pl-who";
   durBox.setAttribute("aria-labelledby", "pl-dur-l"); durBox.removeAttribute("aria-label");
   return el;
+}
+// Net geplande vergaderingen (optimistisch): staan in de tijdlijn tot de agenda ze zelf teruggeeft.
+var agPlanned = [];
+function addPlanned() {
+  agPlanned = agPlanned.filter(function (p) {
+    var st = zonedDate(p.start);
+    var real = S.cal.items.some(function (it) { return !it._gepland && (str(it.id) === p.id || (str(it.subject) === p.subject && +zonedDate(it.start) === +st)); });
+    return !real && st && st.getTime() > Date.now() - 86400000;
+  });
+  S.cal.items = S.cal.items.filter(function (it) { return !it._gepland; }).concat(agPlanned);
 }
 // Wandkloktijd in Europe/Amsterdam ("2026-09-28T10:00:00") van een Date.
 function amsWall(d) {
@@ -703,6 +729,14 @@ Shell.entry("agenda", {
   render: renderToday,
   empty: "Kies een afspraak om hem hier te openen. Nieuwe vergadering: p.",
   count: function () { return S.cal.hasData ? calEvents().filter(function (e) { return !e.allDay && !e.cancelled && e.end.getTime() > Date.now(); }).length : ""; },
+  // Command bar (Ctrl+K): afspraken van vandaag en de volgende werkdag; Enter selecteert de afspraak in Agenda.
+  search: function () {
+    if (!S.cal.hasData) return [];
+    return calEvents().concat(calTomorrow()).map(function (e) {
+      var it = e.it, subj = str(it.subject) || "(geen onderwerp)";
+      return { key: "event:" + str(it.id || subj + e.start.getTime()), title: subj, hint: eventWhen(e), tag: isInvite(e) ? "Uitnodiging" : "Afspraak", words: [nameFromAddr(it.organizer)] };
+    });
+  },
   // Start bij wat nu loopt of straks komt, niet bij wat al voorbij is.
   first: function (rows) { return rows.filter(function (r) { var e = r._sel.item; return e.end && e.end.getTime() > Date.now(); })[0] || rows[0]; }
 });

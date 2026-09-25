@@ -32,7 +32,7 @@ function renderVandaag() {
     if (p.allDay.length) inner.append(h("div", { class: "allday" }, h("b", { text: "Hele dag" }), p.allDay.map(function (e, i) { return (i ? " · " : "") + (str(e.it.subject) || "(geen onderwerp)"); }).join("")));
     if (!p.meet.length) {
       inner.append(h("p", { class: "empty", text: p.evs.length ? "Geen afspraken meer vandaag." : "Geen afspraken vandaag." }));
-      if (p.morgen) inner.append(h("p", { class: "vsub", text: "Morgen als eerste" }), h("ul", { class: "list timeline" }, eventRow(p.morgen)));
+      if (p.morgen) inner.append(h("p", { class: "vsub", text: nextDayTitle() + " als eerste" }), h("ul", { class: "list timeline" }, eventRow(p.morgen)));
     } else {
       var nn = nowNext(p.evs);
       var ul = h("ul", { class: "list timeline" });

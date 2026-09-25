@@ -293,3 +293,57 @@ test.describe("Voorstellen en Vandaag", () => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   });
 });
+
+// =========================================================================================
+// UX-review B5: na ongedaan zegt de balk wat nu waar is; focus naar de volgende rij; voorstellen in Ctrl+K.
+test.describe("Review B5", () => {
+  test("na z zegt de feedbackbalk wat nu waar is (afvinken, Maak vandaag, voorstel)", async ({ page, open }) => {
+    await open(buildMock({ db: { docs: docsWith(VOORSTEL) } }));
+    await goTo(page, "Acties");
+    await openItem(page, SEED);
+    await page.keyboard.press("e");
+    await expect(feedbackBar(page)).toContainText("✓ Actie afgevinkt: " + SEED);
+    await page.keyboard.press("z");
+    await expect(feedbackBar(page)).toContainText("✓ Terug op de lijst: " + SEED);
+    await expect(feedbackBar(page)).not.toContainText("afgevinkt");
+
+    await openItem(page, "Scope-besluit OIDC vastleggen");
+    await page.keyboard.press("v");
+    await expect(feedbackBar(page)).toContainText("Op vandaag gezet");
+    await page.keyboard.press("z");
+    await expect(feedbackBar(page)).toContainText("✓ Niet meer op vandaag: Scope-besluit OIDC vastleggen");
+
+    await openItem(page, "Reageren op budgetvoorstel CI-runners");
+    await page.keyboard.press("e");
+    await expect(feedbackBar(page)).toContainText("Weggelegd");
+    await page.keyboard.press("z");
+    await expect(feedbackBar(page)).toContainText("✓ Terug bij de voorstellen: Reageren op budgetvoorstel CI-runners");
+  });
+
+  test("na e en x staan selectie en focus op de volgende rij", async ({ page, open }) => {
+    await open(buildMock({ db: { docs: docsWith({ "acties/ci-1": { text: "Offerte runners opvragen", who: "eigen actie", due: "", prog: "CI Acceleration", extra: "", why: "",
+      status: "open", vandaag: false, bron: "klad", bronUrl: "", createdAt: "2026-09-24T10:00:00.000Z", updatedAt: "2026-09-24T10:00:00.000Z" } }) } }));
+    await goTo(page, "Acties");
+    await openItem(page, SEED);
+    await page.keyboard.press("e");
+    await expect(detail(page).getByRole("heading", { level: 2 })).toHaveText("Offerte runners opvragen");
+    await expect(page.locator('#lijst button[aria-current="true"]')).toBeFocused();
+    await page.keyboard.press("x");
+    await expect(detail(page).getByRole("heading", { level: 2 })).toHaveText("Scope-besluit OIDC vastleggen");
+    await expect(page.locator('#lijst button[aria-current="true"]')).toBeFocused();
+  });
+
+  test("Ctrl+K vindt een voorstel; Enter selecteert het; Uit toont een leesbare herkomst", async ({ page, open }) => {
+    await open(buildMock({ db: { docs: docsWith(VOORSTEL) } }));
+    await expect(page.getByText("Architectuuroverleg Object Store").first()).toBeVisible();
+    await page.keyboard.press("Control+k");
+    await page.getByRole("combobox", { name: "Zoek, voer uit of vraag Claude" }).fill("reageren op budget");
+    const active = page.getByRole("listbox", { name: "Suggesties" }).locator('[role=option][aria-selected="true"]');
+    await expect(active).toHaveAccessibleName(/^Voorstel Reageren op budgetvoorstel CI-runners/);
+    await page.keyboard.press("Enter");
+    await expect(entryButton(page, "Acties")).toHaveAttribute("aria-current", "page");
+    await expect(detail(page).getByRole("heading", { level: 2 })).toHaveText("Reageren op budgetvoorstel CI-runners");
+    await expect(detail(page)).toContainText("Ochtendscan 24 sep");
+    await expect(detail(page)).not.toContainText("ochtend-2026");
+  });
+});

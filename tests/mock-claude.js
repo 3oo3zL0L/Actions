@@ -236,8 +236,7 @@
   // ==== B4 Agenda (additief, begin) =====================================================================
   // Echte vormen en invoergrenzen van outlook_find_available_time, outlook_respond_to_event en
   // outlook_create_event (schema's van de Microsoft 365-connector), plus read_resource per uri.
-  //   Fixture per invoer (zelfde vorm als groep A): { byInput: [{ when: { uri: "…" }, ...Fixture }], otherwise?: Fixture }.
-  //   Na de merge van groep A doet hun fixtureByInput() dit al vóór deze regel; deze regel is dan een no-op.
+  //   read_resource per uri: via fixtureByInput (groep A), { byInput: [{ when: { uri: "…" }, ...Fixture }], otherwise?: Fixture }.
   //   Zonder fixture: find_available_time geeft vrije sloten op werkdagen (09:30, 11:00, 14:00, 16:00,
   //   wandklok "W. Europe Standard Time") binnen [afterDateTime, beforeDateTime); respond geeft een tekstblok;
   //   create_event geeft {id, webLink, onlineMeeting?}. Ongeldige invoer zonder fixture = contractschending.
