@@ -1,0 +1,10 @@
+/* Inbox: meldingen ingeklapt, compacte rijen, afgehandeld-balk. */
+.notif-toggle { display: flex; width: 100%; align-items: center; gap: 8px; border: 0; background: transparent; color: var(--text-2); padding: 10px 12px; min-height: 44px; border-radius: var(--r-md); cursor: pointer; font-weight: 500; text-align: left; }
+.notif-toggle:hover { background: var(--surface-2); }
+.notif-toggle .chev { transition: transform var(--dur) var(--ease); }
+.notif-toggle[aria-expanded="true"] .chev { transform: rotate(90deg); }
+.row.compact { min-height: 40px; padding-top: 6px; padding-bottom: 6px; }
+.row.compact .title { font-weight: 400; font-size: var(--fs-sm); }
+
+.handled { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; font-size: var(--fs-sm); background: var(--surface-2); border-radius: var(--r-md); padding: 4px 10px; margin-bottom: 8px; }
+.handled .handled-note { flex-basis: 100%; color: var(--warn); font-size: var(--fs-xs); }

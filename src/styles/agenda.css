@@ -1,0 +1,14 @@
+/* Agenda: tijdlijn van vandaag. */
+/* Timeline */
+.timeline { position: relative; padding-left: 14px; }
+.timeline::before { content: ""; position: absolute; left: 4px; top: 6px; bottom: 6px; width: 2px; background: var(--border); border-radius: 2px; }
+.timeline .row.past .title, .timeline .row.past .l2, .timeline .row.past .time { color: var(--text-3); }
+.timeline .row.cancelled { opacity: .7; }
+.timeline .row.current { background: var(--accent-soft); }
+.time { font-family: var(--mono); font-size: var(--fs-sm); color: var(--text-2); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.nowline { display: flex; align-items: center; gap: 8px; color: var(--accent-text); font-size: var(--fs-xs); font-weight: 600; margin: 4px 0; list-style: none; }
+.nowline::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); margin-left: -19px; flex: none; }
+.nowline::after { content: ""; flex: 1; height: 2px; background: var(--accent); }
+.allday { background: var(--surface-2); border-radius: var(--r-md); padding: 8px 12px; margin-bottom: var(--sp-3); font-size: var(--fs-sm); }
+.allday b { font-weight: 600; margin-right: 6px; }
+.done-note { color: var(--text-3); font-size: var(--fs-sm); margin: var(--sp-3) 0 0; }

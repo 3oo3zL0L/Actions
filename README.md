@@ -8,7 +8,9 @@ claude.ai-connectors (Microsoft 365, Atlassian Rovo). Er staan geen tokens of ge
 
 | Map | Inhoud |
 |---|---|
-| `src/index.html` | de app, één bestand, geen build-stap |
+| `src/index.html` | de pagina: markup, laadt `styles/*.css` en `app/*.js` (klassieke scripts, vaste volgorde, geen build-stap) |
+| `src/app/`, `src/styles/` | de app per onderdeel; `node tools/check-globals.js` controleert gedeelde namen |
+| `tools/files-map.js` | print de `files`-map voor publicatie als Artifact |
 | `docs/BRIEF.md` | productbrief (PO) |
 | `docs/UX.md` | ontwerpspecificatie (UX) |
 | `docs/TESTPLAN.md`, `docs/TESTRAPPORT.md` | testaanpak en resultaten (TST) |

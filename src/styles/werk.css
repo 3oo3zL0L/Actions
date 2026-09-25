@@ -1,0 +1,5 @@
+/* Werk: Jira-zoekopdracht. */
+.jqlform { background: var(--surface-2); border-radius: var(--r-md); padding: var(--sp-3); margin-bottom: var(--sp-3); }
+.jqlform label { font-size: var(--fs-sm); font-weight: 600; display: block; margin-bottom: 4px; }
+.jqlform textarea { width: 100%; min-height: 64px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface); padding: 6px 8px; font-family: var(--mono); font-size: var(--fs-sm); }
+.jqlform .btns { display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap; }

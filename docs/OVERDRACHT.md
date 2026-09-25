@@ -8,7 +8,8 @@ Lees dit als je (Claude, als PO) in een nieuwe sessie verdergaat met de Actiepag
 - **Team (subagents)**: Senior UX, Senior DEV, Senior TST, Analist. Elk krijgt een gerichte opdracht met verwijzing naar de docs hieronder.
 
 ## Links
-- App (artifact): https://claude.ai/artifact/PqANDMJuGom3jRqvm8k7zv, bron `src/index.html`. Publiceren met
+- App (artifact): https://claude.ai/artifact/PqANDMJuGom3jRqvm8k7zv, bron `src/index.html` plus `src/app/*.js` en `src/styles/*.css`
+  (als `files`, map via `node tools/files-map.js`). Publiceren met
   `Artifact` + `url` van deze app (anders ontstaat een nieuwe). Capabilities: mcp (Microsoft 365, Atlassian Rovo), sample, db.
 - Verbeterpunten-document: https://claude.ai/code/artifact/e119fb53-6e4d-44c4-b628-513c70e9488a
 - Oude PAF actielijst (archief): https://claude.ai/artifact/Ar6sRYzLNFu5dzdLw1Y4gw
