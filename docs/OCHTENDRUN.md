@@ -2,7 +2,7 @@
 
 Vanaf fase 2 schrijft de ochtendrun niet meer naar de PAF actielijst, maar naar de database van de
 Actiepagina (https://claude.ai/artifact/PqANDMJuGom3jRqvm8k7zv). De pagina toont nieuwe voorstellen
-live onder **Acties → Uit je mail**, zonder dat de pagina opnieuw gepubliceerd hoeft te worden.
+live onder **Acties → Voorstellen**, zonder dat de pagina opnieuw gepubliceerd hoeft te worden.
 
 ## Wat je in Cowork aanpast
 Vervang in de geplande ochtendtaak het deel dat de PAF-pagina republiceert door onderstaande prompt.
@@ -10,19 +10,23 @@ Vervang in de geplande ochtendtaak het deel dat de PAF-pagina republiceert door 
 ```text
 Actiepagina-ochtendrun (werkdagen).
 
-1. Lees mijn mail van de afgelopen 24 uur (Microsoft 365). Negeer no-reply, notificaties en nieuwsbrieven.
-2. Bepaal per mail of er iets van mij (Thomas) verwacht wordt: een beslissing, akkoord, antwoord of taak.
+1. Lees mijn mail en mijn Teams-berichten (chats en kanalen) van de afgelopen 24 uur (Microsoft 365).
+   Negeer no-reply, notificaties, nieuwsbrieven en Teams-meldingsmails.
+2. Bepaal per mail en per Teams-gesprek of er iets van mij (Thomas) verwacht wordt: een beslissing, akkoord,
+   antwoord of taak (ook @-vermeldingen en vragen aan mij in groepschats).
 3. Lees de bestaande database van de Actiepagina (artifact https://claude.ai/artifact/PqANDMJuGom3jRqvm8k7zv):
    collecties "acties" en "voorstellen". Sla voorstellen over die al bestaan (zelfde mail-url) of al als actie
-   op de lijst staan.
+   op de lijst staan (zelfde mail- of Teams-link).
 4. Schrijf elk nieuw voorstel als document in collectie "voorstellen" (doc-id: "v-" + datum + "-" + volgnummer,
    bv. "v-20260925-1") met velden:
    text      korte gebiedende actie, geen datum of naam erin, geen punt aan het eind
    van       naam afzender
-   onderwerp onderwerp van de mail
+   bron      "mail" of "teams"
+   onderwerp onderwerp van de mail, of chatnaam bij Teams
    prog      precies een van: UI/UX, Platform Core, CI Acceleration, OIDC, Object Store, Jakarta migratie,
              Platform Stability, Contracten, Overig
-   mail      de webLink van de mail (https)
+   mail      de webLink van de mail (https), alleen bij bron mail
+   link      de webUrl van het Teams-bericht (https), alleen bij bron teams
    why       optioneel, één korte zin waarom dit bij mij ligt
    status    "nieuw"
    run       datum van vandaag, bv. "25 sep 2026"
