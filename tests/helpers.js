@@ -80,9 +80,11 @@ async function openItem(page, text, expectInDetail) {
   if (expectInDetail !== false) await expect(detail(page)).toContainText(expectInDetail || text);
   return row;
 }
-/** Open het Claude-paneel zonder item (knop Vraag Claude bovenaan) en geef de invoer terug. */
+/** Open het Claude-paneel zonder item en geef de invoer terug. B7: via "Zoek of vraag…" bovenaan (de command bar)
+ *  en de suggestie "Vraag Claude" (zonder tekst: paneel zonder itemcontext, zoals de oude knop). */
 async function openClaude(page) {
-  await page.getByRole("button", { name: "Vraag Claude" }).first().click();
+  await page.getByRole("button", { name: /Zoek of vraag/ }).click();
+  await page.getByRole("option", { name: /^Vraag Claude/ }).click();
   const box = page.getByRole("textbox", { name: "Bericht aan Claude" });
   await expect(box).toBeFocused();
   return box;

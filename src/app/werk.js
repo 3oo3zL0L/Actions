@@ -156,7 +156,7 @@ function werkMarkdown(md) {
   var box = h("div"); box.append(frag);
   var tw = document.createTreeWalker(box, NodeFilter.SHOW_TEXT), n;
   while ((n = tw.nextNode())) {
-    if (/[-]/.test(n.nodeValue)) n.nodeValue = n.nodeValue.replace(/[-]/g, function (c) { return MD_ESC.charAt(c.charCodeAt(0) - 0xE000); });
+    if (/[\uE000-\uE017]/.test(n.nodeValue)) n.nodeValue = n.nodeValue.replace(/[\uE000-\uE017]/g, function (c) { return MD_ESC.charAt(c.charCodeAt(0) - 0xE000); });
   }
   var out = document.createDocumentFragment();
   while (box.firstChild) out.append(box.firstChild);
