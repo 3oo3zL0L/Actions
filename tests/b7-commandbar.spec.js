@@ -164,6 +164,21 @@ test.describe("Uitvoeren", () => {
     await expect(feedbackBar(page)).toContainText("Mail afgehandeld");
   });
 
+  test("'jira' op een mail: Nieuw Jira-issue staat boven Ga naar Werk", async ({ page, open }) => {
+    await open(buildMock());
+    await ready(page);
+    await goTo(page, "Inbox");
+    await openItem(page, "Budget CI-runners Q4");
+    await openBar(page, "jira");
+    await expect(activeOption(page)).toHaveAccessibleName(/^Doen Nieuw Jira-issue Mail: Budget CI-runners Q4 i$/);
+    await expect(options(page).nth(1)).toHaveAccessibleName(/Ga naar Werk/);
+    // Zonder mail/Teams/actie geselecteerd blijft Ga naar Werk bovenaan.
+    await page.keyboard.press("Escape");
+    await goTo(page, "Agenda");
+    await openBar(page, "jira");
+    await expect(activeOption(page)).toHaveAccessibleName(/Ga naar Werk/);
+  });
+
   test("Jira: Status en Toewijzen (geen knop) via de bar", async ({ page, open }) => {
     await open(buildMock());
     await ready(page);
@@ -298,5 +313,19 @@ test.describe("Mobiel 375px", () => {
     await page.keyboard.press("Enter");
     await expect(detail(page).getByRole("heading", { level: 2 })).toHaveText(/CIACC-42/);
     await expect(actionBar(page).getByRole("button", { name: "Reageer" })).toBeVisible();
+  });
+
+  test("de bar toont op mobiel waar een actie of vraag over gaat", async ({ page, open }) => {
+    await open(buildMock());
+    await ready(page);
+    await goTo(page, "Werk");
+    await itemWith(page, "Build-cache delen tussen runners").click({ position: { x: 60, y: 14 } });
+    await page.keyboard.press("Control+k");
+    await bar(page).fill("reageer");
+    const hint = activeOption(page).getByText("Jira: CIACC-42 Build-cache delen tussen runners");
+    await expect(hint).toBeVisible();
+    await bar(page).fill("wat is de status?");
+    await expect(options(page).last().getByText(/^over CIACC-42/)).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
   });
 });

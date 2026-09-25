@@ -53,13 +53,42 @@ function renderConf() {
   limited(list, "conf").forEach(function (p) {
     var row = h("li", { class: "row" });
     var t = str(p.title) || "(zonder titel)";
-    var l2 = [p.space && (p.space.name || p.space.key), str(p.lastModified)].filter(Boolean).join(" · ");
+    var l2 = [p.space && (p.space.name || p.space.key), confWhen(p.lastModified)].filter(Boolean).join(" · ");
     row.append(h("div", { class: "row-main" }, h("div", { class: "l1" }, Shell.selTitle(t)), l2 ? h("div", { class: "l2", text: l2 }) : null));
     Shell.row(row, "conf", "conf:" + str(p.id || t), p);
     ul.append(row);
   });
   inner.append(ul);
   add(inner, showAllBtn(list, "conf", renderConf));
+}
+
+// Confluence geeft "lastModified" als Engelse tekst ("yesterday at 9:28 AM", "Sep 22, 2026", "about an hour ago")
+// of als ISO-datum. Naar de datumstijl van de app (whenLabel + tijd); onleesbaar: de tekst zoals hij kwam.
+function confDate(v) {
+  var s = str(v).trim(), now = new Date(), m;
+  if (!s) return null;
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) { var iso = parseDate(s); return iso ? { d: iso, time: /T\d/.test(s) } : null; }
+  var low = s.toLowerCase();
+  if (/^(just now|a moment ago|now)$/.test(low)) return { d: now, time: true };
+  m = /^(?:about\s+)?(an?|\d+)\s+(minute|hour|day)s?\s+ago$/.exec(low);
+  if (m) { var n = /^an?$/.test(m[1]) ? 1 : +m[1], ms = { minute: 60000, hour: 3600000, day: 86400000 }[m[2]]; return { d: new Date(now.getTime() - n * ms), time: m[2] !== "day" }; }
+  m = /^(today|yesterday)(?:\s+at\s+(\d{1,2}):(\d{2})\s*(am|pm)?)?$/.exec(low);
+  if (m) {
+    var d = startOfDay(now); if (m[1] === "yesterday") d.setDate(d.getDate() - 1);
+    if (m[2]) { var hr = +m[2] % 12; if (m[4] === "pm") hr += 12; else if (!m[4]) hr = +m[2]; d.setHours(hr, +m[3]); }
+    return { d: d, time: !!m[2] };
+  }
+  m = /^([a-z]{3})[a-z]*\.?\s+(\d{1,2}),?\s+(\d{4})$/.exec(low);
+  if (m) { var mi = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"].indexOf(m[1]); if (mi >= 0) return { d: new Date(+m[3], mi, +m[2]), time: false }; }
+  return null;
+}
+function confWhen(v) {
+  var r = confDate(v);
+  if (!r || isNaN(r.d)) return str(v);
+  var lbl = r.time || !sameDay(r.d, new Date()) ? whenLabel(r.d) : "vandaag";
+  if (r.time && !sameDay(r.d, new Date())) lbl += " " + hhmm(r.d);
+  if (r.d.getFullYear() !== new Date().getFullYear()) lbl += " " + r.d.getFullYear();
+  return lbl;
 }
 
 var lastPageAlert = null;
@@ -218,6 +247,16 @@ function paintJira(box, i) {
     ["Prioriteit", str(f.priority && f.priority.name)], ["Type", str(f.issuetype && f.issuetype.name)],
     ["Project", str(f.project && f.project.name)], ["Bijgewerkt", jiraWhen(f.updated)]
   ]));
+  // "wijzig" bij Status en Toegewezen: daar kijkt het oog al; opent dezelfde invulkaart als s en t.
+  if (cap.mcp) box.querySelectorAll(".meta-list dt").forEach(function (dt) {
+    var kind = dt.textContent === "Status" ? "status" : dt.textContent === "Toegewezen" ? "assign" : null;
+    var dd = dt.nextElementSibling;
+    if (!kind || !dd) return;
+    var k = kind === "status" ? "s" : "t";
+    dd.append(" ", h("button", { class: "btn text wijzig", type: "button", text: "wijzig", "aria-keyshortcuts": k,
+      "aria-label": (kind === "status" ? "Wijzig status" : "Wijzig toewijzing") + " van " + key, title: (kind === "status" ? "Status wijzigen" : "Toewijzen") + " (" + k + ")",
+      onclick: function () { var cur = Shell.current(); jiraOpenInline(cur && cur.type === "jira" ? cur.item : i, kind); } }));
+  });
   if (c.state === "error") {
     box.append(h("div", { class: "alert", role: "alert" },
       h("p", null, h("span", { "aria-hidden": "true", text: "⚠ " }), "Beschrijving en commentaar konden niet geladen worden."),
@@ -321,10 +360,13 @@ function jiraCommentPanel(i) {
   var err = h("div", { class: "err" });
   var send = h("button", { class: "btn primary", type: "button", text: "Plaats commentaar", title: "Plaats commentaar op " + key + " (Ctrl Enter)", "aria-keyshortcuts": "Control+Enter" });
   var cancel = h("button", { class: "btn", type: "button", text: "Annuleer", title: "Sluiten (Esc)" });
-  var gen = cap.sample ? h("button", { class: "btn", type: "button", text: "Laat Claude schrijven", title: "Claude schrijft een reactie in jouw stijl; je eigen tekst is de aanzet" }) : null;
-  var sync = function () { send.disabled = busy || !ta.value.trim(); ta.readOnly = busy || !!genCtl; if (gen) gen.disabled = busy || !!genCtl; cancel.disabled = busy; };
-  ta.addEventListener("input", sync);
-  ta.addEventListener("keydown", function (e) { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); post(); } });
+  var gen = cap.sample ? h("button", { class: "btn", type: "button", text: "Laat Claude schrijven", title: "Claude schrijft een reactie in jouw stijl; je eigen tekst is de aanzet (Alt+Enter)", "aria-keyshortcuts": "Alt+Enter" }) : null;
+  var sync = function () { send.disabled = busy; ta.readOnly = busy || !!genCtl; if (gen) gen.disabled = busy || !!genCtl; cancel.disabled = busy; };
+  ta.addEventListener("input", function () { if (ta.value.trim()) clear(err); sync(); });
+  ta.addEventListener("keydown", function (e) {
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); post(); }
+    else if (e.key === "Enter" && e.altKey && gen) { e.preventDefault(); gen.click(); }
+  });
   if (gen) gen.addEventListener("click", function () {
     var prev = ta.value.trim(), myCtl = genCtl = new AbortController();
     writing.textContent = "Claude schrijft…"; sync();
@@ -338,7 +380,8 @@ function jiraCommentPanel(i) {
   cancel.addEventListener("click", function () { werkUnmount(ik, el, "r"); });
   function post() {
     var text = ta.value.trim();
-    if (!text || busy || genCtl) return;
+    if (busy || genCtl) return;
+    if (!text) { clear(err).append(h("p", { class: "field-hint", role: "alert", text: "Typ eerst een reactie" + (gen ? ", of laat Claude schrijven (Alt+Enter)." : ".") })); ta.focus(); return; }
     busy = true; send.textContent = "Plaatsen…"; clear(err); sync();
     atlCall("addCommentToJiraIssue", { issueIdOrKey: key, commentBody: text, contentFormat: "markdown" }).then(function () {
       logEvent("jira_commentaar_geplaatst");
@@ -567,7 +610,14 @@ function newJiraIssue(prefill) {
     field("jn-sum", "Samenvatting", summ), field("jn-desc", "Beschrijving", desc),
     h("p", { class: "note", text: "Wordt aangemaakt in Jira en is zichtbaar voor collega's." }), err, h("div", { class: "btns" }, cancel, create));
   function close() { if (busy) return; if (el.parentNode) el.parentNode.removeChild(el); var s = document.querySelector("#lijst .row.is-sel .sel"); if (s && s.offsetParent !== null) s.focus({ preventScroll: true }); }
-  function sync() { create.disabled = busy || !projSel.value || !typeSel.value || !summ.value.trim(); }
+  function sync() { create.disabled = busy; }
+  // Wat ontbreekt er nog? Geen grijze knop: bij een klik zegt de kaart het en zet de focus op het veld.
+  function missing() {
+    if (!projSel.value) return [projSel, "Kies eerst een project."];
+    if (!typeSel.value) return [typeSel, "Kies een type."];
+    if (!summ.value.trim()) return [summ, "Vul een samenvatting in."];
+    return null;
+  }
   [summ, desc].forEach(function (x) { x.addEventListener("input", sync); x.addEventListener("keydown", function (e) { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submit(); } }); });
   function fillTypes() {
     var pk = projSel.value;
@@ -598,7 +648,9 @@ function newJiraIssue(prefill) {
     fillTypes();
   }, function (e) { clear(projSel).append(h("option", { value: "", text: "Niet beschikbaar" })); clear(err).append(werkErr(e)); sync(); });
   function submit() {
-    if (busy || create.disabled) return;
+    if (busy) return;
+    var miss = missing();
+    if (miss) { clear(err).append(h("p", { class: "field-hint", role: "alert", text: miss[1] })); miss[0].focus(); return; }
     busy = true; create.textContent = "Aanmaken…"; clear(err); sync(); cancel.disabled = true;
     var pk = projSel.value;
     atlCall("createJiraIssue", { projectKey: pk, issueTypeName: typeSel.value, summary: summ.value.trim(), description: desc.value.trim(), contentFormat: "markdown" }).then(function (r) {
@@ -703,7 +755,7 @@ function paintConf(box, p) {
   var id = str(p.id), c = werk.conf[id] || {}, d = c.data || {};
   clear(box);
   var author = str((d.author || p.author || {}).displayName);
-  add(box, metaList([["Space", str((d.space || p.space || {}).name || (d.space || p.space || {}).key)], ["Gewijzigd", str(d.lastModified || p.lastModified)], ["Auteur", author]]));
+  add(box, metaList([["Space", str((d.space || p.space || {}).name || (d.space || p.space || {}).key)], ["Gewijzigd", confWhen(d.lastModified || p.lastModified)], ["Auteur", author]]));
   if (c.state === "error") {
     box.append(h("div", { class: "alert", role: "alert" },
       h("p", null, h("span", { "aria-hidden": "true", text: "⚠ " }), "De pagina kon niet geladen worden."),

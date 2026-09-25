@@ -145,6 +145,9 @@ function cmdBuild(raw) {
   } else {
     var all = cmdNav().concat(acts, gen, cmdItems());
     all.forEach(function (c) { c.score = cmdScore(q, c); });
+    // "jira" of "issue" op een mail, Teams-bericht of actie: bedoeld is bijna altijd een issue van dit item maken.
+    var cur = Shell.current();
+    if (cur && /^(mail|teams|actie)$/.test(cur.type) && /jira|issue|ticket/.test(q)) all.forEach(function (c) { if (c.kind === "act" && c.label === "Nieuw Jira-issue" && c.score) c.score += 40; });
     list = all.filter(function (c) { return c.score > 0; });
     list.sort(function (a, b) { return b.score - a.score; });
     // Dubbele labels (bv. twee rijen met hetzelfde onderwerp) mogen; dezelfde actie twee keer niet.

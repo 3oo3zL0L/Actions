@@ -70,7 +70,7 @@ test.describe("Jira-detail", () => {
     const [call] = await mcpCalls(page, "transitionJiraIssue");
     expect(call.input).toMatchObject({ issueIdOrKey: "PCORE-101", transition: { id: "41" } });
     await expect(itemWith(page, "Pipeline faalt op integratietests")).toContainText("Done");
-    await expect(detail(page).getByRole("definition").first()).toHaveText("Done");
+    await expect(detail(page).getByRole("definition").first()).toHaveText(/^Done/);
     // Een ander issue heeft andere transities: nooit een vaste lijst.
     await openItem(page, "Retentiebeleid voor object versies");
     await actionBar(page).getByRole("button", { name: "Status" }).click();
@@ -86,8 +86,14 @@ test.describe("Jira-detail", () => {
     const box = detail(page).getByRole("textbox", { name: "Commentaar" });
     await expect(box).toBeFocused();
     const post = detail(page).getByRole("button", { name: "Plaats commentaar" });
-    await expect(post).toBeDisabled();
-    await detail(page).getByRole("button", { name: "Laat Claude schrijven" }).click();
+    // Geen grijze knop: leeg plaatsen zegt wat er moet gebeuren en zet de focus terug in het veld.
+    await expect(post).toBeEnabled();
+    await post.click();
+    await expect(detail(page).getByRole("alert")).toContainText("Typ eerst een reactie");
+    await expect(box).toBeFocused();
+    // Laat Claude schrijven: knop met toets Alt+Enter in de tooltip, en de toets werkt in het veld.
+    await expect(detail(page).getByRole("button", { name: "Laat Claude schrijven" })).toHaveAttribute("title", /\(Alt\+Enter\)$/);
+    await box.press("Alt+Enter");
     await expect(box).toHaveValue("Ziet er goed uit, that being said, graag ook de release-branch pinnen.");
     const prompt = (await mockLog(page)).sample.at(-1).input;
     expect(String(prompt)).toContain("PCORE-101");
@@ -103,6 +109,18 @@ test.describe("Jira-detail", () => {
     await expect(comments).toHaveCount(3);
     await expect(comments.last()).toContainText("release-branch pinnen");
     await expect(detail(page).getByRole("textbox", { name: "Commentaar" })).toHaveCount(0);
+  });
+
+  test("Status en Toegewezen in het detail zijn klikbaar (wijzig) en openen dezelfde invulkaart", async ({ page, open }) => {
+    await open(buildMock());
+    await openIssue(page, "Build-cache delen tussen runners");
+    const status = detail(page).getByRole("button", { name: "Wijzig status van CIACC-42" });
+    await expect(status).toHaveAttribute("title", /\(s\)$/);
+    await status.click();
+    await expect(detail(page).getByRole("group", { name: "Zet status op" }).getByRole("button")).toHaveText(["Review", "To Do"]);
+    await page.keyboard.press("Escape");
+    await detail(page).getByRole("button", { name: "Wijzig toewijzing van CIACC-42" }).click();
+    await expect(detail(page).getByRole("group", { name: "Toewijzen: CIACC-42" })).toContainText("Nu: Ruben Smit");
   });
 
   test("Reageer: Esc sluit het invulveld; Ctrl+Enter plaatst", async ({ page, open }) => {
@@ -131,7 +149,7 @@ test.describe("Jira-detail", () => {
     await expect(feedbackBar(page)).toContainText("OBJS-7 toegewezen aan jou");
     let [call] = await mcpCalls(page, "editJiraIssue");
     expect(call.input).toMatchObject({ issueIdOrKey: "OBJS-7", fields: { assignee: { accountId: "acc-thomas" } } });
-    await expect(detail(page).getByRole("definition").nth(1)).toHaveText("Thomas Testpersoon");
+    await expect(detail(page).getByRole("definition").nth(1)).toHaveText(/^Thomas Testpersoon/);
     // Iemand anders: zoeken op naam.
     await page.keyboard.press("t");
     await detail(page).getByRole("textbox", { name: "Zoek een persoon" }).fill("noor");
@@ -198,7 +216,11 @@ test.describe("Confluence-leesweergave", () => {
     await open(buildMock());
     await goTo(page, "Werk");
     await revealTab(page, /confluence/i);
+    // Datums in de app-stijl: "yesterday at 9:28 AM" wordt "gisteren 09:28", nergens Engelse datumtekst.
+    await expect(itemWith(page, "Migratieplan Jakarta EE 10")).toContainText("gisteren 09:28");
+    expect(await page.locator("#lijst").innerText()).not.toMatch(/yesterday|\bAM\b|Sep 22/);
     await openItem(page, "Migratieplan Jakarta EE 10");
+    await expect(detail(page).getByRole("definition").nth(1)).toHaveText("gisteren 09:28");
     const art = detail(page).getByRole("article", { name: /Leesweergave/ });
     await expect(art).toContainText("Alle modules gaan naar Jakarta EE 10");
     const [call] = await mcpCalls(page, "getConfluencePage");
@@ -256,5 +278,37 @@ test.describe("Mobiel 375px", () => {
     await itemWith(page, "Migratieplan Jakarta EE 10").click({ position: { x: 60, y: 14 } });
     await expect(detail(page).getByRole("table")).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
+  });
+
+  // Een open invulkaart valt nooit achter de sticky actiebalk: na openen staat zijn onderkant vrij boven de balk.
+  async function clearOfBar(page, card, what) {
+    await expect(card).toBeVisible();
+    await expect.poll(async () => {
+      const c = await card.boundingBox(), b = await actionBar(page).boundingBox();
+      return Math.round(b.y - (c.y + c.height));
+    }, { message: what + " valt achter de actiebalk" }).toBeGreaterThanOrEqual(0);
+    expect((await card.boundingBox()).y, what + ": bovenkant uit beeld").toBeGreaterThanOrEqual(0);
+  }
+  test("Reageer, Status en Nieuw Jira-issue: kaart en knoppen vrij van de sticky actiebalk", async ({ page, open }) => {
+    await open(buildMock());
+    await goTo(page, "Werk");
+    await itemWith(page, "Pipeline faalt op integratietests na upgrade").click({ position: { x: 60, y: 14 } });
+    await expect(detail(page).getByRole("heading", { name: "Commentaar (2)" })).toBeVisible();
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)); // Thomas las eerst het commentaar
+    await actionBar(page).getByRole("button", { name: "Reageer" }).click();
+    await clearOfBar(page, detail(page).getByRole("group", { name: "Reageer op PCORE-101" }), "Reageer");
+    await expect(detail(page).getByRole("button", { name: "Plaats commentaar" })).toBeInViewport();
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("s");
+    await clearOfBar(page, detail(page).getByRole("group", { name: "Status van PCORE-101" }), "Status");
+    await page.keyboard.press("Escape");
+    await detail(page).getByRole("button", { name: "Terug" }).click();
+    await goTo(page, "Inbox");
+    await itemWith(page, "Budget CI-runners Q4").click({ position: { x: 60, y: 14 } });
+    await expect(detail(page).getByRole("heading", { level: 2 })).toHaveText("Budget CI-runners Q4");
+    await page.keyboard.press("i");
+    const form = detail(page).getByRole("group", { name: "Nieuw Jira-issue van deze mail" });
+    await clearOfBar(page, form, "Nieuw Jira-issue");
+    await expect(form.getByRole("button", { name: "Maak issue" })).toBeEnabled(); // geen grijze knop
   });
 });
