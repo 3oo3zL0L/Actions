@@ -9,7 +9,7 @@ Lees dit als je (Claude, als PO) in een nieuwe sessie verdergaat met de Actiepag
 
 ## Links
 - App (artifact): https://claude.ai/artifact/PqANDMJuGom3jRqvm8k7zv, bron `src/index.html`. Publiceren met
-  `Artifact` + `url` van deze app (anders ontstaat een nieuwe). Capabilities: mcp (Microsoft 365, Atlassian Rovo), sample, db, comments.
+  `Artifact` + `url` van deze app (anders ontstaat een nieuwe). Capabilities: mcp (Microsoft 365, Atlassian Rovo), sample, db.
 - Verbeterpunten-document: https://claude.ai/code/artifact/e119fb53-6e4d-44c4-b628-513c70e9488a
 - Oude PAF actielijst (archief): https://claude.ai/artifact/Ar6sRYzLNFu5dzdLw1Y4gw
 - Repo-branch: `claude/zealous-brahmagupta-fywd7j`
@@ -25,7 +25,7 @@ Lees dit als je (Claude, als PO) in een nieuwe sessie verdergaat met de Actiepag
 | `docs/contract/*.d.ts` | runtime-contracten van `window.claude` |
 
 ## Database van de app
-`acties` (hoofdlijst), `voorstellen` (ochtendrun), `feedback` (Send to PO), `gebruik/<datum>` (gebruikslog).
+`acties` (hoofdlijst), `voorstellen` (ochtendrun en scan), `gebruik/<datum>` (gebruikslog). `feedback` is niet meer in gebruik.
 
 ## Lessen
 - Microsoft 365-zoektools accepteren `limit` maximaal 25. De mock dwingt dit af.
@@ -34,6 +34,6 @@ Lees dit als je (Claude, als PO) in een nieuwe sessie verdergaat met de Actiepag
 
 ## Bij een nieuwe sessie
 1. Lees dit bestand en `git log --oneline | head`.
-2. De koppeling "Send to PO" en opmerkingen wekken alleen de sessie die de app volgt. Publiceer de app één keer
-   opnieuw vanuit de nieuwe sessie (met `url`), zodat die sessie de meldingen krijgt.
+2. Feedback komt via het verbeterpunten-document. Verwerk het, bewaar de afgehandelde punten in
+   `docs/verbeterpunten/<datum>.md` en maak de tabel daarna leeg voor een nieuwe ronde.
 3. Controleer de wekelijkse analist-routine (list_triggers) en laat hem naar de nieuwe sessie wijzen.
