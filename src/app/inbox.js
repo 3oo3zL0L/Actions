@@ -568,7 +568,7 @@ function notifRow(e) {
 function channelRow(c) {
   var status = c.followed ? (c.err ? "Gevolgd · ophalen lukte niet" : "Gevolgd · ververst elke 3 minuten") : "Niet gevolgd";
   if (c.teamName) status += " · " + c.teamName;
-  var row = h("li", { class: "row compact" });
+  var row = h("li", { class: "row irow compact" });
   row.append(h("div", { class: "row-main" },
     h("div", { class: "l1" }, srcIcon("teams"), Shell.selTitle(c.name, c.followed ? ", gevolgd kanaal" : ", kanaal"), c.last ? relTime(new Date(c.last)) : null),
     h("div", { class: "l2", text: status })));
@@ -1149,7 +1149,8 @@ function moreAction(extras) {
 }
 function toggleMore(extras, btn) {
   var slot = Shell.inlineSlot(), ex = slot.querySelector(".more-card");
-  if (ex) { ex.remove(); if (btn) { btn.setAttribute("aria-expanded", "false"); btn.focus(); } return; }
+  if (ex && !ex.hidden) { ex.remove(); if (btn) { btn.setAttribute("aria-expanded", "false"); btn.focus(); } return; }
+  if (ex) ex.remove(); // met Esc verborgen (closeMenus): opnieuw openen
   var card = h("div", { class: "amenu more-card", role: "group", "aria-label": "Meer acties" });
   extras.forEach(function (x) {
     card.append(h("button", { class: "btn", type: "button", title: (x.title || x.label) + " (" + x.key + ")", "aria-keyshortcuts": x.key, text: x.label,

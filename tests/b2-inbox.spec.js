@@ -190,6 +190,15 @@ test.describe("VIP", () => {
     await expect.poll(async () => (await prefsDoc(page)).vip).toEqual(["Femke Bos"]);
   });
 
+  test("komt de agenda later binnen dan de mail, dan schuift wie Thomas vandaag spreekt alsnog naar boven", async ({ page, open }) => {
+    const mock = inboxMock();
+    mock.tools["Microsoft 365"].outlook_calendar_search.delayMs = 1500;
+    await open(mock);
+    await inbox(page);
+    await expect(rowButton(page, "Sanne Dekker", "mail, ongelezen, bovenaan")).toBeVisible({ timeout: 6000 });
+    await expect(lijst(page).getByRole("heading", { name: "Bovenaan" })).toBeVisible();
+  });
+
   test("wie vandaag met Thomas vergadert staat bovenaan met uitleg; voorkeur vip uit de db werkt na herladen", async ({ page, open }) => {
     await open(inboxMock({ db: { docs: { "prefs/thomas": { vip: ["Joost Kramer"] } } } }));
     await inbox(page);
@@ -247,6 +256,8 @@ test.describe("Maildetail", () => {
     await expect(meer.getByRole("button", { name: "Doorsturen" })).toHaveAttribute("title", /\(f\)$/);
     await page.keyboard.press("Escape");
     await expect(meer).toBeHidden();
+    await page.locator("body").press("m"); // na Esc gaat Meer gewoon weer open
+    await expect(meer).toBeVisible();
   });
 });
 
