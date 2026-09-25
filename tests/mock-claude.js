@@ -31,6 +31,9 @@
  *   { text: "..." } | { content: [...] }        // rauw
  *   { error: {code, message, retryable?, retryAfterMs?} }  // reject McpError
  *   { sequence: [Fixture, ...] }                // n-de call krijgt n-de (laatste herhaalt)
+ *   { byInput: [{ when: {...}, ...Fixture }], otherwise?: Fixture }  // kiest op invoer (groep A)
+ * Standaard zoals bij Thomas: Teams-schrijftools en search_people falen met "Missing scope" (tool_error);
+ * __MOCK__.teamsSendBlocked = false / peopleBlocked = false staat ze toe (groep A).
  *   + optioneel delayMs
  *
  * SampleRule:
@@ -131,6 +134,43 @@
     return LOG.mcp.filter((c) => c.server === server && c.tool === tool).length - 1;
   }
 
+  // ===== Groep A (B2/B3): rechtengrenzen van Thomas' Microsoft 365-koppeling en fixtures per invoer =====
+  // - Teams-schrijftools en search_people geven standaard (zoals bij Thomas) een tool_error
+  //   "FORBIDDEN: Missing scope '<scope>': ...". __MOCK__.teamsSendBlocked = false resp. peopleBlocked = false
+  //   staat ze toe. Een expliciete fixture voor de tool wint altijd.
+  // - outlook_modify_labels eist messageId en een niet-lege addCategories en/of removeCategories (zoals het schema).
+  // - Fixture { byInput: [{ when: { veld: waarde }, ...Fixture }], otherwise?: Fixture } kiest op de invoer
+  //   (bv. read_resource per uri, teams_list_channel_messages per kanaal); zonder treffer: otherwise of de standaard.
+  const MISSING_SCOPE = { teams_send_chat_message: "ChatMessage.Send", teams_create_chat: "Chat.Create",
+    teams_send_channel_message: "ChannelMessage.Send", teams_reply_channel_message: "ChannelMessage.Send", search_people: "People.Read" };
+  const GRANTED_SCOPES = "Calendars.ReadWrite, Mail.ReadWrite, Mail.Send, Chat.Read, ChatMessage.Read, ChatMember.Read, Channel.ReadBasic.All, " +
+    "ChannelMessage.Read.All, User.ReadBasic.All, MailboxSettings.ReadWrite, Files.Read.All, Sites.Read.All, OnlineMeetings.Read";
+  function groupAGuard(c, server, tool, input, explicitFx) {
+    if (server !== "Microsoft 365") return null;
+    const scope = MISSING_SCOPE[tool];
+    if (scope && !explicitFx && (tool === "search_people" ? c.peopleBlocked !== false : c.teamsSendBlocked !== false)) {
+      const message = "FORBIDDEN: Missing scope '" + scope + "': Microsoft Entra has not granted this connector the delegated permission required by " +
+        tool + ". Granted permissions: " + GRANTED_SCOPES;
+      return { code: "tool_error", message, server, result: { content: [{ type: "text", text: message }], isError: true } };
+    }
+    if (tool === "outlook_modify_labels") {
+      const list = (k) => input && Array.isArray(input[k]) && input[k].length > 0 && input[k].every((x) => typeof x === "string" && x);
+      if (!input || typeof input.messageId !== "string" || !input.messageId || !(list("addCategories") || list("removeCategories"))) {
+        violation("outlook_modify_labels: messageId en addCategories/removeCategories verplicht");
+        const message = "Input validation error: messageId and addCategories or removeCategories are required";
+        return { code: "tool_error", message, server, result: { content: [{ type: "text", text: message }], isError: true } };
+      }
+    }
+    return null;
+  }
+  function fixtureByInput(fx, input) {
+    if (!fx || !Array.isArray(fx.byInput)) return fx;
+    const hit = fx.byInput.find((e) => Object.entries(e.when || {}).every(([k, v]) => input && JSON.stringify(input[k]) === JSON.stringify(v)));
+    if (hit) { const { when, ...rest } = hit; return rest; }
+    return fx.otherwise || null;
+  }
+  // ===== einde groep A =====
+
   async function execTool(server, tool, input, via, signal) {
     const entry = { via, server, tool, input: clone(input), t: Date.now(), outcome: "pending" };
     LOG.mcp.push(entry);
@@ -157,10 +197,14 @@
         throw mcpErr("tool_error", `Input validation error: limit must be <= ${max}`, { server });
       }
       let fx = c.tools && c.tools[server] && c.tools[server][tool];
+      const explicitFx = !!fx; // groep A
       if (fx && Array.isArray(fx.sequence)) {
         const n = countPrior(server, tool);
         fx = fx.sequence[Math.min(n, fx.sequence.length - 1)];
       }
+      fx = fixtureByInput(fx, input); // groep A
+      const guardErr = groupAGuard(c, server, tool, input, explicitFx); // groep A
+      if (guardErr) { await sleep(5); throw guardErr; } // groep A
       if (!fx) fx = defaultFixture(server, tool);
       await sleep(fx.delayMs || 5);
       if (signal && signal.aborted) throw mcpErr("cancelled", "aborted");

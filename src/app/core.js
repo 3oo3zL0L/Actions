@@ -212,6 +212,16 @@ var DIRECT_LABEL = { cal: "Open Outlook", mail: "Open Outlook", teams: "Open Tea
 var RETRACT = { needs_reauth: 1, server_not_connected: 1, server_not_found: 1, selection_required: 1, not_in_manifest: 1, blocked_by_policy: 1, approval_required: 1, consent_required: 1, not_granted: 1, capability_disabled: 1, capability_removed: 1 };
 var KNOWN = ["needs_reauth", "server_not_connected", "selection_required", "server_not_found", "server_unavailable", "not_in_manifest", "blocked_by_policy", "approval_required", "tool_error", "bad_request", "cancelled", "rate_limited", "upstream_error", "not_granted", "capability_disabled", "capability_removed", "transform_error", "consent_required", "user_changed"];
 function errCode(e) { var c = e && typeof e === "object" ? e.code : null; return KNOWN.indexOf(c) >= 0 ? c : "upstream_error"; }
+// Ontbrekend recht in Microsoft Entra (tool_error "FORBIDDEN: Missing scope '<scope>'"): geeft de scope of null.
+function missingScope(e) {
+  if (!e || typeof e !== "object") return null;
+  var t = str(e.message);
+  var c = e.result && Array.isArray(e.result.content) ? e.result.content : [];
+  c.forEach(function (b) { if (b && typeof b.text === "string") t += " " + b.text; });
+  var m = /Missing scope '([^']+)'/.exec(t);
+  return m ? m[1] : null;
+}
+var TEAMS_BLOCKED_TEXT = "Teams staat direct versturen niet toe voor jouw account (IT moet toestemming geven).";
 var NA_TEXT = "Geen koppelingen in deze weergave. Open de pagina in claude.ai en koppel Microsoft 365 en Atlassian.";
 // Geeft {cat, lines:[...], btn:null|"retry"|"consent", link:bool}
 function describeError(e, key, state) {

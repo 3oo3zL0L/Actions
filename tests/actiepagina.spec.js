@@ -4,7 +4,7 @@
 const { test: base, expect } = require("@playwright/test");
 const { buildMock, emptyMock } = require("./fixtures");
 const { openPage, mockLog, mcpCalls, dbDump, heading, section, itemWith, revealTab, JUNK_TEXT,
-  goTo, actionBar, openItem, openClaude } = require("./helpers");
+  goTo, actionBar, openItem, openClaude, detail, feedbackBar } = require("./helpers");
 
 // ---- Microcopy-aannames (UI is Nederlands, zie BRIEF.md) ----------------------------------
 const H = {
@@ -188,23 +188,23 @@ test.describe("Agenda", () => {
 
 // =========================================================================================
 test.describe("Inbox", () => {
-  test("toont alle mails uit de losse contentblokken, ongelezen eerst", async ({ page, open }) => {
+  test("toont alle mails uit de losse contentblokken, nieuwste eerst (B2: plan 3a)", async ({ page, open }) => {
     await open(buildMock());
     await goTo(page, "Inbox");
     // payload bevat alleen het eerste blok (mail-001); de rest bewijst dat alle blokken geparsed zijn.
     for (const s of ["Planning release 26.4", "Budget CI-runners Q4", "Vraag over OIDC-scope voor partnerportaal"]) {
       await expect(page.getByText(s).first()).toBeVisible();
     }
-    const unreadFirst = await page.evaluate(() => {
+    const newestFirst = await page.evaluate(() => {
       const find = (s) => {
-        const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+        const w = document.createTreeWalker(document.getElementById("lijst"), NodeFilter.SHOW_TEXT);
         for (let n = w.nextNode(); n; n = w.nextNode()) if (n.textContent.includes(s)) return n;
         return null;
       };
-      const unread = find("Budget CI-runners Q4"), read = find("Planning release 26.4");
-      return !!(unread && read && (unread.compareDocumentPosition(read) & Node.DOCUMENT_POSITION_FOLLOWING));
+      const newer = find("Planning release 26.4"), older = find("Budget CI-runners Q4"); // 12 en 45 minuten geleden
+      return !!(newer && older && (newer.compareDocumentPosition(older) & Node.DOCUMENT_POSITION_FOLLOWING));
     });
-    expect(unreadFirst, "ongelezen mail staat niet boven gelezen mail").toBe(true);
+    expect(newestFirst, "nieuwere mail staat niet boven oudere mail").toBe(true);
     await expectNoJunk(page); // o.a. geen paginatieblok als item
   });
 
@@ -221,41 +221,35 @@ test.describe("Inbox", () => {
 
   test("toont Teams-berichten van vandaag en gisteren", async ({ page, open }) => {
     await open(buildMock());
-    await revealTab(page, /teams/i);
+    await revealTab(page, /teams/i); // B2: filterknop Teams in de ene Inbox-lijst
     await expect(page.getByText("Heb je de benchmark van de nieuwe storage-backend al gezien?").first()).toBeVisible();
     await expect(page.getByText("Nightly build was gisteren weer groen na de cachefix.").first()).toBeVisible();
-    await expect(page.getByRole("tabpanel", { name: /teams/i }).getByText("Mark Bakker").first()).toBeVisible();
+    await expect(itemWith(page, "Heb je de benchmark").getByText("Mark Bakker")).toBeVisible();
     await expectNoJunk(page);
   });
 
-  test("Antwoord-concept maakt pas na bevestiging een concept in Outlook, nooit versturen", async ({ page, open }) => {
+  // B2: Beantwoord vervangt Antwoord-concept. Niets gaat naar Outlook voor Thomas op Verstuur klikt, en Annuleer
+  // binnen de 10 seconden verstuurt niets (geen concept, geen send). Versturen zelf: tests/b2-inbox.spec.js.
+  test("Beantwoord: Claude schrijft pas op verzoek, niets naar Outlook voor Verstuur; Annuleer binnen 10 s verstuurt niets", async ({ page, open }) => {
     await open(buildMock({
       sample: { rules: [{ match: "runner", text: "Dag Ruben, akkoord met de verdubbeling van de runners. Groet, Thomas" }] },
     }));
     await goTo(page, "Inbox");
     await openItem(page, "Budget CI-runners Q4");
-    await actionBar(page).getByRole("button", { name: /antwoord/i }).click();
+    await actionBar(page).getByRole("button", { name: "Beantwoord" }).click();
+    const ta = detail(page).getByRole("textbox", { name: "Tekst" });
+    await expect(ta).toBeFocused();
+    await detail(page).getByRole("button", { name: "Laat Claude schrijven" }).click();
     await expect.poll(() => pageContains(page, "akkoord met de verdubbeling"), { timeout: 8000 }).toBe(true);
-    expect(await mcpCalls(page, "outlook_create_reply_draft"), "concept al gemaakt zonder bevestiging").toEqual([]);
+    expect(await mcpCalls(page, /outlook_create_reply|send|forward/), "iets naar Outlook zonder Verstuur").toEqual([]);
 
-    // Thomas past de tekst aan (als die in een bewerkbaar veld staat).
-    const edited = await page.evaluate(() => {
-      const el = [...document.querySelectorAll("textarea, [contenteditable=true]")]
-        .find((e) => (e.value ?? e.innerText).includes("akkoord met de verdubbeling"));
-      if (!el) return false;
-      el.setAttribute("data-test-draft", "1");
-      return true;
-    });
-    if (edited) await page.locator("[data-test-draft]").fill("Dag Ruben, akkoord. AANGEPAST door Thomas.");
-
-    await page.getByRole("button", { name: DRAFT_CONFIRM_BTN }).last().click();
-    await expect.poll(async () => (await mcpCalls(page, "outlook_create_reply_draft")).length).toBe(1);
-    const [draft] = await mcpCalls(page, "outlook_create_reply_draft");
-    expect(draft.server).toBe("Microsoft 365");
-    expect(draft.input.messageId).toBe("mail-003");
-    const body = String(draft.input.body ?? draft.input.comment ?? "");
-    expect(body).toContain(edited ? "AANGEPAST door Thomas" : "akkoord met de verdubbeling");
-    expect(await mcpCalls(page, /send/), "verstuur-tool aangeroepen").toEqual([]);
+    await ta.fill("Hi Ruben,\n\nAkkoord. AANGEPAST door Thomas.");
+    await detail(page).getByRole("button", { name: "Verstuur" }).click();
+    await page.clock.runFor(3000);
+    await feedbackBar(page).getByRole("button", { name: /^Annuleer/ }).click();
+    await page.clock.runFor(15000);
+    expect(await mcpCalls(page, /outlook_create_reply|send|forward/), "verstuurd ondanks Annuleer").toEqual([]);
+    await expect(detail(page).getByRole("textbox", { name: "Tekst" })).toHaveValue(/AANGEPAST door Thomas/);
   });
 });
 

@@ -1,13 +1,18 @@
 // Ronde 4: mailstijl van Thomas, voorstellen uit mail en Teams (+ scan), "Vraag Claude" per item, thema Dark Forest.
 const { test: base, expect } = require("@playwright/test");
 const { buildMock, data } = require("./fixtures");
-const { openPage, mockLog, mcpCalls, dbDump, itemWith, goTo, actionBar, openItem, openClaude } = require("./helpers");
+const { openPage, mockLog, mcpCalls, dbDump, itemWith, goTo, actionBar, openItem, openClaude, detail, inboxFilter } = require("./helpers");
 
 /** B1: mail selecteren in Inbox en een knop uit de actiebalk klikken. */
 async function mailAction(page, subject, button) {
   await goTo(page, "Inbox");
   await openItem(page, subject);
   await actionBar(page).getByRole("button", { name: button }).click();
+}
+/** B2: Beantwoord opent het antwoordveld in het detail; Claude schrijft op "Laat Claude schrijven". */
+async function claudeReply(page, subject) {
+  await mailAction(page, subject, "Beantwoord");
+  await detail(page).getByRole("button", { name: "Laat Claude schrijven" }).click();
 }
 
 const SEND_TOOLS = /send_mail|send_draft|forward_mail|outlook_send/;
@@ -34,10 +39,10 @@ const textareaValues = (page) => page.evaluate(() => [...document.querySelectorA
 
 // =========================================================================================
 test.describe("Mailstijl van Thomas", () => {
-  test("Antwoord-concept: prompt bevat EMAIL_STYLE, uitvoer eindigt op KR/Thomas zonder em-dash", async ({ page, open }) => {
+  test("Beantwoord + Laat Claude schrijven: prompt bevat EMAIL_STYLE, uitvoer eindigt op KR/Thomas zonder em-dash", async ({ page, open }) => {
     await open(buildMock({ sample: { rules: [{ match: "runner",
       text: "Hi Ruben,\n\nAkkoord met de verdubbeling — prima voorstel. That said, houd het budget in de gaten.\n\nGroet,\nThomas" }] } }));
-    await mailAction(page, "Budget CI-runners Q4", "Antwoord-concept");
+    await claudeReply(page, "Budget CI-runners Q4");
     await expect.poll(async () => (await textareaValues(page)).some((v) => /KR\nThomas$/.test(v)), { timeout: 8000 }).toBe(true);
     const value = (await textareaValues(page)).find((v) => /KR\nThomas$/.test(v));
     expect(value).not.toMatch(/—|–/);
@@ -52,15 +57,17 @@ test.describe("Mailstijl van Thomas", () => {
     expect(prompt).toMatch(/Taal: die van de ontvangen mail/);
     expect(prompt).not.toContain("Groet, Thomas");
 
-    await page.getByRole("button", { name: "Uitvoeren" }).last().click();
-    await expect.poll(async () => (await mcpCalls(page, "outlook_create_reply_draft")).length).toBe(1);
-    const [draft] = await mcpCalls(page, "outlook_create_reply_draft");
-    expect(draft.input.body).toMatch(/\n\nKR\nThomas$/);
+    // B2: versturen gaat met 10 s uitstel; de verstuurde body (KR/Thomas) staat in tests/b2-inbox.spec.js.
+    // Hier (geen verstuur-tools toegestaan) annuleren we binnen de tijd: er gaat niets naar Outlook.
+    await detail(page).getByRole("button", { name: "Verstuur" }).click();
+    await page.getByRole("status").getByRole("button", { name: /^Annuleer/ }).first().click();
+    await page.clock.runFor(12000);
+    expect(await mcpCalls(page, /outlook_create_reply/)).toEqual([]);
   });
 
   test("KR/Thomas wordt niet dubbel toegevoegd", async ({ page, open }) => {
     await open(buildMock({ sample: { rules: [{ match: "runner", text: "Hi Ruben,\n\nAkkoord.\n\nKR\nThomas" }] } }));
-    await mailAction(page, "Budget CI-runners Q4", "Antwoord-concept");
+    await claudeReply(page, "Budget CI-runners Q4");
     await expect.poll(async () => (await textareaValues(page)).includes("Hi Ruben,\n\nAkkoord.\n\nKR\nThomas"), { timeout: 8000 }).toBe(true);
   });
 
@@ -187,14 +194,15 @@ test.describe("Vraag Claude per item", () => {
     expect(prompt).toContain("messageId: mail-003");
     expect(prompt).toContain("Volledige mail over runners.");
     expect(call.toolNames).toContain("voer_uit");
-    expect((await mcpCalls(page, "read_resource"))[0].input).toEqual({ uri: "mail:///messages/mail-003" });
+    // B2: het detail laadt de volledige inhoud ook (eerst het automatisch geselecteerde item); de mail-uri moet erbij zijn.
+    expect((await mcpCalls(page, "read_resource")).map((c) => c.input)).toContainEqual({ uri: "mail:///messages/mail-003" });
     await expect(ctxCard(page)).toBeHidden(); // context is gebruikt
   });
 
   test("Teams- en actierij: contextkaart, ✕ haalt context weg, events worden gelogd", async ({ page, open }) => {
     await open(buildMock());
     await goTo(page, "Inbox");
-    await page.getByRole("tab", { name: /teams/i }).click();
+    await inboxFilter(page).getByRole("button", { name: /^Teams/ }).click(); // B2: filterknop in plaats van tab
     await openItem(page, T0.summary);
     await actionBar(page).getByRole("button", { name: "Vraag Claude" }).click();
     await expect(ctxCard(page)).toContainText("Over:");

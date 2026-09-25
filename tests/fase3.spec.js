@@ -1,7 +1,7 @@
 // Fase 3: "Send to PO" (comments-capability, docs/contract/comments.d.ts) en het gebruikslog (db `gebruik`).
 const { test: base, expect } = require("@playwright/test");
 const { buildMock } = require("./fixtures");
-const { openPage, mockLog, dbDump, goTo, openClaude } = require("./helpers");
+const { openPage, mockLog, dbDump, goTo, openClaude, inboxFilter } = require("./helpers");
 
 const SEND_TOOLS = /send_mail|send_draft|forward_mail|outlook_send/;
 const test = base.extend({
@@ -41,7 +41,7 @@ test.describe("Gebruikslog", () => {
     await expect(page.getByText("Architectuuroverleg Object Store").first()).toBeVisible();
     await page.getByRole("button", { name: /alles verversen/i }).click();
     await goTo(page, "Inbox");
-    await page.getByRole("tab", { name: /teams/i }).click();
+    await inboxFilter(page).getByRole("button", { name: /^Teams/ }).click(); // B2: filterknop in plaats van tab
     await goTo(page, "Acties");
     const input = page.getByRole("textbox", { name: /nieuwe actie/i });
     await input.fill("Log-test actie");

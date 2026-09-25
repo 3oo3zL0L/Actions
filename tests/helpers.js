@@ -94,7 +94,15 @@ async function openClaude(page) {
  */
 async function revealTab(page, name) {
   const tab = page.getByRole("tab", { name, includeHidden: true });
-  if (!(await tab.count())) return;
+  if (!(await tab.count())) {
+    // B2: Mail en Teams staan in één Inbox-lijst met filterknoppen (Alles / Mail / Teams).
+    const src = String(name);
+    if (/mail|teams/i.test(src)) {
+      await goTo(page, "Inbox");
+      await inboxFilter(page).getByRole("button", { name }).first().click();
+    }
+    return;
+  }
   if (!(await tab.first().isVisible())) {
     const label = await tab.first().innerText();
     await goTo(page, /mail|teams/i.test(label) ? "Inbox" : "Werk");
@@ -102,8 +110,11 @@ async function revealTab(page, name) {
   await tab.first().click();
 }
 
+/** B2: de filterknoppen van de Inbox (Alles / Mail / Teams / Afgehandeld). */
+const inboxFilter = (page) => page.getByRole("group", { name: "Filter inbox" });
+
 /** Tekst die nooit op het scherm mag staan (lekkende implementatie). */
 const JUNK_TEXT = [/\[object Object\]/, /\bundefined\b/, /\bNaN\b/, /moreResults|nextOffset|nextCursor/];
 
 module.exports = { openPage, mockLog, mcpCalls, dbDump, heading, section, itemWith, revealTab, JUNK_TEXT, PAGE_URL,
-  ENTRY_NAMES, nav, entryButton, goTo, detail, actionBar, feedbackBar, openItem, openClaude };
+  ENTRY_NAMES, nav, entryButton, goTo, detail, actionBar, feedbackBar, openItem, openClaude, inboxFilter };
