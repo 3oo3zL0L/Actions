@@ -2,9 +2,11 @@
 /* Layout: drie zones. Links de ingangen, midden de lijst, rechts het detail (of het Claude-paneel).
    Elke kolom scrolt zelf; de pagina zelf scrolt niet op desktop. Mobiel (<= 700px): tabbalk onderaan,
    lijst en detail zijn twee schermen. */
-:root { --nav-w: 168px; --tab-h: 60px; --fb-h: 0px; }
+/* Regel: het detail krijgt hoogstens 560px (--detail-w: minmax(360px, min(560px, 42vw))), de lijst de rest. Ook het Claude-paneel gebruikt
+   --detail-w, zodat de lijst niet verspringt als het paneel opent. */
+:root { --nav-w: 168px; --tab-h: 60px; --fb-h: 0px; --detail-w: minmax(360px, min(560px, 42vw)); }
 .app { display: grid; height: 100vh; height: 100dvh; min-height: 0;
-  grid-template-columns: var(--nav-w) minmax(300px, 1fr) minmax(360px, 1.4fr);
+  grid-template-columns: var(--nav-w) minmax(0, 1fr) var(--detail-w);
   grid-template-rows: minmax(0, 1fr) auto;
   grid-template-areas: "nav list detail" "nav fb fb"; }
 .nav { grid-area: nav; overflow-y: auto; padding: var(--sp-4) var(--sp-2); border-right: 1px solid var(--border); background: var(--surface); display: flex; flex-direction: column; gap: var(--sp-3); min-width: 0; }
@@ -22,7 +24,7 @@
 .nav-btn[aria-current="page"] .nav-count { background: var(--accent); color: var(--on-accent); }
 .list-col { grid-area: list; overflow-y: auto; min-width: 0; padding: var(--sp-4); display: flex; flex-direction: column; gap: var(--sp-4); outline: none; }
 .list-col > .entry[hidden] { display: none; }
-.detail-col { grid-area: detail; min-width: 0; min-height: 0; display: flex; flex-direction: column; border-left: 1px solid var(--border); background: var(--surface); }
+.detail-col { container: detail / inline-size; grid-area: detail; min-width: 0; min-height: 0; display: flex; flex-direction: column; border-left: 1px solid var(--border); background: var(--surface); }
 .detail { flex: 1; min-height: 0; overflow-y: auto; padding: var(--sp-4) var(--sp-5) var(--sp-5); display: flex; flex-direction: column; gap: var(--sp-3); }
 .detail[hidden] { display: none; }
 .detail-top { display: none; }
@@ -86,7 +88,7 @@ button.stretch:focus-visible::after { outline: 2px solid var(--focus); outline-o
   .nav-btn { flex-direction: column; gap: 2px; padding: 8px 2px; font-size: var(--fs-xs); text-align: center; }
   .nav-ic { font-size: 18px; width: auto; }
   .nav-count { position: absolute; top: 2px; right: 6px; min-width: 18px; padding: 0 5px; }
-  .app { grid-template-columns: var(--nav-w) minmax(280px, 1fr) minmax(320px, 1.1fr); }
+  :root { --detail-w: clamp(340px, 42vw, 440px); }
   .detail { padding: var(--sp-3) var(--sp-4) var(--sp-4); }
   .abar { margin: calc(-1 * var(--sp-3)) calc(-1 * var(--sp-4)) 0; padding: var(--sp-3) var(--sp-4); top: calc(-1 * var(--sp-3)); }
 }
@@ -210,3 +212,23 @@ button.stretch:focus-visible::after { outline: 2px solid var(--focus); outline-o
 .stale-label { font-size: var(--fs-xs); color: var(--warn); font-weight: 600; margin: 0 0 4px; }
 .stale-wrap { opacity: .75; }
 .showall { margin-top: 6px; }
+
+/* Smalle detailkolom (desktop en tablet): compacte actiebalk met korte labels, zodat vijf knoppen plus Meer op
+   één regel passen. Het volledige label blijft de naam (aria-label), de tooltip en de tekst in de DOM. */
+@media (min-width: 701px) {
+  @container detail (max-width: 600px) {
+    .abar { gap: 4px; padding-left: var(--sp-3); padding-right: var(--sp-3); }
+    .abar .btn { padding: 4px 6px; font-size: 12px; }
+    .abar .btn[data-short] { font-size: 0; gap: 0; }
+    .abar .btn[data-short]::before { content: attr(data-short); font-size: 12px; }
+    .abar .btn[data-short] > span[aria-hidden="true"] { font-size: 12px; margin-left: 3px; }
+  }
+}
+
+/* Brede lijst (desktop): geen onnodig afgekapte titels en contextregels; ze lopen door naar een tweede regel. */
+@media (min-width: 701px) {
+  @container (min-width: 440px) {
+    .row-main .title { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
+    .row-main .l2 { white-space: normal; }
+  }
+}

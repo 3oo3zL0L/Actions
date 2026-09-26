@@ -488,3 +488,34 @@ test.describe("Review B1 mobiel 375px", () => {
   });
 });
 
+
+// =========================================================================================
+// Feedback Thomas: het detail neemt veel ruimte die niet gebruikt wordt. Regel: detail hoogstens 560px, de lijst de rest.
+test.describe("Ruimte: lijst krijgt de ruimte, detail wat het nodig heeft", () => {
+  for (const vp of [{ width: 1280, height: 860 }, { width: 1600, height: 900 }]) {
+    test(`${vp.width}px: detail ≤ 560px, lijst breder dan het detail, actiebalk op één regel`, async ({ page, open }) => {
+      await page.setViewportSize(vp);
+      await open(buildMock());
+      const cases = [["Inbox", "Budget CI-runners Q4"], ["Acties", "Akkoord geven op releaseplanning 26.4"], ["Werk", "Pipeline faalt op integratietests na upgrade"], ["Agenda", "Architectuuroverleg Object Store"]];
+      for (const [entry, text] of cases) {
+        await goTo(page, entry);
+        await openItem(page, text);
+        const d = await detail(page).boundingBox(), l = await page.locator("#lijst").boundingBox();
+        expect(d.width, `${entry}: detail`).toBeLessThanOrEqual(560.5);
+        expect(l.width, `${entry}: lijst breder dan detail`).toBeGreaterThan(d.width);
+        const tops = await actionBar(page).evaluate((bar) => [...bar.children].map((c) => Math.round(c.getBoundingClientRect().top)));
+        expect(new Set(tops).size, `${entry}: actiebalk op één regel (${tops})`).toBe(1);
+      }
+      // Korte labels in de smalle balk, maar de naam blijft volledig.
+      await goTo(page, "Inbox");
+      await openItem(page, "Budget CI-runners Q4");
+      await expect(actionBar(page).getByRole("button", { name: "Vraag Claude" })).toBeVisible();
+      await expect(actionBar(page).getByRole("link", { name: /Open in Outlook/ })).toBeVisible();
+      // Claude-paneel gebruikt dezelfde kolom: de lijst verspringt niet.
+      const before = await page.locator("#lijst").boundingBox();
+      await openClaude(page);
+      const after = await page.locator("#lijst").boundingBox();
+      expect(Math.round(after.width)).toBe(Math.round(before.width));
+    });
+  }
+});

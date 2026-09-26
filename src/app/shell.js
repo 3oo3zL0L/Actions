@@ -279,14 +279,16 @@ var Shell = (function () {
     bar.hidden = !acts.length;
     acts.forEach(function (a) {
       var tip = (a.title || a.label) + (a.key ? " (" + a.key + ")" : "");
-      var el;
+      var el, short = shortLabel(a.label);
       if (a.href) {
         el = h("a", { class: "btn", href: a.href, target: "_blank", rel: "noopener noreferrer", title: tip, "aria-keyshortcuts": a.key || null, "data-slot": a.slot || "extra" },
           a.label, h("span", { "aria-hidden": "true", text: " ↗" }), h("span", { class: "sr", text: " (opent in nieuw tabblad)" }));
         el.addEventListener("click", function () { logEvent("detail_open_" + cur.type); });
+        if (short) { el.setAttribute("data-short", short); el.setAttribute("aria-label", a.label + " (opent in nieuw tabblad)"); }
       } else {
         el = h("button", { class: "btn" + (a.slot === "primary" ? " primary" : ""), type: "button", title: tip, "aria-keyshortcuts": a.key || null, "data-slot": a.slot || "extra", text: a.label });
         el.addEventListener("click", function () { if (st.cur) st.auto[st.cur.entry] = false; focusSoon(); a.run(st.cur ? st.cur.item : it, el); });
+        if (short) { el.setAttribute("data-short", short); el.setAttribute("aria-label", a.label); }
       }
       a.el = el;
       curActions.push(a);
@@ -299,6 +301,12 @@ var Shell = (function () {
     if (ik && inlineCards[ik]) slot.append(inlineCards[ik]);
     $("detailView").scrollTop = 0;
     fitBar();
+  }
+  // Korte labels voor een smalle detailkolom (CSS toont data-short; naam, tooltip en tekst blijven volledig).
+  function shortLabel(label) {
+    var l = str(label), m = /^Open in (.+)$/.exec(l);
+    if (m) return m[1];
+    return { "Vraag Claude": "Claude", "Maak actie": "+ Actie", "Open bron": "Bron" }[l] || "";
   }
   // Vraag Claude voor elk type: context = label, titel en de zichtbare tekst van het detail (of spec.context).
   function askDefault(t, spec) {
