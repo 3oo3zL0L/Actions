@@ -10,7 +10,7 @@ na het publiceren van deze versie. Elke regel: doe X, controleer Y.
 - Wijs een uitnodiging af, klik daarna op "Toch accepteren" in de feedbackbalk → verwacht: afspraak staat
   weer op Geaccepteerd, geen dubbele mail naar de organisator.
 - Plan een vergadering van 30 minuten met een collega → verwacht: afspraak in Outlook met Teams-link erin,
-  en de collega krijgt de uitnodiging in zijn agenda.
+  en de collega krijgt de uitnodiging in de agenda.
 
 ## Jira
 - Reageer op een issue via de knop Reageer → verwacht: commentaar staat onder het issue in Jira, zichtbaar
