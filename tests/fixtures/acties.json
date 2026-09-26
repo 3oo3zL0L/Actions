@@ -1,0 +1,15 @@
+{
+  "_comment": "PAF-compatibel model (BRIEF.md, Besluit klant 24 sep). Keys met acties/ zijn db-paden.",
+  "acties/seed-001": { "text": "Akkoord geven op releaseplanning 26.4", "who": "eigen actie", "due": "26 sep",
+    "prog": "Platform Core", "extra": "", "why": "Release kan pas door na akkoord", "status": "open", "vandaag": true,
+    "bron": "mail", "bronUrl": "https://outlook.example.com/owa/?ItemID=mail-001", "van": "eva.jansen@example.com",
+    "onderwerp": "Planning release 26.4", "createdAt": "2026-09-24T07:55:00.000Z", "updatedAt": "2026-09-24T07:55:00.000Z" },
+  "acties/seed-002": { "text": "Benchmark storage-backend doorlezen", "who": "eigen actie", "due": "",
+    "prog": "Object Store", "extra": "", "why": "", "status": "done", "vandaag": false,
+    "bron": "teams", "bronUrl": "", "van": "Mark Bakker", "onderwerp": "",
+    "createdAt": "2026-09-23T12:00:00.000Z", "updatedAt": "2026-09-24T08:10:00.000Z" },
+  "acties/seed-003": { "text": "Contractverlenging leverancier CI-runners bespreken", "who": "Lotte Visser", "due": "1 okt",
+    "prog": "Contracten", "extra": "", "why": "", "status": "dropped", "vandaag": false,
+    "bron": "klad", "bronUrl": "", "van": "", "onderwerp": "",
+    "createdAt": "2026-09-20T09:00:00.000Z", "updatedAt": "2026-09-22T09:00:00.000Z" }
+}

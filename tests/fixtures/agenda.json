@@ -1,0 +1,27 @@
+{
+  "_comment": "Tijden zijn wandkloktijd (W. Europe Standard Time) op de testdag; de builder vult de datum in. Referentie-'nu' = 10:15.",
+  "timeZone": "W. Europe Standard Time",
+  "events": [
+    { "id": "evt-001", "subject": "Stand-up Platform Core", "start": "08:30", "end": "08:45",
+      "organizer": "eva.jansen@example.com", "attendees": ["eva.jansen@example.com", "thomas@example.com", "ruben.smit@example.com"],
+      "location": "Microsoft Teams Meeting", "summary": "Dagelijkse stand-up.", "isOrganizer": false },
+    { "id": "evt-002", "subject": "1-op-1 met Lotte Visser", "start": "09:00", "end": "09:30",
+      "organizer": "thomas@example.com", "attendees": ["lotte.visser@example.com", "thomas@example.com"],
+      "location": "Kamer 2.14", "summary": "Voortgang Object Store, verlofplanning.", "isOrganizer": true },
+    { "id": "evt-003", "subject": "Architectuuroverleg Object Store", "start": "10:00", "end": "11:00",
+      "organizer": "mark.bakker@example.com", "attendees": ["mark.bakker@example.com", "thomas@example.com", "noor.mulder@example.com"],
+      "location": "Microsoft Teams Meeting", "summary": "Keuze storage-backend en migratiepad.", "isOrganizer": false },
+    { "id": "evt-004", "subject": "Sync CI Acceleration", "start": "11:30", "end": "12:00",
+      "organizer": "ruben.smit@example.com", "attendees": ["ruben.smit@example.com", "thomas@example.com"],
+      "location": "Microsoft Teams Meeting", "summary": "Buildtijden, caching van artefacten.", "isOrganizer": false },
+    { "id": "evt-005", "subject": "OIDC review met security", "start": "13:00", "end": "14:00",
+      "organizer": "noor.mulder@example.com", "attendees": ["noor.mulder@example.com", "thomas@example.com", "security@example.com"],
+      "location": "Microsoft Teams Meeting", "summary": "Review van de token-refresh flow.", "isOrganizer": false },
+    { "id": "evt-006", "subject": "Voortgang Jakarta migratie", "start": "15:30", "end": "16:00",
+      "organizer": "thomas@example.com", "attendees": ["daan.devries@example.com", "thomas@example.com"],
+      "location": "Microsoft Teams Meeting", "summary": "Status modules, blokkades.", "isOrganizer": true },
+    { "id": "evt-007", "subject": "Borrel team Platform Stability", "start": "16:30", "end": "17:30",
+      "organizer": "eva.jansen@example.com", "attendees": ["eva.jansen@example.com", "thomas@example.com"],
+      "location": "Kantine", "summary": "Gaat niet door.", "isOrganizer": false, "isCancelled": true }
+  ]
+}

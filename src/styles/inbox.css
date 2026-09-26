@@ -1,0 +1,43 @@
+/* Inbox: meldingen ingeklapt, compacte rijen, afgehandeld-balk. */
+.notif-toggle { display: flex; width: 100%; align-items: center; gap: 8px; border: 0; background: transparent; color: var(--text-2); padding: 10px 12px; min-height: 44px; border-radius: var(--r-md); cursor: pointer; font-weight: 500; text-align: left; }
+.notif-toggle:hover { background: var(--surface-2); }
+.notif-toggle .chev { transition: transform var(--dur) var(--ease); }
+.notif-toggle[aria-expanded="true"] .chev { transform: rotate(90deg); }
+.row.compact { min-height: 40px; padding-top: 6px; padding-bottom: 6px; }
+.row.compact .title { font-weight: 400; font-size: var(--fs-sm); }
+
+.handled { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; font-size: var(--fs-sm); background: var(--surface-2); border-radius: var(--r-md); padding: 4px 10px; margin-bottom: 8px; }
+.handled .handled-note { flex-basis: 100%; color: var(--warn); font-size: var(--fs-xs); }
+
+/* B2: één lijst met filterknoppen, bronicoon, groepen, afgehandeld gedimd. */
+.ifilter { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: var(--sp-3); }
+.ifbtn { border: 1px solid var(--border); background: var(--surface); color: var(--text-2); border-radius: var(--r-pill); padding: 4px 12px; min-height: 32px; cursor: pointer; font-weight: 500; }
+.ifbtn:hover { background: var(--surface-2); color: var(--text); }
+.ifbtn[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--text); font-weight: 600; }
+.ifbtn .tcount { color: var(--text-3); margin-left: 2px; font-variant-numeric: tabular-nums; }
+.ifbtn.ifhandled { margin-left: auto; }
+@media (max-width: 560px) { .ifbtn { min-height: 40px; } .ifbtn.ifhandled { margin-left: 0; } }
+.igroup { font-size: var(--fs-sm); font-weight: 600; color: var(--text-2); margin: var(--sp-3) 0 2px; }
+.igroup:first-child { margin-top: 0; }
+.igroup-hint { font-size: var(--fs-xs); color: var(--text-3); margin: 0 12px 4px; }
+.row .src { flex: none; width: 1.2em; text-align: center; color: var(--text-3); font-size: var(--fs-sm); }
+.row.irow .l2 { padding-left: calc(1.2em + 8px); }
+.row.done .title, .row.done .l2 { color: var(--text-3); }
+/* Invulkaarten in het detail: antwoord, doorsturen, Meer. */
+.composer .rcp { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 8px; }
+.composer .rcp-lbl { font-size: var(--fs-sm); color: var(--text-2); padding-top: 7px; min-width: 2.5em; }
+.composer .rcp-box { position: relative; flex: 1; min-width: 0; }
+.composer .rcp-box input { width: 100%; min-height: 34px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface); padding: 4px 8px; }
+.rcp-list { list-style: none; margin: 4px 0 0; padding: 4px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface); box-shadow: var(--shadow-1); }
+.rcp-opt { display: flex; flex-wrap: wrap; gap: 0 8px; padding: 6px 8px; border-radius: var(--r-sm); cursor: pointer; }
+.rcp-opt:hover, .rcp-opt[aria-selected="true"] { background: var(--accent-soft); }
+.rcp-opt .rcp-mail { color: var(--text-3); font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.composer .note { font-size: var(--fs-xs); color: var(--text-3); margin: 6px 0 0; }
+.ccard.collapsed.pending { border-left-color: var(--accent); }
+.attach p { margin: 0; font-size: var(--fs-sm); color: var(--text-2); }
+@media (max-width: 560px) { .composer .rcp-box input { min-height: 44px; } }
+.ccard .copy-fallback { display: block; width: 100%; margin: 6px 0; min-height: 4.5em; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface); padding: 6px; }
+.ccard .copy-fallback[hidden] { display: none; }
+/* Invulkaart open: de primaire knop (Beantwoord, Antwoord, Kopieer naar Teams) staat er niet dubbel; r en Enter springen
+   naar het tekstvak van de kaart. */
+.detail:has(#detailInline .composer) .abar [data-slot="primary"] { display: none; }
