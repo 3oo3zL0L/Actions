@@ -478,8 +478,9 @@ function renderInbox() {
   syncChannelWatches();
   var f = inboxFilter();
   var unread = mailUnread(), open = teamsOpen();
-  $("tc-mail").textContent = unread ? " " + unread : "";
-  $("tc-teams").textContent = S.teams.hasData && open ? " " + open : "";
+  // Beide chips tellen "nieuw": ongelezen mail en Teams-berichten die je nog niet afhandelde (zoals de teller in de navigatie).
+  $("tc-mail").textContent = unread ? " · " + unread + " nieuw" : "";
+  $("tc-teams").textContent = S.teams.hasData && open ? " · " + open + " nieuw" : "";
   paintFilter(f);
   inboxFresh();
   Shell.changed();
@@ -517,7 +518,7 @@ function renderInbox() {
   }
   if (md.notif.length) box.append.apply(box, groupToggle("notif-list", "Meldingen (" + md.notif.length + ")", LS.notif, md.notif.map(notifRow)));
   if (inboxUi.showHandled) {
-    box.append(h("h3", { class: "igroup", text: "Afgehandeld (" + md.done.length + ")" }));
+    box.append(h("h3", { class: "igroup", id: "h-afgehandeld", text: "Afgehandeld (" + md.done.length + ")" }));
     if (!md.done.length) box.append(h("p", { class: "empty", text: "Nog niets afgehandeld." }));
     else { var ul3 = h("ul", { class: "list" }); md.done.forEach(function (e) { e.done = true; ul3.append(inboxRow(e)); }); box.append(ul3); }
   }
@@ -538,10 +539,13 @@ function groupToggle(id, label, lsKey, rowsIn, hint) {
   var tip = hint ? h("p", { class: "hint igroup-hint", text: hint }) : null;
   if (tip) tip.hidden = !open;
   var tg = h("button", { class: "notif-toggle", type: "button", "aria-expanded": open ? "true" : "false", "aria-controls": id, onclick: function () {
-    var o = tg.getAttribute("aria-expanded") !== "true";
+    setGroup(tg.getAttribute("aria-expanded") !== "true");
+  } }, h("span", { class: "chev", "aria-hidden": "true", text: "▸" }), label);
+  function setGroup(o) {
     tg.setAttribute("aria-expanded", o ? "true" : "false"); ul.hidden = !o; if (tip) tip.hidden = !o; lsSet(lsKey, o ? "open" : "dicht");
     Shell.changed();
-  } }, h("span", { class: "chev", "aria-hidden": "true", text: "▸" }), label);
+  }
+  ul._open = function () { if (ul.hidden) setGroup(true); };
   return tip ? [tg, tip, ul] : [tg, ul];
 }
 function srcIcon(kind) { return h("span", { class: "src", "aria-hidden": "true", text: kind === "mail" ? "✉" : "💬" }); }
@@ -576,11 +580,29 @@ function channelRow(c) {
     h("div", { class: "l2", text: status })));
   return Shell.row(row, "kanaal", "kanaal:" + chKey(c), c);
 }
+// Klap de ingeklapte groep open waarin deze rij staat (bv. na selectie via de command bar).
+function revealRow(key) {
+  var li = document.querySelector('#inbox-list [data-sel-key="' + String(key).replace(/["\\]/g, "\\$&") + '"]');
+  var ul = li && li.closest("ul");
+  if (ul && ul.hidden && ul._open) ul._open();
+}
+// j/↓ op de laatste zichtbare rij: open de volgende ingeklapte groep (Meldingen, Teams-kanalen), zodat j doorloopt.
+function openNextGroup() {
+  var rows = Array.prototype.slice.call(document.querySelectorAll("#inbox-list [data-sel-key]")).filter(function (r) { return r.offsetParent !== null; });
+  var cur = Shell.current(), last = rows[rows.length - 1];
+  if (!cur || !last || last.getAttribute("data-sel-key") !== cur.key) return false;
+  var closed = Array.prototype.slice.call(document.querySelectorAll("#inbox-list ul[hidden]")).filter(function (u) { return u._open && u.querySelector("[data-sel-key]"); })[0];
+  if (!closed) return false;
+  closed._open();
+  return true;
+}
 function toggleHandledView() {
   inboxUi.showHandled = !inboxUi.showHandled;
   logEvent(inboxUi.showHandled ? "inbox_afgehandeld_tonen" : "inbox_afgehandeld_verbergen");
   renderInbox();
-  announce(inboxUi.showHandled ? "Afgehandelde berichten staan onderaan" : "Afgehandelde berichten verborgen");
+  var hd = inboxUi.showHandled && document.getElementById("h-afgehandeld");
+  if (hd) hd.scrollIntoView({ block: "start", behavior: "smooth" });
+  announce(inboxUi.showHandled ? (hd ? hd.textContent : "Afgehandelde berichten") + " staan onderaan" : "Afgehandelde berichten verborgen");
 }
 function cycleFilter() { var order = ["alles", "mail", "teams"]; setInboxFilter(order[(order.indexOf(inboxFilter()) + 1) % 3]); }
 document.querySelectorAll("#body-inbox [data-filter]").forEach(function (b) {
@@ -614,7 +636,7 @@ function loadBody(it, at) {
     var body = v && isPlain(v.body) ? v.body : null;
     var raw = body ? str(body.content) : v ? str(v.bodyPreview || v.summary || v.text) : plain;
     var isHtml = body ? str(body.contentType).toLowerCase() === "html" || /<[a-z][\s\S]*>/i.test(raw) : /<[a-z][\s\S]*>/i.test(raw);
-    var text = isHtml ? htmlToText(raw) : raw.replace(/\r/g, "").replace(/\n\s*\n\s*\n+/g, "\n\n").trim();
+    var text = isHtml ? htmlToText(raw.replace(/<\/p>/gi, "</p><br>")) : raw.replace(/\r/g, "").replace(/\n\s*\n\s*\n+/g, "\n\n").trim();
     if (!text) throw { code: "transform_error", message: "lege inhoud" };
     var ppl = function (x) { return (Array.isArray(x) ? x : []).map(personOf).filter(function (p) { return p.email || p.name; }); };
     var out = { text: text, to: ppl(v && v.toRecipients), cc: ppl(v && v.ccRecipients), from: personOf(v && (v.from || v.sender)),
@@ -780,6 +802,7 @@ function openMailComposer(m, mode, job) {
       drafts[dk] = { text: text, to: toField ? toField.value() : "" };
       if (job && job.error && text.trim() === job.text.trim() && recipientText(to) === recipientText(job.to)) { retrySend(job); return; }
       queueMailSend({ m: m, mode: mode, text: text, to: to });
+      Shell.leaveField(null); // focus naar de geselecteerde rij, zodat de sneltoetsen (z) weer werken
     },
     onClose: function (text) {
       drafts[dk] = { text: text, to: toField ? toField.value() : "" };
@@ -1063,8 +1086,8 @@ function openTeamsComposer(t) {
   var api = composer({
     title: place === who ? "Antwoord aan " + who : "Antwoord in " + place, meta: "Op: " + trunc(teamsText(t), 120),
     text: drafts[key] || "", placeholder: "Je antwoord",
-    sendLabel: blocked ? "Kopieer en open in Teams" : "Verstuur",
-    sendTitle: blocked ? "Kopieer je tekst en open het bericht in Teams" : "Direct versturen in Teams",
+    sendLabel: blocked ? "Kopieer naar Teams" : "Verstuur",
+    sendTitle: blocked ? "Kopieer je tekst naar het klembord en open het bericht in Teams" : "Direct versturen in Teams",
     note: blocked ? TEAMS_BLOCKED_TEXT + " Je tekst gaat naar het klembord en het bericht opent in Teams."
       : "Wordt direct verstuurd in Teams en kan niet worden teruggehaald.",
     generate: cap.sample ? function (hint, prev, onText, signal) { return runSample(chatReplyPrompt(t, place, hint, prev), { onText: onText, signal: signal, cache: hint || prev ? false : undefined }); } : null,
@@ -1083,6 +1106,7 @@ function openTeamsComposer(t) {
         logEvent("teams_antwoord_verzonden");
         var card = statusCard("ok", "✓ Verzonden in " + place);
         mountCard(key, card); laterRemove(key, card);
+        if (!document.activeElement || document.activeElement === document.body) Shell.leaveField(null);
         feedback({ text: "Teams-bericht verzonden in " + place, link: findLink(r) || t.webUrl, linkLabel: "Bekijk" });
       }, function (e) {
         c.busy(false);
@@ -1166,6 +1190,7 @@ document.addEventListener("keydown", function (e) {
   if ($("keys").open || !$("chat").hidden) return;
   if (typeof gPending !== "undefined" && gPending && Date.now() - gPending < 1500) return;
   var k = e.key, done = false;
+  if ((k === "j" || k === "ArrowDown") && !(t && t.closest && t.closest(".abar-menu"))) { openNextGroup(); return; } // Shell.move doet de rest
   if (k !== "t" && k !== "v" && k !== "V") return;
   if (Shell.actions().some(function (a) { return a && a.key === k; })) return; // het item gaat voor
   if (k === "t") { cycleFilter(); done = true; }
@@ -1184,6 +1209,7 @@ Shell.type("mail", {
   title: function (m) { return str(m.subject) || "(geen onderwerp)"; },
   inline: function (m) { return "mail:" + m.id; },
   detail: function (m, body) {
+    revealRow("mail:" + m.id);
     var p = personOf(m.sender || m.from), d = parseDate(m.receivedDateTime);
     var pairs = [
       ["Van", (p.name || "(onbekend)") + (p.email && p.email !== p.name ? " <" + p.email + ">" : "")],
@@ -1257,8 +1283,9 @@ Shell.type("teams", {
   actions: function (t) {
     var tg = teamsTarget(t), blocked = teamsBlocked(), done = isHandled(t), place = teamsPlace(t);
     return [
-      tg ? { slot: "primary", label: blocked ? "Kopieer en open in Teams" : "Antwoord", key: "r",
-        title: blocked ? "Schrijf je antwoord; de tekst gaat naar je klembord en het bericht opent in Teams" : "Antwoord" + (place ? " in " + place : ""), run: function (x) { openTeamsComposer(x); } } : null,
+      tg ? { slot: "primary", label: blocked ? "Kopieer naar Teams" : "Antwoord", key: "r",
+        title: blocked ? "Schrijf je antwoord; de tekst gaat naar je klembord en het bericht opent in Teams"
+          : place && place !== teamsFrom(t) ? "Antwoord in " + place : "Antwoord aan " + teamsFrom(t), run: function (x) { openTeamsComposer(x); } } : null,
       done ? { slot: "done", label: "Terugzetten", key: "e", title: "Terug in de inbox", run: function (x) { restoreHandled("teams", x); } }
         : { slot: "done", label: "Afhandelen", key: "e", title: "Uit de lijst halen (alleen op deze pagina)", run: function (x) { handleItem("teams", x); } },
       { slot: "make", label: "Maak actie", key: "a", title: "Maak een actie van dit bericht", run: function (x) { inboxMakeActie("teams", x); } },
@@ -1271,6 +1298,7 @@ Shell.type("kanaal", {
   label: "Teams-kanaal",
   title: function (c) { return c.name; },
   detail: function (c, body) {
+    revealRow("kanaal:" + chKey(c));
     add(body, metaList([["Team", c.teamName], ["Volgen", c.followed ? "ja, ververst elke 3 minuten" : "nee"]]));
     body.append(h("p", { class: "detail-text", text: c.followed
       ? "Nieuwe berichten uit dit kanaal komen in je Inbox, met de kanaalnaam erbij."
@@ -1290,7 +1318,26 @@ Shell.entry("inbox", {
   label: "Inbox",
   render: renderInbox,
   empty: "Kies een mail of Teams-bericht om het hier te openen.",
-  count: inboxCount
+  count: inboxCount,
+  // Command bar (Ctrl+K): mail, Teams-berichten (ook kanaalberichten) en Teams-kanalen; Enter selecteert het item.
+  search: function () {
+    var out = [];
+    S.mail.items.forEach(function (m) {
+      if (!m || !m.id || isHandled(m)) return;
+      var p = personOf(m.sender || m.from);
+      out.push({ key: "mail:" + m.id, title: str(m.subject) || "(geen onderwerp)", hint: "van " + p.name, tag: isNotification(m) ? "Melding" : "Mail", words: [p.name, p.email] });
+    });
+    teamsItems().forEach(function (t) {
+      if (isHandled(t)) return;
+      var who = teamsFrom(t), place = teamsPlace(t);
+      out.push({ key: "teams:" + t.id, title: trunc(teamsText(t), 70) || "Teams-bericht", hint: "van " + who + (place && place !== who ? " in " + place : ""), tag: "Teams", words: [who, place] });
+    });
+    if (S.teams.hasData) knownChannels().forEach(function (c) {
+      out.push({ key: "kanaal:" + chKey(c), title: c.name, hint: c.followed ? "gevolgd kanaal" : "kanaal, niet gevolgd (kies en volg met s)", tag: "Kanaal",
+        words: ["kanaal", "teams-kanaal", c.followed ? "niet meer volgen" : "volg kanaal", c.teamName] });
+    });
+    return out;
+  }
 });
 // Voorkeuren van een ander apparaat of na het laden: lijst en detail bijwerken als iets voor de Inbox veranderde.
 var inboxPrefSig = "";
