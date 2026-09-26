@@ -1,0 +1,244 @@
+/* Schil: layout, kop, kaarten, tabs, rijen, laad- en foutstaten. */
+/* Layout: drie zones. Links de ingangen, midden de lijst, rechts het detail (of het Claude-paneel).
+   Elke kolom scrolt zelf; de pagina zelf scrolt niet op desktop. Mobiel (<= 700px): tabbalk onderaan,
+   lijst en detail zijn twee schermen. */
+/* Regel: het detail krijgt hoogstens 560px (--detail-w: minmax(360px, min(560px, 42vw))), de lijst de rest. Ook het Claude-paneel gebruikt
+   --detail-w, zodat de lijst niet verspringt als het paneel opent. */
+:root { --nav-w: 168px; --tab-h: 60px; --fb-h: 0px; --detail-w: minmax(360px, min(560px, 42vw)); }
+.app { display: grid; height: 100vh; height: 100dvh; min-height: 0;
+  grid-template-columns: var(--nav-w) minmax(0, 1fr) var(--detail-w);
+  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-areas: "nav list detail" "nav fb fb"; }
+.nav { grid-area: nav; overflow-y: auto; padding: var(--sp-4) var(--sp-2); border-right: 1px solid var(--border); background: var(--surface); display: flex; flex-direction: column; gap: var(--sp-3); min-width: 0; }
+.nav-brand { margin: 0 0 0 10px; font-weight: 700; font-size: var(--fs-md); color: var(--text-2); letter-spacing: .01em; }
+.nav-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.nav-btn { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 40px; padding: 6px 10px; border: 0; border-radius: var(--r-md);
+  background: transparent; color: var(--text-2); cursor: pointer; font-weight: 500; text-align: left; position: relative; }
+.nav-btn:hover { background: var(--surface-2); color: var(--text); }
+.nav-btn[aria-current="page"] { background: var(--accent-soft); color: var(--text); font-weight: 600; }
+.nav-btn[aria-current="page"]::before { content: ""; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; border-radius: 3px; background: var(--accent); }
+.nav-ic { width: 20px; text-align: center; font-size: 16px; flex: none; }
+.nav-lbl { flex: 1; min-width: 0; }
+.nav-count { font-size: var(--fs-xs); font-variant-numeric: tabular-nums; color: var(--text-2); background: var(--surface-2); border-radius: var(--r-pill); padding: 0 7px; min-width: 22px; text-align: center; }
+.nav-count:empty { display: none; }
+.nav-btn[aria-current="page"] .nav-count { background: var(--accent); color: var(--on-accent); }
+.list-col { grid-area: list; overflow-y: auto; min-width: 0; padding: var(--sp-4); display: flex; flex-direction: column; gap: var(--sp-4); outline: none; }
+.list-col > .entry[hidden] { display: none; }
+.detail-col { container: detail / inline-size; grid-area: detail; min-width: 0; min-height: 0; display: flex; flex-direction: column; border-left: 1px solid var(--border); background: var(--surface); }
+.detail { flex: 1; min-height: 0; overflow-y: auto; padding: var(--sp-4) var(--sp-5) var(--sp-5); display: flex; flex-direction: column; gap: var(--sp-3); }
+.detail[hidden] { display: none; }
+.detail-top { display: none; }
+.detail-body { display: flex; flex-direction: column; gap: var(--sp-3); order: 3; }
+.abar { order: 1; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; position: sticky; top: calc(-1 * var(--sp-4)); z-index: 2;
+  margin: calc(-1 * var(--sp-4)) calc(-1 * var(--sp-5)) 0; padding: var(--sp-3) var(--sp-4); background: var(--surface); border-bottom: 1px solid var(--border); }
+/* Compact: 5 vaste knoppen + 1 extra op één regel bij 1280px; de rest via "Meer". */
+.abar { gap: 4px; }
+.abar .btn { padding: 4px 8px; }
+.abar .btn[data-slot="extra"] { background: transparent; }
+/* Meer ▾: het menu hangt aan de actiebalk (sticky = gepositioneerd), rechts uitgelijnd binnen de detailkolom en boven
+   de invulkaarten; zo wordt het nooit links afgeknipt, ook niet als Meer op een tweede regel staat. */
+.abar { z-index: 4; }
+.abar-more { position: static; }
+.abar.tight { gap: 2px; }
+.abar.tight .btn { padding-left: 4px; padding-right: 4px; }
+.abar-more > .btn { padding-left: 6px; padding-right: 6px; } /* compact, zodat vijf vaste knoppen plus Meer op 1280px op één regel passen */
+.abar-menu { position: absolute; right: var(--sp-4); top: calc(100% - 2px); z-index: 5; max-width: calc(100% - 2 * var(--sp-4)); min-width: 200px; display: flex; flex-direction: column; gap: 2px; padding: 6px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); box-shadow: var(--shadow-2); }
+.abar-menu[hidden] { display: none; }
+.abar-menu .btn { justify-content: flex-start; border-color: transparent; width: 100%; }
+.lbl-m { display: none; }
+.detail-inline { order: 2; }
+.detail-inline:empty { display: none; }
+.detail-inline .ccard { margin: 0; }
+.detail-type { margin: 0; color: var(--text-3); font-size: var(--fs-xs); font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
+.detail-type:empty { display: none; }
+.detail-title { margin: -6px 0 0; font-size: var(--fs-xl); line-height: 1.25; font-weight: 700; overflow-wrap: anywhere; }
+.detail-text { margin: 0; white-space: pre-line; overflow-wrap: anywhere; line-height: 1.55; }
+.detail-text.extra { color: var(--text-2); font-size: var(--fs-sm); }
+.meta-list { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 16px; margin: 0; font-size: var(--fs-sm); }
+.meta-list dt { color: var(--text-3); }
+.meta-list dd { margin: 0; overflow-wrap: anywhere; }
+.detail-empty { margin: auto 0; padding: var(--sp-6) 0; text-align: center; color: var(--text-3); }
+.detail-empty p { margin: 0 0 6px; }
+.detail-empty .hint { font-size: var(--fs-sm); }
+.detail-col .chat { flex: 1; min-height: 0; }
+/* Feedbackbalk: één balk voor alles, onder lijst en detail (bedekt niets). */
+.feedback { grid-area: fb; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 8px 12px 8px 16px; min-height: 48px;
+  background: var(--text); color: var(--bg); font-size: var(--fs-sm); font-weight: 500; }
+.feedback[hidden] { display: none; }
+.feedback .btn.text { color: var(--accent); font-weight: 600; min-height: 32px; }
+.feedback .btn.text:hover { background: rgb(128 128 128 / .2); }
+.feedback .fb-sep { opacity: .6; }
+.feedback .fb-close { margin-left: auto; color: inherit; width: 32px; height: 32px; font-size: 14px; }
+.feedback .fb-close:hover { background: rgb(128 128 128 / .2); color: inherit; }
+.feedback .fb-note { flex-basis: 100%; font-size: var(--fs-xs); opacity: .85; }
+:root[data-theme="forest"] .nav, :root[data-theme="forest"] .detail-col, :root[data-theme="forest"] .abar { background: rgb(24 25 28 / .9); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }
+:root[data-theme="forest"] .abar { background: rgb(24 25 28 / .97); }
+/* Geselecteerde rij */
+.row.is-sel { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+.row.is-sel:hover { background: var(--accent-soft); }
+button.stretch { border: 0; background: transparent; padding: 0; margin: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; min-width: 0; }
+button.stretch::after { content: ""; position: absolute; inset: 0; border-radius: var(--r-md); }
+button.stretch:focus-visible { outline: none; }
+button.stretch:focus-visible::after { outline: 2px solid var(--focus); outline-offset: -2px; }
+.row { cursor: pointer; }
+.row a:not(.stretch), .row input, .row label, .row .row-side { position: relative; z-index: 1; }
+.vgroup + .vgroup { margin-top: var(--sp-4); }
+.vgroup h3 { font-size: var(--fs-sm); font-weight: 600; margin: 0 0 4px; color: var(--text-2); }
+/* Tussenbreedte: smalle navigatie met pictogram en label eronder. */
+@media (max-width: 1099px) and (min-width: 701px) {
+  :root { --nav-w: 76px; }
+  .nav { padding: var(--sp-3) 4px; }
+  .nav-brand { display: none; }
+  .nav-btn { flex-direction: column; gap: 2px; padding: 8px 2px; font-size: var(--fs-xs); text-align: center; }
+  .nav-ic { font-size: 18px; width: auto; }
+  .nav-count { position: absolute; top: 2px; right: 6px; min-width: 18px; padding: 0 5px; }
+  :root { --detail-w: clamp(340px, 42vw, 440px); }
+  .detail { padding: var(--sp-3) var(--sp-4) var(--sp-4); }
+  .abar { margin: calc(-1 * var(--sp-3)) calc(-1 * var(--sp-4)) 0; padding: var(--sp-3) var(--sp-4); top: calc(-1 * var(--sp-3)); }
+}
+/* Mobiel: tabbalk onderaan, lijst en detail als twee schermen. De actiebalk plakt onderaan het detail boven de
+   tabbalk (duimbereik). De feedbackbalk zweeft boven de tabbalk; --fb-h houdt ruimte vrij zodat hij niets bedekt. */
+@media (max-width: 700px) {
+  .app { display: block; height: auto; }
+  .nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; flex-direction: row; padding: 0 0 env(safe-area-inset-bottom); height: calc(var(--tab-h) + env(safe-area-inset-bottom));
+    border-right: 0; border-top: 1px solid var(--border); overflow: hidden; }
+  .nav-brand { display: none; }
+  .nav-list { flex-direction: row; width: 100%; gap: 0; }
+  .nav-list li { flex: 1; min-width: 0; }
+  .nav-btn { flex-direction: column; gap: 1px; height: var(--tab-h); min-height: 44px; padding: 6px 2px; font-size: 11px; border-radius: 0; text-align: center; }
+  .nav-btn[aria-current="page"]::before { left: 20%; right: 20%; top: 0; bottom: auto; width: auto; height: 3px; }
+  .nav-ic { font-size: 18px; width: auto; }
+  .nav-lbl { flex: none; }
+  .nav-count { position: absolute; top: 4px; left: calc(50% + 6px); min-width: 18px; padding: 0 5px; }
+  .list-col { overflow: visible; padding: var(--sp-3) var(--sp-4) calc(var(--tab-h) + 16px + var(--fb-h) + env(safe-area-inset-bottom)); }
+  .detail-col { display: none; border-left: 0; }
+  body.m-detail .list-col { display: none; }
+  body.m-detail .detail-col { display: flex; min-height: 100vh; min-height: 100dvh; padding-bottom: calc(var(--tab-h) + var(--fb-h) + env(safe-area-inset-bottom)); }
+  .detail { overflow: visible; padding: var(--sp-3) var(--sp-4) 0; }
+  .detail-top { display: block; order: 0; margin: 0 0 -4px -6px; }
+  .detail-body { order: 1; }
+  .detail-inline { order: 2; }
+  /* Focus in een invulkaart scrolt hem vrij van actiebalk en tabbalk (shell.js keepInlineVisible doet de hele kaart). */
+  html { scroll-padding-bottom: calc(var(--tab-h) + var(--fb-h) + 120px + env(safe-area-inset-bottom)); }
+  .abar { order: 3; margin: auto calc(-1 * var(--sp-4)) 0; padding: var(--sp-2) var(--sp-4); position: sticky; top: auto;
+    bottom: calc(var(--tab-h) + var(--fb-h) + env(safe-area-inset-bottom)); border-bottom: 0; border-top: 1px solid var(--border); background: var(--surface); }
+  :root[data-theme="forest"] .abar { background: rgb(24 25 28 / .98); }
+  .abar .btn { min-height: 44px; flex: 1 1 auto; }
+  .abar-more { flex: 1 1 auto; display: flex; position: relative; }
+  .abar-more > .btn { flex: 1 1 auto; }
+  .abar-menu { top: auto; right: 0; bottom: calc(100% + 4px); max-width: none; }
+  .detail-title { font-size: var(--fs-lg); }
+  body.m-detail .detail-col .chat { height: calc(100vh - var(--tab-h) - var(--fb-h) - env(safe-area-inset-bottom)); height: calc(100dvh - var(--tab-h) - var(--fb-h) - env(safe-area-inset-bottom)); flex: none; }
+  .feedback { position: fixed; left: 8px; right: 8px; bottom: calc(var(--tab-h) + 8px + env(safe-area-inset-bottom)); z-index: 35; border-radius: var(--r-md); box-shadow: var(--shadow-2); }
+  /* Kop: Vraag Claude en Thema met zichtbaar label; verversen gaat per ingang (⟳ in de kop), sneltoetsen zijn voor desktop. */
+  #refreshAll, #helpBtn { display: none; }
+  #themeBtn { width: auto; padding: 0 12px; gap: 6px; font-size: var(--fs-sm); color: var(--text); }
+  .lbl-m { display: inline; }
+}
+
+/* Header */
+.head { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--sp-3) var(--sp-4); }
+.head-main { flex: 1 1 320px; min-width: 0; }
+.greet { font-size: var(--fs-2xl); font-weight: 700; margin: 0; line-height: 1.15; }
+.date { color: var(--text-2); font-size: var(--fs-md); margin-top: 2px; }
+.head-tools { display: flex; gap: var(--sp-2); align-items: center; flex-wrap: wrap; min-width: 0; }
+.nowstrip { margin-top: var(--sp-3); display: flex; flex-wrap: wrap; gap: 2px 6px; font-size: var(--fs-md); color: var(--text-2); align-items: center; }
+.nowstrip a { color: var(--text); text-decoration: none; border-bottom: 1px solid var(--border); }
+.nowstrip a:hover { border-bottom-color: var(--accent); }
+.nowstrip .sep { color: var(--text-3); }
+.nowstrip strong { font-weight: 600; }
+.pagealert { flex: 1 1 100%; border: 1px solid var(--border); background: var(--warn-soft); border-radius: var(--r-md); padding: var(--sp-3) var(--sp-4); font-size: var(--fs-sm); }
+.pagealert p { margin: 0 0 6px; }
+.chip-ph { display: inline-block; width: 110px; height: 14px; border-radius: var(--r-pill); background: var(--surface-2); vertical-align: middle; }
+@media (max-width: 560px) {
+  .greet { font-size: var(--fs-xl); }
+  .date { font-size: var(--fs-sm); }
+  .nowstrip { font-size: var(--fs-sm); max-height: 3em; overflow: hidden; }
+}
+
+/* Cards */
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); box-shadow: var(--shadow-1); padding: var(--sp-4); min-width: 0; scroll-margin-top: 12px; }
+@media (min-width: 561px) { .card { padding: var(--sp-5); } }
+.card-head { display: flex; align-items: center; gap: var(--sp-2); margin-bottom: var(--sp-3); min-height: 36px; flex-wrap: wrap; min-width: 0; }
+.card { container-type: inline-size; }
+@container (max-width: 400px) {
+  .card-head { gap: 4px; }
+  .card-head .fresh { font-size: var(--fs-xs); order: 10; flex-basis: 100%; margin-left: 0; padding-left: 4px; }
+  .card-head .fresh:empty { display: none; }
+}
+@media (max-width: 560px) { #helpBtn { display: none; } }
+.card-head h2 { margin: 0; font-size: var(--fs-lg); font-weight: 600; }
+.card-head .count { color: var(--text-3); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
+.card-head .fresh { margin-left: auto; color: var(--text-3); font-size: var(--fs-sm); white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+/* Tabs */
+.tabs { display: flex; gap: var(--sp-2); margin-bottom: var(--sp-3); border-bottom: 1px solid var(--border); }
+.tabs [role="tab"] { border: 0; background: transparent; padding: 8px 10px; min-height: 40px; cursor: pointer; color: var(--text-2);
+  font-weight: 500; border-bottom: 3px solid transparent; margin-bottom: -1px; font-variant-numeric: tabular-nums; }
+.tabs [role="tab"][aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+.tabs .tcount { color: var(--text-3); margin-left: 4px; }
+.tabs .tools { margin-left: auto; display: flex; align-items: center; }
+@media (max-width: 560px) { .tabs [role="tab"] { min-height: 44px; flex: 1; } }
+
+/* Rows */
+.list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.row { position: relative; display: flex; gap: var(--sp-3); align-items: flex-start; padding: 8px 8px 8px 12px; border-radius: var(--r-md); min-height: 48px; }
+.row:hover { background: var(--surface-2); }
+.row.unread::before { content: ""; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; border-radius: 3px; background: var(--accent); }
+.row.unread .title { font-weight: 700; }
+.row-main { flex: 1; min-width: 0; }
+.row-main .l1 { display: flex; gap: 8px; align-items: baseline; min-width: 0; }
+.row-main .title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.row-main .l2 { color: var(--text-2); font-size: var(--fs-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row-main .l3 { color: var(--text-2); font-size: var(--fs-sm); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.row .when { color: var(--text-3); font-size: var(--fs-sm); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.row-side { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; position: relative; z-index: 1; }
+@media (max-width: 560px) {
+  .row { min-height: 56px; }
+  .row-main .title { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+}
+
+/* States */
+.sk { list-style: none; padding: 8px 12px; }
+.sk span { display: block; height: 12px; border-radius: 6px; background: var(--surface-2); margin: 6px 0; }
+.sk span:first-child { width: 60%; } .sk span:last-child { width: 40%; }
+@media (prefers-reduced-motion: no-preference) {
+  .sk span { background: linear-gradient(90deg, var(--surface-2) 0%, var(--border) 50%, var(--surface-2) 100%); background-size: 200% 100%; animation: shimmer 1.4s linear infinite; }
+}
+@keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+.empty { color: var(--text-3); margin: 8px 0; }
+.alert { border: 1px solid var(--border); background: var(--warn-soft); border-radius: var(--r-md); padding: var(--sp-3); margin-bottom: var(--sp-3); font-size: var(--fs-sm); }
+.alert.na { background: var(--surface-2); }
+.alert p { margin: 0 0 4px; }
+.alert .btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+.alert details { margin-top: 6px; color: var(--text-3); font-size: var(--fs-xs); }
+.alert summary { cursor: pointer; }
+.stale-label { font-size: var(--fs-xs); color: var(--warn); font-weight: 600; margin: 0 0 4px; }
+.stale-wrap { opacity: .75; }
+.showall { margin-top: 6px; }
+
+/* Smalle detailkolom (desktop en tablet): compacte actiebalk met korte labels, zodat vijf knoppen plus Meer op
+   één regel passen. Het volledige label blijft de naam (aria-label), de tooltip en de tekst in de DOM. */
+@media (min-width: 701px) {
+  @container detail (max-width: 600px) {
+    .abar { gap: 4px; padding-left: var(--sp-3); padding-right: var(--sp-3); }
+    .abar .btn { padding: 4px 6px; font-size: 12px; }
+    .abar .btn[data-short] { font-size: 0; gap: 0; }
+    .abar .btn[data-short]::before { content: attr(data-short); font-size: 12px; }
+    .abar .btn[data-short] > span[aria-hidden="true"] { font-size: 12px; margin-left: 3px; }
+    /* "Meer ▾" wordt een icoon-knop (naam blijft "Meer acties" via aria-label): op een tablet (bv. 900px) is dat
+       vaak het enige verschil tussen wel en niet op één regel passen. */
+    .abar-more > .btn .abar-more-txt { display: none; }
+    .abar-more > .btn { padding-left: 8px; padding-right: 8px; }
+    .abar-more > .btn > span[aria-hidden="true"] { font-size: 14px; margin-left: 0; }
+  }
+}
+
+/* Brede lijst (desktop): geen onnodig afgekapte titels en contextregels; ze lopen door naar een tweede regel. */
+@media (min-width: 701px) {
+  @container (min-width: 440px) {
+    .row-main .title { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
+    .row-main .l2 { white-space: normal; }
+  }
+}

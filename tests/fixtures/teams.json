@@ -1,0 +1,20 @@
+{
+  "_comment": "minutesAgo t.o.v. referentie-nu; builder zet createdDateTime. chats = teams_list_chats.",
+  "messages": [
+    { "id": "tm-001", "chatId": "19:mock-chat-object-store@thread.v2", "minutesAgo": 8,
+      "from": { "displayName": "Mark Bakker", "email": "mark.bakker@example.com" },
+      "summary": "Heb je de benchmark van de nieuwe storage-backend al gezien?" },
+    { "id": "tm-002", "chatId": "19:mock-chat-lotte_thomas@unq.gbl.spaces", "minutesAgo": 35,
+      "from": { "displayName": "Lotte Visser", "email": "lotte.visser@example.com" },
+      "summary": "Ik zet de demo voor morgen om 14:00 in de agenda." },
+    { "id": "tm-003", "chatId": "19:mock-chat-ci@thread.v2", "minutesAgo": 1200,
+      "from": { "displayName": "Ruben Smit", "email": "ruben.smit@example.com" },
+      "summary": "Nightly build was gisteren weer groen na de cachefix." }
+  ],
+  "chats": [
+    { "id": "19:mock-chat-object-store@thread.v2", "chatType": "group", "topic": "Object Store kernteam", "minutesAgo": 8, "memberCount": 5,
+      "members": [{ "displayName": "Mark Bakker", "email": "mark.bakker@example.com" }, { "displayName": "Thomas Testpersoon", "email": "thomas@example.com" }] },
+    { "id": "19:mock-chat-lotte_thomas@unq.gbl.spaces", "chatType": "oneOnOne", "topic": null, "minutesAgo": 35, "memberCount": 2,
+      "members": [{ "displayName": "Lotte Visser", "email": "lotte.visser@example.com" }, { "displayName": "Thomas Testpersoon", "email": "thomas@example.com" }] }
+  ]
+}

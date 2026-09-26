@@ -1,0 +1,13 @@
+{
+  "content": {
+    "totalCount": 2,
+    "nodes": [
+      { "id": "900101", "type": "page", "title": "Migratieplan Jakarta EE 10", "lastModified": "yesterday at 9:28 AM",
+        "summary": "Stappenplan per module met risico's.", "space": { "key": "DEV", "name": "Development" },
+        "author": { "displayName": "Daan de Vries" }, "webUrl": "https://wiki.example.com/spaces/DEV/pages/900101" },
+      { "id": "900202", "type": "page", "title": "OIDC ontwerpkeuzes", "lastModified": "Sep 22, 2026",
+        "summary": "Besluiten rond token-levensduur en scopes.", "space": { "key": "SEC", "name": "Security" },
+        "author": { "displayName": "Noor Mulder" }, "webUrl": "https://wiki.example.com/spaces/SEC/pages/900202" }
+    ]
+  }
+}
