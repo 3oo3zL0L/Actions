@@ -2,7 +2,7 @@
 // actiebalk Vink af (e) · Maak vandaag (v) · Vraag Claude (c) · Open bron (o), feedback met z = ongedaan,
 // Nieuwe actie (n) als formulier bovenaan het detail, voorstellen zonder knoppen in de rij.
 const { test: base, expect } = require("@playwright/test");
-const { buildMock, data } = require("./fixtures");
+const { buildMock, data, referenceNow } = require("./fixtures");
 const { openPage, mockLog, dbDump, itemWith, goTo, entryButton, detail, actionBar, feedbackBar, openItem, heading } = require("./helpers");
 
 const test = base.extend({
@@ -32,6 +32,8 @@ function docsWith(extra = {}) {
     ...extra,
   };
 }
+// Actie op vandaag door de vlag, zonder deadline: "Haal van vandaag" werkt op elke weekdag (seed-001 heeft deadline 26 sep).
+const SEED_VLAG = { "acties/seed-001": { ...data.acties["acties/seed-001"], due: "" } };
 const VOORSTEL = { "voorstellen/v1": { text: "Reageren op budgetvoorstel CI-runners", van: "Ruben Smit", onderwerp: "Budget CI-runners Q4",
   prog: "CI Acceleration", mail: "https://outlook.example.com/owa/?ItemID=mail-003", why: "Ruben wacht op akkoord voor Q4",
   createdAt: "2026-09-24T06:00:00.000Z", run: "ochtend-2026-09-24", status: "nieuw" } };
@@ -66,7 +68,7 @@ test.describe("Lijst", () => {
 // =========================================================================================
 test.describe("Detail en actiebalk", () => {
   test("actiebalk: Vink af · Haal van vandaag · Vraag Claude · Open bron ↗ · Laten vervallen; elke knop noemt zijn toets", async ({ page, open }) => {
-    await open(buildMock());
+    await open(buildMock({ db: { docs: docsWith(SEED_VLAG) } }));
     await goTo(page, "Acties");
     await openItem(page, SEED);
     expect(await barLabels(page)).toEqual(["Vink af", "Haal van vandaag", "Vraag Claude", "Open bron", "Laten vervallen"]);
@@ -269,11 +271,7 @@ test.describe("Voorstellen en Vandaag", () => {
   });
 
   test("Vandaag: afspraken van nu, acties met vandaag en nieuwe voorstellen; Haal van vandaag haalt de actie eruit", async ({ page, open }) => {
-    // De seed heeft deadline "26 sep"; valt de testdag daarop, dan telt die deadline ook als vandaag. Hier gaat het om de markering.
-    const docs = docsWith(VOORSTEL);
-    docs["acties/seed-001"] = { ...docs["acties/seed-001"], due: "" };
-    delete docs["acties/seed-001"].dueIso;
-    await open(buildMock({ db: { docs } }));
+    await open(buildMock({ db: { docs: docsWith({ ...VOORSTEL, ...SEED_VLAG }) } })); // markering zonder deadline
     await expect(heading(page, "Acties voor vandaag")).toBeVisible();
     await expect(heading(page, "Nieuwe voorstellen")).toBeVisible();
     await expect(itemWith(page, "Reageren op budgetvoorstel CI-runners")).toBeVisible();
@@ -349,5 +347,20 @@ test.describe("Review B5", () => {
     await expect(detail(page).getByRole("heading", { level: 2 })).toHaveText("Reageren op budgetvoorstel CI-runners");
     await expect(detail(page)).toContainText("Ochtendscan 24 sep");
     await expect(detail(page)).not.toContainText("ochtend-2026");
+  });
+});
+
+// =========================================================================================
+// Deadline vandaag (bv. op zaterdag 26 sep voor seed-001): de deadline houdt de actie op Vandaag.
+test.describe("Deadline vandaag", () => {
+  test("actie staat op Vandaag, zonder Haal van vandaag (dat kan niet), status noemt de deadline", async ({ page, open }) => {
+    await open(buildMock({ refNow: referenceNow("2026-09-26") }));
+    await expect(heading(page, "Acties voor vandaag")).toBeVisible();
+    await expect(itemWith(page, SEED)).toBeVisible();
+    await openItem(page, SEED);
+    await expect(detail(page)).toContainText("open, vandaag (deadline vandaag)");
+    await expect(actionBar(page).getByRole("button", { name: /vandaag/i })).toHaveCount(0);
+    await expect(actionBar(page).getByRole("menuitem", { name: /vandaag/i })).toHaveCount(0);
+    await expect(actionBar(page).getByRole("button", { name: "Vink af" })).toBeVisible();
   });
 });

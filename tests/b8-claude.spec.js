@@ -2,7 +2,7 @@
 // vangrails ongewijzigd; Teams zonder recht (Missing scope) geeft een kopieer-en-plakregel; personen_zoeken uit het
 // eigen adresboek; chattekst en Jira-commentaar via finishChat (geen dashes, "that being said", geen KR/Thomas).
 const { test: base, expect } = require("@playwright/test");
-const { buildMock, data } = require("./fixtures");
+const { buildMock, data, referenceNow } = require("./fixtures");
 const { openPage, mockLog, mcpCalls, goTo, actionBar, openItem, openClaude, itemWith, nav, detail, feedbackBar } = require("./helpers");
 
 const test = base.extend({
@@ -170,7 +170,7 @@ test.describe("Teams zonder recht (Missing scope)", () => {
 
   test("met de vlag al gezet (minder dan 7 dagen) roept voer_uit de connector niet aan", async ({ page, open }) => {
     await open(buildMock({ teamsSendBlocked: false, db: { docs: { ...JSON.parse(JSON.stringify(require("./fixtures/acties.json"))),
-      "prefs/thomas": { teamsSendBlocked: { since: new Date(Date.now() - 86400000).toISOString() } } } },
+      "prefs/thomas": { teamsSendBlocked: { since: new Date(referenceNow() - 86400000).toISOString() } } } },
       sample: { rules: [{ match: "kanaal", text: "Plak hem zelf.", toolCalls: [voer("teams_reply_channel_message", { teamId: "team-x", channelId: "19:kanaal-x@thread.tacv2", messageId: "m-1", body: "Klopt." })] }] } }));
     await askBar(page, "Antwoord in het kanaal dat het klopt");
     await expect(page.getByText("Plak hem zelf.").first()).toBeVisible({ timeout: 8000 });

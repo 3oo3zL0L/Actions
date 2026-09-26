@@ -37,10 +37,15 @@ function amsToEpoch(y, mo, d, h, mi) {
   return t;
 }
 
-/** Referentie-nu: vandaag (Amsterdamse datum) 10:15. */
-function referenceNow(realNow = Date.now()) {
-  const p = amsParts(realNow);
-  return amsToEpoch(p.y, p.mo, p.d, REF_HOUR, REF_MINUTE);
+/**
+ * Referentie-nu: een vaste werkdag, donderdag 24 sep 2026 10:15 (Amsterdam), zodat de suite niet afhangt van de
+ * weekdag waarop hij draait (morgen = vrijdag, deadlines in acties.json liggen na vandaag).
+ * ACTIEPAGINA_REF_DATE=YYYY-MM-DD draait de hele suite op een andere dag (bv. een vrijdag of zaterdag).
+ */
+const REF_DATE = process.env.ACTIEPAGINA_REF_DATE || "2026-09-24";
+function referenceNow(date = REF_DATE) {
+  const [y, mo, d] = String(date).split("-").map(Number);
+  return amsToEpoch(y, mo, d, REF_HOUR, REF_MINUTE);
 }
 
 function wallClock(refEpoch, hhmm, dayOffset = 0) {
@@ -113,7 +118,7 @@ function buildChats(ref) {
  * samengevoegd; `overrides.tools` per server/tool.
  */
 function buildMock(overrides = {}) {
-  const ref = referenceNow();
+  const ref = overrides.refNow || referenceNow(); // eigen referentiedag mogelijk (bv. een zaterdag)
   const base = {
     refNow: ref,
     capabilities: { mcp: true, sample: true, db: true, permissions: true },

@@ -90,8 +90,8 @@ function freeSlots(ref, specs, dur = 30) {
  * worden samengevoegd (eigen fixtures van de test winnen).
  */
 function buildAgendaMock(overrides = {}) {
-  const ref = referenceNow();
-  const base = buildMock();
+  const ref = overrides.refNow || referenceNow();
+  const base = buildMock({ refNow: ref });
   const cal = base.tools["Microsoft 365"].outlook_calendar_search.items.concat(EXTRA.map((e) => calItem(ref, e)));
   const evt003 = { id: "evt-003", subject: "Architectuuroverleg Object Store", start: "10:00", end: "11:00", organizer: "mark.bakker@example.com",
     attendees: ["mark.bakker@example.com", "thomas@example.com", "noor.mulder@example.com"], location: "Microsoft Teams Meeting", summary: "Keuze storage-backend en migratiepad." };
@@ -107,7 +107,7 @@ function buildAgendaMock(overrides = {}) {
     },
   };
   const merged = { ...tools["Microsoft 365"], ...((overrides.tools || {})["Microsoft 365"] || {}) };
-  return buildMock({ ...overrides, tools: { ...(overrides.tools || {}), "Microsoft 365": merged } });
+  return buildMock({ ...overrides, refNow: ref, tools: { ...(overrides.tools || {}), "Microsoft 365": merged } });
 }
 
 module.exports = { buildAgendaMock, freeSlots, nextWorkdays, nextDay, wall, EXTRA };
