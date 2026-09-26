@@ -234,6 +234,8 @@ test.describe("Vangrails ongewijzigd", () => {
     await expect(page.getByText("Klaar.").first()).toBeVisible({ timeout: 8000 });
     expect(await directCalls(page, "outlook_create_draft")).toHaveLength(5);
     expect((await toolResults(page, "voer_uit")).at(-1).result.fout).toMatch(/Vraag Thomas om te bevestigen/);
+    // Eigen tekst voor het budget (Thomas vroeg het wel zelf), los van de weigering zonder eigen vraag.
+    await expect(panel(page).locator("details.step.fail").last()).toContainText("Niet uitgevoerd: maximaal 5 acties per vraag. Vraag opnieuw om door te gaan.");
 
     await chatBox(page).press("Escape");
     await goTo(page, "Vandaag");
@@ -242,6 +244,7 @@ test.describe("Vangrails ongewijzigd", () => {
     await expect(page.getByText("Voorbereid.").first()).toBeVisible({ timeout: 8000 });
     expect(await mcpCalls(page, "outlook_send_mail")).toEqual([]);
     expect((await toolResults(page, "voer_uit")).at(-1).result.fout).toMatch(/bevestigen/);
+    await expect(panel(page).locator("details.step.fail").last()).toContainText("Niet uitgevoerd: Thomas vroeg hier niet zelf om");
   });
 });
 
@@ -285,5 +288,53 @@ test.describe("Paneel bedekt niets", () => {
     if (await feedbackBar(page).isVisible()) expect(overlaps(await feedbackBar(page).boundingBox(), p)).toBe(false);
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
     if (SHOTS) await page.screenshot({ path: SHOTS + "/b8-mobiel-paneel.png" });
+  });
+
+  // UX-review B8: opnieuw openen met een bestaand gesprek scrolde op mobiel de hele pagina (kop en kaart buiten beeld).
+  test("375px: Esc, e en opnieuw c laten de pagina bovenaan; kop, kaart en invoer in beeld; focus na Esc op de actiebalk", async ({ page, open }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    // Stapregels met links (sr-tekst) in een oud bericht: die mogen de pagina niet langer maken dan het scherm.
+    await open(buildMock({ sample: { rules: [
+      { match: "tweede vraag", text: "Plak hem zelf.", toolCalls: [lees("personen_zoeken", { q: "Lotte" }, "pagina"), voer("teams_send_chat_message", { chatId: LOTTE_CHAT, body: "Ik ben later." }, "aan Lotte Visser")] },
+      { match: "vraag", text: "**Kort:** antwoord.\n\n- punt een\n- punt twee\n- punt drie" }] } }));
+    await goTo(page, "Inbox");
+    await itemWith(page, "Budget CI-runners Q4").click({ position: { x: 60, y: 14 } });
+    await actionBar(page).getByRole("button", { name: "Vraag Claude" }).click();
+    for (const q of ["eerste vraag", "tweede vraag", "derde vraag", "vierde vraag"]) {
+      await ask(page, q);
+      await expect(panel(page).locator(".msg.cl .msg-actions")).toHaveCount(["eerste vraag", "tweede vraag", "derde vraag", "vierde vraag"].indexOf(q) + 1, { timeout: 8000 });
+    }
+    for (const withE of [true, false]) {
+      await chatBox(page).press("Escape");
+      await expect(panel(page)).toBeHidden();
+      await expect.poll(() => page.evaluate(() => !!document.activeElement.closest("#abar"))).toBe(true); // niet BODY
+      if (withE) { await page.keyboard.press("e"); await expect(feedbackBar(page)).toBeVisible(); }
+      await page.keyboard.press("c");
+      await expect(chatBox(page)).toBeFocused();
+      await page.waitForTimeout(300);
+      expect(await page.evaluate(() => window.scrollY)).toBe(0);
+      expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeLessThanOrEqual(812); // geen lege ruimte onder de invoer
+      const p = await panel(page).boundingBox();
+      expect(p.y).toBeGreaterThanOrEqual(0);
+      for (const loc of [page.getByRole("button", { name: "Sluit Claude-paneel" }), page.getByRole("button", { name: "Terug naar de lijst" }).filter({ visible: true }).last(), ctxCard(page), chatBox(page)]) {
+        await expect(loc).toBeInViewport({ ratio: 1 });
+      }
+      const log = await page.locator("#chatLog").evaluate((el) => ({ top: el.scrollTop, max: el.scrollHeight - el.clientHeight }));
+      expect(log.top).toBeGreaterThanOrEqual(log.max - 2); // het gesprek staat onderaan, alleen de log scrolt
+    }
+  });
+
+  test("placeholder: vóór de eerste vraag 'Vraag iets over <titel>…', zonder item 'Vraag Claude iets…', daarna 'Antwoord aan Claude…'", async ({ page, open }) => {
+    await open(buildMock());
+    await goTo(page, "Inbox");
+    await openItem(page, "Budget CI-runners Q4");
+    await actionBar(page).getByRole("button", { name: "Vraag Claude" }).click();
+    await expect(chatBox(page)).toHaveAttribute("placeholder", "Vraag iets over Budget CI-runners Q4…");
+    await ctxCard(page).getByRole("button", { name: "Context weghalen" }).click();
+    await expect(chatBox(page)).toHaveAttribute("placeholder", "Vraag Claude iets…");
+    await openItem(page, "Vraag over OIDC-scope voor partnerportaal", false);
+    await expect(chatBox(page)).toHaveAttribute("placeholder", /^Vraag iets over Vraag over OIDC-scope/);
+    await ask(page, "Vat samen");
+    await expect(chatBox(page)).toHaveAttribute("placeholder", "Antwoord aan Claude…");
   });
 });
