@@ -38,3 +38,6 @@
 @media (max-width: 560px) { .composer .rcp-box input { min-height: 44px; } }
 .ccard .copy-fallback { display: block; width: 100%; margin: 6px 0; min-height: 4.5em; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface); padding: 6px; }
 .ccard .copy-fallback[hidden] { display: none; }
+/* Invulkaart open: de primaire knop (Beantwoord, Antwoord, Kopieer naar Teams) staat er niet dubbel; r en Enter springen
+   naar het tekstvak van de kaart. */
+.detail:has(#detailInline .composer) .abar [data-slot="primary"] { display: none; }

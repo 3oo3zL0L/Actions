@@ -313,6 +313,7 @@ var Shell = (function () {
     var bar = $("abar");
     var old = bar.querySelector(".abar-more");
     if (old) { old.querySelectorAll("[data-slot]").forEach(function (x) { bar.insertBefore(x, old); }); old.remove(); }
+    bar.classList.remove("tight");
     if (bar.hidden || !bar.offsetParent) return;
     var first = bar.firstElementChild; if (!first) return;
     var lineH = first.offsetHeight, maxRows = isPhone() ? 2 : 1;
@@ -323,7 +324,20 @@ var Shell = (function () {
     var btn = h("button", { class: "btn", type: "button", "aria-haspopup": "menu", "aria-expanded": moreOpen ? "true" : "false", "aria-label": "Meer acties", title: "Meer acties" }, "Meer", h("span", { "aria-hidden": "true", text: " ▾" }));
     var wrap = h("div", { class: "abar-more" }, btn, menu);
     btn.addEventListener("click", function () { moreOpen = menu.hidden; menu.hidden = !moreOpen; btn.setAttribute("aria-expanded", moreOpen ? "true" : "false"); if (moreOpen) { var f = menu.querySelector("button, a"); if (f) f.focus(); } });
-    menu.addEventListener("keydown", function (e) { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); moreOpen = false; menu.hidden = true; btn.setAttribute("aria-expanded", "false"); btn.focus(); } });
+    // Toetsen binnen het menu (role=menu): ↑/↓, Home/End bewegen tussen de items, Esc sluit; nooit de lijstselectie.
+    menu.addEventListener("keydown", function (e) {
+      var its = Array.prototype.slice.call(menu.querySelectorAll("button, a")).filter(function (x) { return x.offsetParent !== null; });
+      var i = its.indexOf(document.activeElement), n = null;
+      if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); moreOpen = false; menu.hidden = true; btn.setAttribute("aria-expanded", "false"); btn.focus(); return; }
+      if (e.key === "ArrowDown" || e.key === "j") n = i < 0 ? 0 : (i + 1) % its.length;
+      else if (e.key === "ArrowUp" || e.key === "k") n = i < 0 ? its.length - 1 : (i - 1 + its.length) % its.length;
+      else if (e.key === "Home") n = 0;
+      else if (e.key === "End") n = its.length - 1;
+      else if (e.key === "Tab") { moreOpen = false; menu.hidden = true; btn.setAttribute("aria-expanded", "false"); return; }
+      if (n == null || !its.length) return;
+      e.preventDefault(); e.stopPropagation();
+      its[n].focus();
+    });
     bar.append(wrap);
     moreActs.forEach(function (a) {
       menu.append(h("button", { class: "btn", type: "button", role: "menuitem", title: (a.title || a.label) + (a.key ? " (" + a.key + ")" : ""), "aria-keyshortcuts": a.key || null,
@@ -332,6 +346,7 @@ var Shell = (function () {
     var extras = Array.prototype.filter.call(bar.children, function (x) { return x.getAttribute && x.getAttribute("data-slot") === "extra"; });
     while (extras.length && !fits()) { var x = extras.pop(); x.setAttribute("role", "menuitem"); menu.insertBefore(x, menu.firstChild); }
     if (!menu.firstChild) wrap.remove();
+    if (!fits()) bar.classList.add("tight"); // lange labels (bv. "Kopieer naar Teams"): compacter, liever dan een tweede regel
   }
   function closeMore() { var m = document.querySelector("#abar .abar-menu"); if (m && !m.hidden) { moreOpen = false; m.hidden = true; var b = m.previousSibling; if (b) b.setAttribute("aria-expanded", "false"); return true; } return false; }
   var fitTimer = null;

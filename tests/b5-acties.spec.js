@@ -269,7 +269,11 @@ test.describe("Voorstellen en Vandaag", () => {
   });
 
   test("Vandaag: afspraken van nu, acties met vandaag en nieuwe voorstellen; Haal van vandaag haalt de actie eruit", async ({ page, open }) => {
-    await open(buildMock({ db: { docs: docsWith(VOORSTEL) } }));
+    // De seed heeft deadline "26 sep"; valt de testdag daarop, dan telt die deadline ook als vandaag. Hier gaat het om de markering.
+    const docs = docsWith(VOORSTEL);
+    docs["acties/seed-001"] = { ...docs["acties/seed-001"], due: "" };
+    delete docs["acties/seed-001"].dueIso;
+    await open(buildMock({ db: { docs } }));
     await expect(heading(page, "Acties voor vandaag")).toBeVisible();
     await expect(heading(page, "Nieuwe voorstellen")).toBeVisible();
     await expect(itemWith(page, "Reageren op budgetvoorstel CI-runners")).toBeVisible();
