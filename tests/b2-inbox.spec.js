@@ -4,6 +4,7 @@
 // Plan: docs/UX-PLAN.md (B2), bouwbrief: docs/PLAN-FASE2.md ("Teams antwoorden", "Adresboek", "Schrijfstijl").
 const { test: base, expect } = require("@playwright/test");
 const { inboxMock, LOTTE_CHAT, GROUP_CHAT } = require("./fixtures/inbox");
+const { referenceNow } = require("./fixtures"); // "sinds" relatief aan de testklok, niet aan de echte datum
 const { openPage, mockLog, mcpCalls, dbDump, itemWith, entryButton, goTo, detail, actionBar, feedbackBar, openItem, inboxFilter } = require("./helpers");
 
 // In deze spec mag de app echt versturen (na Verstuur en de 10 s); wel: geen contractschendingen, geen fouten in de console.
@@ -572,7 +573,7 @@ test.describe("Teams-bericht", () => {
 
   test("lukt kopiëren niet, dan zegt de balk dat eerlijk en staat de tekst geselecteerd klaar", async ({ page, open }) => {
     await page.addInitScript(() => { document.execCommand = () => false; });
-    await open(inboxMock({ db: { docs: { "prefs/thomas": { teamsSendBlocked: { since: new Date(Date.now() - 86400000).toISOString() } } } } }));
+    await open(inboxMock({ db: { docs: { "prefs/thomas": { teamsSendBlocked: { since: new Date(referenceNow() - 86400000).toISOString() } } } } }));
     await page.evaluate(() => { Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: () => Promise.reject(new Error("geen recht")) } }); });
     await inbox(page);
     await openItem(page, "Heeft iemand de benchmarkcijfers", "Mark Bakker");
@@ -586,7 +587,7 @@ test.describe("Teams-bericht", () => {
   });
 
   test("groepschat zonder Teams-recht: klembord en het bericht openen via zijn webUrl", async ({ page, open }) => {
-    await open(inboxMock({ db: { docs: { "prefs/thomas": { teamsSendBlocked: { since: new Date(Date.now() - 86400000).toISOString() } } } } }));
+    await open(inboxMock({ db: { docs: { "prefs/thomas": { teamsSendBlocked: { since: new Date(referenceNow() - 86400000).toISOString() } } } } }));
     await inbox(page);
     await openItem(page, "Heeft iemand de benchmarkcijfers", "Mark Bakker");
     await actionBar(page).getByRole("button", { name: "Kopieer en open in Teams" }).click();
@@ -598,7 +599,7 @@ test.describe("Teams-bericht", () => {
   });
 
   test("vlag ouder dan 7 dagen: de app probeert direct versturen opnieuw; met recht gaat het bericht echt (Bekijk ↗, geen ongedaan)", async ({ page, open }) => {
-    await open(inboxMock({ teamsSendBlocked: false, db: { docs: { "prefs/thomas": { teamsSendBlocked: { since: new Date(Date.now() - 8 * 86400000).toISOString() } } } } }));
+    await open(inboxMock({ teamsSendBlocked: false, db: { docs: { "prefs/thomas": { teamsSendBlocked: { since: new Date(referenceNow() - 8 * 86400000).toISOString() } } } } }));
     await inbox(page);
     await openItem(page, "Heeft iemand de benchmarkcijfers", "Mark Bakker");
     await expect(actionBar(page).getByRole("button", { name: "Antwoord", exact: true })).toBeVisible();
