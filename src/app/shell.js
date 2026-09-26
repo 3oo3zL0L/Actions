@@ -330,9 +330,10 @@ var Shell = (function () {
     var lineH = first.offsetHeight, maxRows = isPhone() ? 2 : 1;
     var fits = function () { return bar.scrollHeight - parseFloat(getComputedStyle(bar).paddingTop) - parseFloat(getComputedStyle(bar).paddingBottom) <= lineH * maxRows + 6 * (maxRows - 1) + 2; };
     var moreActs = curActions.filter(function (a) { return a.slot === "more" && a.run && !a.el; });
-    if (fits() && !moreActs.length) return;
+    if (fits() && !moreActs.length) { setRoving(bar); return; }
     var menu = h("div", { class: "abar-menu", role: "menu", "aria-label": "Meer acties", hidden: !moreOpen });
-    var btn = h("button", { class: "btn", type: "button", "aria-haspopup": "menu", "aria-expanded": moreOpen ? "true" : "false", "aria-label": "Meer acties", title: "Meer acties" }, "Meer", h("span", { "aria-hidden": "true", text: " ▾" }));
+    var btn = h("button", { class: "btn", type: "button", "aria-haspopup": "menu", "aria-expanded": moreOpen ? "true" : "false", "aria-label": "Meer acties", title: "Meer acties" },
+      h("span", { class: "abar-more-txt", text: "Meer" }), h("span", { "aria-hidden": "true", text: " ▾" }));
     var wrap = h("div", { class: "abar-more" }, btn, menu);
     btn.addEventListener("click", function () { moreOpen = menu.hidden; menu.hidden = !moreOpen; btn.setAttribute("aria-expanded", moreOpen ? "true" : "false"); if (moreOpen) { var f = menu.querySelector("button, a"); if (f) f.focus(); } });
     // Toetsen binnen het menu (role=menu): ↑/↓, Home/End bewegen tussen de items, Esc sluit; nooit de lijstselectie.
@@ -358,8 +359,37 @@ var Shell = (function () {
     while (extras.length && !fits()) { var x = extras.pop(); x.setAttribute("role", "menuitem"); menu.insertBefore(x, menu.firstChild); }
     if (!menu.firstChild) wrap.remove();
     if (!fits()) bar.classList.add("tight"); // lange labels (bv. "Kopieer naar Teams"): compacter, liever dan een tweede regel
+    setRoving(bar);
   }
   function closeMore() { var m = document.querySelector("#abar .abar-menu"); if (m && !m.hidden) { moreOpen = false; m.hidden = true; var b = m.previousSibling; if (b) b.setAttribute("aria-expanded", "false"); return true; } return false; }
+  // Roving tabindex voor de actiebalk (role=toolbar), ARIA APG: één knop is tabbaar (tabindex 0), de rest -1;
+  // ←/→ bewegen de focus binnen de balk (nooit de lijstselectie), Home/End naar de eerste/laatste knop.
+  function toolbarItems(bar) {
+    return Array.prototype.slice.call(bar.children).map(function (c) {
+      if (c.classList && c.classList.contains("btn")) return c;
+      if (c.classList && c.classList.contains("abar-more")) return c.querySelector(":scope > .btn");
+      return null;
+    }).filter(Boolean);
+  }
+  function setRoving(bar) {
+    var its = toolbarItems(bar);
+    its.forEach(function (x, i) { x.tabIndex = i === 0 ? 0 : -1; });
+  }
+  $("abar").addEventListener("keydown", function (e) {
+    if (e.target.closest(".abar-menu")) return; // eigen ↑/↓/Home/End-afhandeling van het "Meer"-menu
+    var its = toolbarItems($("abar"));
+    var i = its.indexOf(document.activeElement);
+    if (i < 0) return;
+    var n = null;
+    if (e.key === "ArrowRight") n = (i + 1) % its.length;
+    else if (e.key === "ArrowLeft") n = (i - 1 + its.length) % its.length;
+    else if (e.key === "Home") n = 0;
+    else if (e.key === "End") n = its.length - 1;
+    if (n == null) return;
+    e.preventDefault(); e.stopPropagation();
+    its.forEach(function (x, j) { x.tabIndex = j === n ? 0 : -1; });
+    its[n].focus();
+  });
   var fitTimer = null;
   window.addEventListener("resize", function () { clearTimeout(fitTimer); fitTimer = setTimeout(fitBar, 100); });
   document.addEventListener("click", function (e) { if (!e.target.closest(".abar-more")) closeMore(); });

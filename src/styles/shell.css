@@ -227,6 +227,11 @@ button.stretch:focus-visible::after { outline: 2px solid var(--focus); outline-o
     .abar .btn[data-short] { font-size: 0; gap: 0; }
     .abar .btn[data-short]::before { content: attr(data-short); font-size: 12px; }
     .abar .btn[data-short] > span[aria-hidden="true"] { font-size: 12px; margin-left: 3px; }
+    /* "Meer ▾" wordt een icoon-knop (naam blijft "Meer acties" via aria-label): op een tablet (bv. 900px) is dat
+       vaak het enige verschil tussen wel en niet op één regel passen. */
+    .abar-more > .btn .abar-more-txt { display: none; }
+    .abar-more > .btn { padding-left: 8px; padding-right: 8px; }
+    .abar-more > .btn > span[aria-hidden="true"] { font-size: 14px; margin-left: 0; }
   }
 }
 

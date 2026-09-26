@@ -3,8 +3,8 @@
    met een eigen illustratie van het donkere woud als achtergrond. Standaardthema. */
 :root[data-theme="forest"] {
   --bg: #000000; --surface: #18191c; --surface-2: #222328; --border: #2f3137;
-  --text: #ecebe6; --text-2: #b4b3ad; --text-3: #8e8d88;
-  --accent: #e8a317; --on-accent: #101113; --accent-text: #f0b640; --accent-soft: #3a2c0c;
+  --text: #ecebe6; --text-2: #b4b3ad; --text-3: #9d9c96;
+  --accent: #e8a317; --on-accent: #101113; --accent-text: #f0b640; --accent-soft: #3a2c0c; --accent-border: var(--accent);
   --info: #7fb0ff; --success: #5fcf8a; --warn: #f0b640; --danger: #ff8a80;
   --info-soft: #172338; --success-soft: #13291c; --warn-soft: #3a2c0c; --danger-soft: #3a1714;
   --focus: #e8a317; --scrim: rgb(0 0 0 / .7);

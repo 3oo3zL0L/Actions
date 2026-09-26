@@ -9,6 +9,7 @@
     "serve": "http-server src -p 4173 -c-1 --silent"
   },
   "devDependencies": {
-    "@playwright/test": "1.56.1"
+    "@playwright/test": "1.56.1",
+    "axe-core": "^4.13.0"
   }
 }
