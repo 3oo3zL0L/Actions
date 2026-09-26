@@ -101,8 +101,8 @@ test.describe("Eén lijst", () => {
     await open(inboxMock());
     await inbox(page);
     await expect(entryButton(page, "Inbox")).toHaveAccessibleName("Inbox 7"); // 3 ongelezen mail + 4 Teams (eigen bericht telt niet)
-    await expect(inboxFilter(page).getByRole("button", { name: /^Mail/ })).toHaveText(/Mail\s*3/);
-    await expect(inboxFilter(page).getByRole("button", { name: /^Teams/ })).toHaveText(/Teams\s*4/);
+    await expect(inboxFilter(page).getByRole("button", { name: /^Mail/ })).toHaveText("Mail · 3 nieuw");
+    await expect(inboxFilter(page).getByRole("button", { name: /^Teams/ })).toHaveText("Teams · 4 nieuw");
     await openItem(page, "Heeft iemand de benchmarkcijfers");
     await page.keyboard.press("e");
     await expect(entryButton(page, "Inbox")).toHaveAccessibleName("Inbox 6");
@@ -538,7 +538,7 @@ test.describe("Teams-bericht", () => {
     await expect(lijst(page).getByText("benchmarkcijfers")).toHaveCount(0);
   });
 
-  test("Antwoord zonder Teams-recht (standaard): één poging, dan klembord + 1-op-1 chat met vooringevulde tekst; daarna direct 'Kopieer en open in Teams'", async ({ page, open }) => {
+  test("Antwoord zonder Teams-recht (standaard): één poging, dan klembord + 1-op-1 chat met vooringevulde tekst; daarna direct 'Kopieer naar Teams'", async ({ page, open }) => {
     await open(inboxMock({ sample: { rules: [{ match: "Teams-antwoord", text: "Ja, ik open de demo om 14:00 — prima.\n\nKR\nThomas" }] } }));
     await inbox(page);
     await openItem(page, "Kun je de demo om 14:00", "Lotte Visser");
@@ -562,11 +562,11 @@ test.describe("Teams-bericht", () => {
     expect(tryCall.outcome).toBe("tool_error");
     await expect.poll(async () => (await prefsDoc(page)).teamsSendBlocked?.since).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     // Met de vlag: de knop heet direct zo en er is geen mislukte poging meer.
-    await expect(actionBar(page).getByRole("button", { name: "Kopieer en open in Teams" })).toBeVisible();
+    await expect(actionBar(page).getByRole("button", { name: "Kopieer naar Teams" })).toBeVisible();
     await expect(detail(page)).toContainText("✓ Tekst gekopieerd. Plak hem in Teams.");
-    await actionBar(page).getByRole("button", { name: "Kopieer en open in Teams" }).click();
+    await actionBar(page).getByRole("button", { name: "Kopieer naar Teams" }).click();
     await composerText(page).fill("Top, tot straks");
-    await composer(page).getByRole("button", { name: "Kopieer en open in Teams" }).click();
+    await composer(page).getByRole("button", { name: "Kopieer naar Teams" }).click();
     expect(await mcpCalls(page, "teams_send_chat_message")).toHaveLength(1);
     await expect.poll(async () => page.evaluate(() => window.__copied.at(-1))).toBe("Top, tot straks");
   });
@@ -577,7 +577,7 @@ test.describe("Teams-bericht", () => {
     await page.evaluate(() => { Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: () => Promise.reject(new Error("geen recht")) } }); });
     await inbox(page);
     await openItem(page, "Heeft iemand de benchmarkcijfers", "Mark Bakker");
-    await actionBar(page).getByRole("button", { name: "Kopieer en open in Teams" }).click();
+    await actionBar(page).getByRole("button", { name: "Kopieer naar Teams" }).click();
     await composerText(page).fill("Ik zoek ze op.");
     await composerText(page).press("Control+Enter");
     await expect(feedbackBar(page)).toContainText("⚠ Kopiëren lukte niet. Kopieer je tekst zelf en plak hem in Teams");
@@ -590,7 +590,7 @@ test.describe("Teams-bericht", () => {
     await open(inboxMock({ db: { docs: { "prefs/thomas": { teamsSendBlocked: { since: new Date(referenceNow() - 86400000).toISOString() } } } } }));
     await inbox(page);
     await openItem(page, "Heeft iemand de benchmarkcijfers", "Mark Bakker");
-    await actionBar(page).getByRole("button", { name: "Kopieer en open in Teams" }).click();
+    await actionBar(page).getByRole("button", { name: "Kopieer naar Teams" }).click();
     await composerText(page).fill("Ik zoek ze op.");
     await composerText(page).press("Control+Enter");
     await expect(feedbackBar(page)).toContainText("Tekst gekopieerd. Plak hem in Teams");
@@ -710,5 +710,121 @@ test.describe("Mobiel 375px", () => {
     await noH();
     await page.keyboard.press("Escape"); // sluit het antwoordveld
     await expect(composerText(page)).toHaveCount(0);
+  });
+});
+
+// =========================================================================================
+// UX-review B2/B3 (review/B2-B3.md): Meer-menu, toetsen, command bar, groepen, focus en kleine teksten.
+test.describe("Na UX-review", () => {
+  const BLOCKED = { db: { docs: { "prefs/thomas": { teamsSendBlocked: { since: new Date(Date.now() - 86400000).toISOString() } } } } };
+
+  test("Teams zonder recht: 'Kopieer naar Teams' houdt de balk op één regel; Meer ▾ opent binnen de detailkolom, boven de invulkaart", async ({ page, open }) => {
+    await open(inboxMock(BLOCKED));
+    await inbox(page);
+    await openItem(page, "Kun je de demo om 14:00", "Lotte Visser");
+    const prim = actionBar(page).getByRole("button", { name: "Kopieer naar Teams" });
+    await expect(prim).toHaveAttribute("title", /opent in Teams \(r\)$/);
+    const tops = await actionBar(page).evaluate((bar) => [...bar.children].map((c) => Math.round(c.getBoundingClientRect().top)));
+    expect(new Set(tops).size, "actiebalk op één regel").toBe(1);
+    // Invulkaart open: de primaire knop staat er niet dubbel; r springt naar het tekstvak.
+    await prim.click();
+    await expect(composer(page)).toBeVisible();
+    await expect(prim).toBeHidden();
+    await expect(composer(page).getByRole("button", { name: "Kopieer naar Teams" })).toBeVisible();
+    await page.locator("body").press("r");
+    await expect(composerText(page)).toBeFocused();
+    await actionBar(page).getByRole("button", { name: "Meer acties" }).click();
+    const menu = actionBar(page).getByRole("menu", { name: "Meer acties" });
+    await expect(menu).toBeVisible();
+    const m = await menu.boundingBox(), col = await detail(page).boundingBox();
+    expect(m.x).toBeGreaterThanOrEqual(col.x);
+    expect(m.x + m.width).toBeLessThanOrEqual(col.x + col.width + 0.5);
+    const onTop = await menu.evaluate((el) => { const r = el.getBoundingClientRect(); const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height - 8); return el.contains(hit); });
+    expect(onTop, "menu ligt boven de invulkaart").toBe(true);
+  });
+
+  test("↑/↓, Home/End en Esc blijven binnen het open Meer-menu; de lijstselectie verandert niet", async ({ page, open }) => {
+    await open(inboxMock());
+    await inbox(page);
+    await openItem(page, "Offerte licenties buildserver");
+    await actionBar(page).getByRole("button", { name: "Meer acties" }).click();
+    const items = actionBar(page).getByRole("menu", { name: "Meer acties" }).getByRole("menuitem");
+    await expect(items.first()).toBeFocused();
+    await page.keyboard.press("ArrowDown");
+    await expect(items.nth(1)).toBeFocused();
+    await page.keyboard.press("End");
+    await expect(items.last()).toBeFocused();
+    await page.keyboard.press("ArrowDown");
+    await expect(items.first()).toBeFocused();
+    await page.keyboard.press("ArrowUp");
+    await expect(items.last()).toBeFocused();
+    await page.keyboard.press("Home");
+    await expect(items.first()).toBeFocused();
+    await expect(detail(page).getByRole("heading", { level: 2 })).toHaveText("Offerte licenties buildserver");
+    await page.keyboard.press("Escape");
+    await expect(items.first()).toBeHidden();
+    await expect(actionBar(page).getByRole("button", { name: "Meer acties" })).toBeFocused();
+    await expect(detail(page).getByRole("heading", { level: 2 })).toHaveText("Offerte licenties buildserver");
+  });
+
+  test("Ctrl+K vindt Teams-kanalen en -berichten; kiezen opent het kanaal (groep klapt open); Volgen staat bij de suggesties", async ({ page, open }) => {
+    await open(inboxMock());
+    await inbox(page);
+    await page.keyboard.press("Control+k");
+    const box = page.getByRole("combobox", { name: "Zoek, voer uit of vraag Claude" });
+    const opts = page.getByRole("listbox", { name: "Suggesties" }).getByRole("option");
+    await box.fill("storage-ADR");
+    await expect(opts.filter({ hasText: "Wie neemt de review van de storage-ADR?" })).toHaveCount(1);
+    await box.fill("architectuur");
+    const kanaalOpt = opts.filter({ hasText: "Kanaal" }).filter({ hasText: "Architectuur" });
+    await expect(kanaalOpt).toHaveCount(1);
+    await kanaalOpt.click();
+    await expect(detail(page).getByRole("heading", { name: "Architectuur" })).toBeVisible();
+    await expect(lijst(page).getByRole("button", { name: "Teams-kanalen (2)" })).toHaveAttribute("aria-expanded", "true");
+    await page.keyboard.press("Control+k");
+    await box.fill("volg");
+    await expect(opts.filter({ hasText: "Volgen" }).first()).toBeVisible();
+  });
+
+  test("j loopt door in de ingeklapte groepen Meldingen en Teams-kanalen", async ({ page, open }) => {
+    await open(inboxMock());
+    await inbox(page);
+    await openItem(page, "storage-ADR", "Noor Mulder");
+    await page.locator("body").press("j");
+    await expect(lijst(page).getByRole("button", { name: "Meldingen (1)" })).toHaveAttribute("aria-expanded", "true");
+    await expect(detail(page).getByRole("heading", { level: 2 })).toHaveText("Je wekelijkse samenvatting");
+    await page.locator("body").press("j");
+    await expect(lijst(page).getByRole("button", { name: "Teams-kanalen (2)" })).toHaveAttribute("aria-expanded", "true");
+    await expect(detail(page).getByRole("heading", { level: 2 })).toHaveText("Releases");
+  });
+
+  test("na Ctrl+Enter staat de focus op de geselecteerde rij (z annuleert meteen)", async ({ page, open }) => {
+    await open(inboxMock());
+    await inbox(page);
+    await openItem(page, "Offerte licenties buildserver");
+    await page.locator("body").press("r");
+    await composerText(page).fill("Hi Joost,\n\nAkkoord.");
+    await composerText(page).press("Control+Enter");
+    await expect(rowButton(page, "Joost Kramer", "mail, ongelezen")).toBeFocused();
+    await page.keyboard.press("z");
+    await expect(composerText(page)).toHaveValue("Hi Joost,\n\nAkkoord.");
+    await page.clock.runFor(15000);
+    expect(await mcpCalls(page, SEND)).toEqual([]);
+  });
+
+  test("V scrolt naar de groep Afgehandeld; mailtekst houdt witregels tussen alinea's; 1-op-1-tooltip 'Antwoord aan <naam>'", async ({ page, open }) => {
+    await page.setViewportSize({ width: 1280, height: 600 });
+    await open(inboxMock());
+    await inbox(page);
+    await openItem(page, "Offerte licenties buildserver");
+    await page.locator("body").press("e");
+    await page.locator("body").press("v");
+    await expect(lijst(page).getByRole("heading", { name: "Afgehandeld (1)" })).toBeInViewport();
+    await openItem(page, "Architectuurschets OIDC-koppeling");
+    await expect(detail(page)).toContainText("Volledige tekst van ib-m2");
+    const tekst = await detail(page).locator(".detail-text").innerText();
+    expect(tekst).toMatch(/Hoi Thomas,\n\nZie de schets in de bijlage\.\n\nVolledige tekst/);
+    await openItem(page, "Kun je de demo om 14:00", "Lotte Visser");
+    await expect(actionBar(page).getByRole("button", { name: "Antwoord", exact: true })).toHaveAttribute("title", "Antwoord aan Lotte Visser (r)");
   });
 });

@@ -175,7 +175,7 @@ test.describe("Antwoorden op een kanaalbericht", () => {
     expect(await page.evaluate(() => window.__copied)).toEqual(["Dank, ik plan de acceptatietest morgen."]);
     expect(await page.evaluate(() => window.__opened)).toEqual(["https://teams.example.com/l/message/releases/ib-c1"]);
     await expect.poll(async () => Boolean((await prefsDoc(page)).teamsSendBlocked)).toBe(true);
-    await expect(actionBar(page).getByRole("button", { name: "Kopieer en open in Teams" })).toBeVisible();
+    await expect(actionBar(page).getByRole("button", { name: "Kopieer naar Teams" })).toBeVisible();
   });
 
   test("Vraag Claude over een kanaalbericht geeft Claude de kanaal-ids mee", async ({ page, open }) => {

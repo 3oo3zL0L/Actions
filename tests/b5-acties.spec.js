@@ -271,7 +271,7 @@ test.describe("Voorstellen en Vandaag", () => {
   });
 
   test("Vandaag: afspraken van nu, acties met vandaag en nieuwe voorstellen; Haal van vandaag haalt de actie eruit", async ({ page, open }) => {
-    await open(buildMock({ db: { docs: docsWith({ ...VOORSTEL, ...SEED_VLAG }) } }));
+    await open(buildMock({ db: { docs: docsWith({ ...VOORSTEL, ...SEED_VLAG }) } })); // markering zonder deadline
     await expect(heading(page, "Acties voor vandaag")).toBeVisible();
     await expect(heading(page, "Nieuwe voorstellen")).toBeVisible();
     await expect(itemWith(page, "Reageren op budgetvoorstel CI-runners")).toBeVisible();
