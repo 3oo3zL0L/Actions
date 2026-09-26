@@ -35,9 +35,14 @@
 .abar { gap: 4px; }
 .abar .btn { padding: 4px 8px; }
 .abar .btn[data-slot="extra"] { background: transparent; }
-.abar-more { position: relative; }
+/* Meer ▾: het menu hangt aan de actiebalk (sticky = gepositioneerd), rechts uitgelijnd binnen de detailkolom en boven
+   de invulkaarten; zo wordt het nooit links afgeknipt, ook niet als Meer op een tweede regel staat. */
+.abar { z-index: 4; }
+.abar-more { position: static; }
+.abar.tight { gap: 2px; }
+.abar.tight .btn { padding-left: 4px; padding-right: 4px; }
 .abar-more > .btn { padding-left: 6px; padding-right: 6px; } /* compact, zodat vijf vaste knoppen plus Meer op 1280px op één regel passen */
-.abar-menu { position: absolute; right: 0; top: calc(100% + 4px); z-index: 5; min-width: 200px; display: flex; flex-direction: column; gap: 2px; padding: 6px;
+.abar-menu { position: absolute; right: var(--sp-4); top: calc(100% - 2px); z-index: 5; max-width: calc(100% - 2 * var(--sp-4)); min-width: 200px; display: flex; flex-direction: column; gap: 2px; padding: 6px;
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); box-shadow: var(--shadow-2); }
 .abar-menu[hidden] { display: none; }
 .abar-menu .btn { justify-content: flex-start; border-color: transparent; width: 100%; }
@@ -120,9 +125,9 @@ button.stretch:focus-visible::after { outline: 2px solid var(--focus); outline-o
     bottom: calc(var(--tab-h) + var(--fb-h) + env(safe-area-inset-bottom)); border-bottom: 0; border-top: 1px solid var(--border); background: var(--surface); }
   :root[data-theme="forest"] .abar { background: rgb(24 25 28 / .98); }
   .abar .btn { min-height: 44px; flex: 1 1 auto; }
-  .abar-more { flex: 1 1 auto; display: flex; }
+  .abar-more { flex: 1 1 auto; display: flex; position: relative; }
   .abar-more > .btn { flex: 1 1 auto; }
-  .abar-menu { top: auto; bottom: calc(100% + 4px); }
+  .abar-menu { top: auto; right: 0; bottom: calc(100% + 4px); max-width: none; }
   .detail-title { font-size: var(--fs-lg); }
   body.m-detail .detail-col .chat { height: calc(100vh - var(--tab-h) - var(--fb-h) - env(safe-area-inset-bottom)); height: calc(100dvh - var(--tab-h) - var(--fb-h) - env(safe-area-inset-bottom)); flex: none; }
   .feedback { position: fixed; left: 8px; right: 8px; bottom: calc(var(--tab-h) + 8px + env(safe-area-inset-bottom)); z-index: 35; border-radius: var(--r-md); box-shadow: var(--shadow-2); }

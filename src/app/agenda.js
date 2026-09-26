@@ -395,6 +395,12 @@ function eventActie(e) {
 // prefill: {subject, attendees: [{name, email}] of e-mailadressen, note, duration: 30|60}. Ook aan te roepen vanuit een mail.
 var PLAN_DAYS = 5;
 function planMeeting(prefill, opener) {
+  // Koppelingen nog aan het laden (pagina net open): eerst afwachten, niet stil stoppen.
+  if (cap.mcp === undefined && hasRuntime) {
+    var tries = arguments[2] || 0;
+    if (tries < 50) setTimeout(function () { planMeeting(prefill, opener, tries + 1); }, 100);
+    return;
+  }
   if (!cap.mcp) { announce("Plannen kan hier niet: geen koppeling met Microsoft 365."); return; }
   prefill = prefill || {};
   logEvent("plan_open");

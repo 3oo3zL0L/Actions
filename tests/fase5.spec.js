@@ -79,12 +79,12 @@ test.describe("Mail afhandelen", () => {
     await open(buildMock());
     await goTo(page, "Inbox");
     const mailTab = inboxFilter(page).getByRole("button", { name: /^Mail/ }); // B2: filterknop met aantal ongelezen
-    await expect(mailTab).toHaveText(/Mail\s*2/);
+    await expect(mailTab).toHaveText("Mail · 2 nieuw");
     // B1: selecteren, dan Afhandelen in de actiebalk; de melding staat in de feedbackbalk.
     await openItem(page, "Budget CI-runners Q4");
     await actionBar(page).getByRole("button", { name: /afhandelen/i }).click();
     await expect(lijst(page).getByText("Budget CI-runners Q4")).toHaveCount(0);
-    await expect(mailTab).toHaveText(/Mail\s*1/);
+    await expect(mailTab).toHaveText("Mail · 1 nieuw");
     const bar = page.getByRole("status").filter({ hasText: "Budget CI-runners Q4 afgehandeld" }).filter({ has: page.getByRole("button", { name: "Ongedaan maken" }) });
     await expect(bar).toBeVisible();
     await expect(bar).not.toContainText(/gelezen/i); // er is geen tool om op gelezen te zetten
@@ -112,7 +112,7 @@ test.describe("Mail afhandelen", () => {
     await page.getByRole("button", { name: "Ongedaan maken" }).click();
     await expect(page.getByText("Budget CI-runners Q4").first()).toBeVisible();
     await expect.poll(async () => Object.keys(await dbDump(page, "inbox_verborgen/")).length).toBe(0);
-    await expect(inboxFilter(page).getByRole("button", { name: /^Mail/ })).toHaveText(/Mail\s*2/);
+    await expect(inboxFilter(page).getByRole("button", { name: /^Mail/ })).toHaveText("Mail · 2 nieuw");
   });
 
   test("categorie-fout: mail blijft verborgen met een kleine melding", async ({ page, open }) => {
@@ -132,7 +132,7 @@ test.describe("Mail afhandelen", () => {
     await goTo(page, "Inbox");
     await expect(page.getByText("Planning release 26.4").first()).toBeVisible();
     await expect(lijst(page).getByText("Budget CI-runners Q4")).toHaveCount(0);
-    await expect(inboxFilter(page).getByRole("button", { name: /^Mail/ })).toHaveText(/Mail\s*1/);
+    await expect(inboxFilter(page).getByRole("button", { name: /^Mail/ })).toHaveText("Mail · 1 nieuw");
   });
 });
 

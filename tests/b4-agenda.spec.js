@@ -269,6 +269,7 @@ test.describe("Plan een vergadering", () => {
       { payload: { nowDateTime: new Date(mock.refNow).toISOString(), availableTimes: [], unavailableParticipants: [] } },
       slotsFixture(mock.refNow)] };
     await open(mock);
+    await expect(page.getByText("Architectuuroverleg Object Store").first()).toBeVisible(); // pagina geladen
     await page.evaluate(() => planMeeting({ subject: "Budget CI-runners Q4", attendees: [{ name: "Ruben Smit", email: "ruben.smit@example.com" }] }));
     const p = planner(page);
     await expect(entryButton(page, "Agenda")).toHaveAttribute("aria-current", "page");
@@ -409,4 +410,22 @@ test.describe("Review B4", () => {
     await expect(entryButton(page, "Agenda")).toHaveAttribute("aria-current", "page");
     await expect(detail(page).getByRole("heading", { level: 2 })).toHaveText("Roadmapsessie Jakarta migratie");
   });
+});
+
+// =========================================================================================
+// Weekdag-onafhankelijk: de suite draait op donderdag 24 sep (fixtures); hier expliciet vrijdag en zaterdag.
+test.describe("Weekend", () => {
+  for (const [dag, datum] of [["vrijdag", "2026-09-25"], ["zaterdag", "2026-09-26"]]) {
+    test(dag + ": de volgende werkdag heet Maandag; zoekbereik loopt tot en met maandag", async ({ page, open }) => {
+      await open(buildAgendaMock({ refNow: referenceNow(datum) }));
+      await goTo(page, "Agenda");
+      await expect(heading(page, /^Maandag/)).toBeVisible();
+      const maandag = page.locator(".aday").filter({ has: page.getByRole("heading", { name: /^Maandag/ }) });
+      await expect(maandag.getByText("Roadmapsessie Jakarta migratie")).toBeVisible();
+      const [call] = await mcpCalls(page, "outlook_calendar_search");
+      expect(call.input.beforeDateTime).toBe("2026-09-29");
+      await openItem(page, "Demo CI Acceleration");
+      await expect(detail(page)).toContainText("ma 28 sep 13:00-13:45");
+    });
+  }
 });

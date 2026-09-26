@@ -463,7 +463,7 @@ Shell.type("actie", {
   detail: function (a, body) {
     var bl = a.bron in BRON_LABEL ? BRON_LABEL[a.bron] : str(a.bron);
     add(body, metaList([
-      ["Status", a.status === "done" ? "klaar" : a.status === "dropped" ? "n.v.t." : isToday(a) ? "open, vandaag" + (dueState(a) === "over" ? " (deadline verlopen)" : "") : "open"],
+      ["Status", a.status === "done" ? "klaar" : a.status === "dropped" ? "n.v.t." : isToday(a) ? "open, vandaag" + (dueState(a) === "over" ? " (deadline verlopen)" : dueState(a) === "today" ? " (deadline vandaag)" : "") : "open"],
       ["Bron", bl ? bl + (a.van ? " van " + nameFromAddr(a.van) : "") + (a.onderwerp ? ", " + str(a.onderwerp) : "") : ""]
     ]));
     if (a._pending === "error") { body.append(h("p", { class: "errmsg", role: "alert", text: "Niet opgeslagen. Kies Opnieuw opslaan." })); return; }
@@ -478,7 +478,7 @@ Shell.type("actie", {
     return [
       open ? { slot: "primary", label: "Vink af", key: "e", title: "Actie afvinken", run: function (x) { setDone(x, true); } }
         : { slot: "primary", label: "Heropen", key: "e", title: "Actie weer openzetten", run: function (x) { setDone(x, false); } },
-      open && (a.vandaag || !todayByDue) ? { slot: "make", label: a.vandaag ? "Haal van vandaag" : "Maak vandaag", key: "v",
+      open && !todayByDue ? { slot: "make", label: a.vandaag ? "Haal van vandaag" : "Maak vandaag", key: "v",
         title: a.vandaag ? "Niet meer op je lijst voor vandaag" : "Op je lijst voor vandaag zetten", run: function (x) {
           logEvent("actie_vandaag"); var was = !!x.vandaag; updateActie(x, { vandaag: !was });
           feedback({ text: (was ? "Van vandaag gehaald: " : "Op vandaag gezet: ") + trunc(x.text, 60), undoText: (was ? "Weer op vandaag: " : "Niet meer op vandaag: ") + trunc(x.text, 60),

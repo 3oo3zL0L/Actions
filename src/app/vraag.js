@@ -115,7 +115,7 @@ function openAsk(type, it, btn) {
   if (askFollow) return;
   logEvent("vraag_claude_item_" + type);
   openPanel(btn);
-  chatInput.focus();
+  focusChatInput();
 }
 // B8: Thomas kiest een andere rij terwijl het paneel open is. Het paneel blijft open, het gesprek blijft staan en
 // de contextkaart wisselt naar het nieuwe item (dezelfde context als Vraag Claude in de actiebalk zou geven).
@@ -137,6 +137,7 @@ function renderCtx() {
   var box = clear($("chatCtx"));
   var c = chat.ctx;
   box.hidden = !c;
+  renderPlaceholder();
   if (!c) return;
   var link = h("a", { class: "ctxlink", target: "_blank", rel: "noopener noreferrer", title: "Om in Cowork of een gewone chat verder te werken" },
     "Open in Claude-chat", h("span", { "aria-hidden": "true", text: " ↗" }), h("span", { class: "sr", text: " (opent in nieuw tabblad, om in Cowork of een gewone chat verder te werken)" }));
@@ -147,7 +148,7 @@ function renderCtx() {
   link.addEventListener("mouseenter", setLink);
   box.append(
     h("div", { class: "ctxmain" }, h("span", { class: "ctxlabel", text: "Over: " }), h("span", { class: "ctxtitle", text: trunc(c.title, 120) })),
-    h("button", { class: "icon-btn", type: "button", "aria-label": "Context weghalen", title: "Vraag zonder dit item", text: "×", onclick: function () { chat.ctx = null; renderCtx(); chatInput.focus(); } }),
+    h("button", { class: "icon-btn", type: "button", "aria-label": "Context weghalen", title: "Vraag zonder dit item", text: "×", onclick: function () { chat.ctx = null; renderCtx(); focusChatInput(); } }),
     h("div", { class: "ctxfoot" }, c.status ? h("span", { class: "ctxstatus", text: c.status }) : null, link));
 }
 // Een vraag van Thomas uit de balk of het paneel; met itemcontext als die er staat.
@@ -155,7 +156,7 @@ async function userAsk(v) {
   v = str(v).trim();
   if (!v || !cap.sample || chat.busy) return;
   logEvent("claude_vraag", v);
-  chat.budget = WRITE_BUDGET; // Thomas typte zelf een vraag: schrijfacties toegestaan (max 5)
+  chat.budget = WRITE_BUDGET; chat.ownAsk = true; // Thomas typte zelf een vraag: schrijfacties toegestaan (max 5)
   var c = chat.ctx;
   if (!c) { sendChat(v); return; }
   // De kaart blijft staan (hij volgt de selectie); een vervolgvraag over hetzelfde item stuurt de itemdata niet opnieuw.
