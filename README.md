@@ -1,76 +1,31 @@
-# Actielijst
+# Actiepagina
 
-De PAF-actielijst uit Cowork, als echte app. Gebouwd zoals DHH het zou doen: Rails 8.1 omakase,
-één SQLite-database, Hotwire in plaats van een JavaScript-framework, geen build-stap, en met Kamal
-op je eigen server. Installeer hem als app op je telefoon via "Zet op beginscherm".
+Live: https://claude.ai/artifact/PqANDMJuGom3jRqvm8k7zv
 
-## Wat hij doet
+Eén pagina om de werkdag vanuit te doen: agenda, Outlook-mail, Teams, Jira, Confluence, je acties en
+Claude als collega, samen op één scherm. Draait als claude.ai-Artifact en leest je gegevens via je eigen
+claude.ai-connectors (Microsoft 365, Atlassian Rovo). Er staan geen tokens of gegevens in de code.
 
-- **Klad**: typ een actie, Enter en hij staat erop. Meerdere regels worden meerdere acties.
-- **Inspreken**: de microfoonknop luistert in het Nederlands (Chrome, Safari) of wijst de dicteerknop
-  van je toetsenbord aan. Claude splitst het dictaat in losse acties en deelt ze in.
-- **Vandaag**: Prioritiseer zet een actie bovenaan, met de reden erbij.
-- **Uit je mail**: voorstellen van de Cowork-ochtendrun. Op de lijst of weg, met ongedaan maken.
-- **Herschrijven in gewone taal**: tik op een actie en typ "deadline naar 1 okt en Santhosh erbij".
-- **Klaar is weg**: afgevinkt blijft vandaag zichtbaar, na twee weken ruimt een nachtelijke job het op.
-- **Live**: verandert er iets op je laptop, dan ververst je telefoon mee (Turbo morphing via Solid Cable).
-
-Zonder `ANTHROPIC_API_KEY` werkt alles gewoon, alleen komt nieuw werk dan onder Overig.
-
-## Hoe hij in elkaar zit
-
-| | |
+| Map | Inhoud |
 |---|---|
-| `Item` | een actie, met gedrag in concerns: `Closeable`, `Prioritizable`, `Classifiable`, `Rewritable`, `Transcribable` |
-| `Program` | de kopjes: UI/UX, Platform Core, CI Acceleration, OIDC, Object Store, Jakarta migratie, Platform Stability, Contracten, Overig |
-| `Proposal` | een voorstel uit de mail, `Decidable` |
-| `Capture` | wat je in het klad typt of inspreekt, zodat ruwe tekst nooit verloren gaat |
-| `Assistant` | Claude (Messages API, structured outputs) voor indelen, splitsen en herschrijven |
+| `src/index.html` | de pagina: markup, laadt `styles/*.css` en `app/*.js` (klassieke scripts, vaste volgorde, geen build-stap) |
+| `src/app/`, `src/styles/` | de app per onderdeel; `node tools/check-globals.js` controleert gedeelde namen |
+| `tools/files-map.js` | print de `files`-map voor publicatie als Artifact |
+| `docs/BRIEF.md` | productbrief (PO) |
+| `docs/UX.md` | ontwerpspecificatie (UX) |
+| `docs/TESTPLAN.md`, `docs/TESTRAPPORT.md` | testaanpak en resultaten (TST) |
+| `docs/contract/` | type-definities van de artifact-runtime (`window.claude`) |
+| `tests/` | Playwright-tests met een nagebootste `window.claude` |
 
-Toestanden zijn resources, geen custom acties: `POST /items/:id/completion`, `DELETE /items/:id/priority`,
-`POST /proposals/:id/acceptance`. Achtergrondwerk loopt via Solid Queue in Puma.
-
-## Lokaal draaien
-
-```sh
-bin/setup          # gems, database, programma's
-bin/dev            # http://localhost:3000, eerste bezoek maakt je account aan
-bin/rails test     # Minitest met fixtures
-```
-
-Zet `ANTHROPIC_API_KEY` in je omgeving (of in `bin/rails credentials:edit` onder `anthropic.api_key`)
-voor de slimme functies. Model: `claude-opus-5`, te wijzigen met `ASSISTANT_MODEL`.
-
-## Overzetten vanuit Cowork
-
-Ga naar **Importeren** onderaan de pagina en plak de inhoud van `/areas/todos.md`. Kopjes worden
-programma's, `- [ ] actie | wie | deadline` wordt een actie.
-
-## Koppeling met de Cowork-ochtendrun
-
-Maak een token aan in de console (`bin/rails runner 'puts User.first.api_token'`) en geef de run:
+## Testen
 
 ```sh
-# De lijst lezen, in hetzelfde formaat als todos.md
-curl -H "Authorization: Bearer $TOKEN" https://actielijst.example.com/items.md
-
-# Een voorstel uit de mail neerzetten
-curl -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{"proposal":{"text":"Status teruggeven op contract","sender":"Sophie","program_name":"Contracten","mail_url":"https://outlook.office365.com/..."}}' \
-  https://actielijst.example.com/proposals.json
-
-# Een actie toevoegen
-curl -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{"capture":{"body":"Rogier bellen"}}' https://actielijst.example.com/captures.json
+npm install
+npm test
 ```
 
-Het token opent alleen deze JSON- en markdown-endpoints, nooit de app zelf.
+## Publiceren
 
-## Deployen
-
-Vul in `config/deploy.yml` het IP-adres van een server en je hostnaam in, dan:
-
-```sh
-bin/kamal setup    # eerste keer
-bin/kamal deploy   # daarna
-```
+De pagina wordt als Artifact gepubliceerd met de capabilities uit `docs/BRIEF.md` (`mcp`, `sample`, `db`).
+Schrijfacties (mailconcept, Teams-bericht, Jira-commentaar) gebeuren altijd pas na jouw klik op **Uitvoeren**;
+mail wordt nooit verstuurd, alleen als concept in Outlook gezet.

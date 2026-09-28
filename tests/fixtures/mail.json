@@ -1,0 +1,17 @@
+{
+  "_comment": "minutesAgo t.o.v. referentie-nu; builder zet receivedDateTime (UTC, Z). Volgorde = newest first zoals outlook_email_search(order:newest).",
+  "messages": [
+    { "id": "mail-001", "subject": "Planning release 26.4", "sender": "eva.jansen@example.com", "minutesAgo": 12,
+      "summary": "Kun je voor vrijdag akkoord geven op de releaseplanning?", "isRead": true, "importance": "normal" },
+    { "id": "mail-002", "subject": "[Jira] PCORE-101 is toegewezen aan jou", "sender": "no-reply@jira.example.com", "minutesAgo": 20,
+      "summary": "Mark Bakker heeft PCORE-101 aan je toegewezen.", "isRead": false, "importance": "normal" },
+    { "id": "mail-003", "subject": "Budget CI-runners Q4", "sender": "ruben.smit@example.com", "minutesAgo": 45,
+      "summary": "Voorstel om de runner-capaciteit te verdubbelen, graag je reactie.", "isRead": false, "importance": "high" },
+    { "id": "mail-004", "subject": "Je wekelijkse samenvatting", "sender": "noreply@notifications.example.com", "minutesAgo": 90,
+      "summary": "Dit gebeurde er deze week in je kanalen.", "isRead": false, "importance": "normal" },
+    { "id": "mail-005", "subject": "Vraag over OIDC-scope voor partnerportaal", "sender": "noor.mulder@example.com", "minutesAgo": 130,
+      "summary": "Mogen we de scope uitbreiden met offline_access?", "isRead": false, "importance": "normal", "hasAttachments": true },
+    { "id": "mail-006", "subject": "Notulen architectuurboard", "sender": "mark.bakker@example.com", "minutesAgo": 1500,
+      "summary": "Bijgaand de notulen van dinsdag.", "isRead": true, "importance": "normal", "hasAttachments": true }
+  ]
+}
