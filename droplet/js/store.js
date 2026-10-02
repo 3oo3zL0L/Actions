@@ -1,10 +1,11 @@
 /* Droplet · what Droplet remembers (db capability; in-memory when absent).
-   Collections: rankings/<msgKey>, done/<msgKey>, sent/<msgKey>, feedback/<msgKey>. */
+   Collections: rankings/<msgKey>, done/<msgKey>, sent/<msgKey>, feedback/<msgKey>,
+   handoff/<itemKey> (a Teams reply copied out, waiting for you to post it). */
 (function (D) {
   "use strict";
   var rt = D.rt;
   var store = D.store = { persistent: false, failed: false };
-  var mem = { rankings: {}, done: {}, sent: {}, feedback: {} };
+  var mem = { rankings: {}, done: {}, sent: {}, feedback: {}, handoff: {} };
   var chains = {};
   var KEEP_RANKINGS_DAYS = 14, KEEP_FEEDBACK = 200;
 
@@ -27,17 +28,17 @@
 
   store.loadAll = function () {
     store.persistent = !!db();
-    return Promise.all([readAll("rankings"), readAll("done"), readAll("feedback"), readAll("sent")]).then(function (r) {
+    return Promise.all([readAll("rankings"), readAll("done"), readAll("feedback"), readAll("sent"), readAll("handoff")]).then(function (r) {
       var fb = Object.keys(r[2]).map(function (k) { var v = Object.assign({}, r[2][k]); v.key = k; return v; })
         .sort(function (a, b) { return String(b.at || "").localeCompare(String(a.at || "")); });
-      prune(r[0], fb, r[3]);
-      return { rankings: r[0], done: r[1], feedback: fb, sent: r[3], ok: true };
+      prune(r[0], fb, r[3], r[4]);
+      return { rankings: r[0], done: r[1], feedback: fb, sent: r[3], handoff: r[4], ok: true };
     }, function () {
       store.failed = true;
-      return { rankings: {}, done: {}, feedback: [], sent: {}, ok: false };
+      return { rankings: {}, done: {}, feedback: [], sent: {}, handoff: {}, ok: false };
     });
   };
-  function prune(rankings, fb, sent) {
+  function prune(rankings, fb, sent, handoff) {
     var cutoff = Date.now() - KEEP_RANKINGS_DAYS * 864e5, n = 0;
     Object.keys(rankings).forEach(function (k) {
       var t = Date.parse(rankings[k].rankedAt || "");
@@ -46,6 +47,10 @@
     Object.keys(sent || {}).forEach(function (k) {
       var t = Date.parse(sent[k].sentAt || "");
       if (n < 40 && (!t || t < cutoff)) { n++; del("sent", k); }
+    });
+    Object.keys(handoff || {}).forEach(function (k) {
+      var t = Date.parse(handoff[k].at || "");
+      if (n < 60 && (!t || t < Date.now() - 3 * 864e5)) { n++; del("handoff", k); }
     });
     fb.slice(KEEP_FEEDBACK).forEach(function (f) { del("feedback", f.key); });
   }
@@ -62,6 +67,8 @@
   store.clearDone = function (key) { return del("done", key); };
   /* A sent reply stays locked, also after Undo of its done mark and a reload. */
   store.setSent = function (key, d) { return set("sent", key, d); };
+  store.setHandoff = function (key, d) { return set("handoff", key, d); };
+  store.clearHandoff = function (key) { return del("handoff", key); };
   store.setFeedback = function (key, f) { return set("feedback", key, f); };
   store.clearFeedback = function (key) { return del("feedback", key); };
 })(window.Droplet = window.Droplet || {});
