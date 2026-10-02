@@ -25,11 +25,25 @@
     return null;
   };
 
+  /* The read_resource uri for a message id. The search hands each mail its
+     own uri; Droplet copies the encoding seen there (encoded is the default). */
+  var PREFIX = "mail:///messages/";
+  mail.uriStyle = "encoded";
+  mail.uriFor = function (id) {
+    return PREFIX + (mail.uriStyle === "raw" ? String(id) : encodeURIComponent(String(id)));
+  };
+  function learnUriStyle(id, uri) {
+    if (!uri || encodeURIComponent(id) === id) return;
+    if (uri === PREFIX + id) mail.uriStyle = "raw";
+    else if (uri === PREFIX + encodeURIComponent(id)) mail.uriStyle = "encoded";
+  }
+
   function normalize(o) {
     var id = String(o.id || "");
     var sender = typeof o.sender === "string" ? o.sender : (o.sender && (o.sender.address || o.sender.emailAddress && o.sender.emailAddress.address)) || "";
     var senderName = (o.sender && typeof o.sender === "object" && o.sender.name) || U.nameFromAddress(sender);
-    var uri = typeof o.uri === "string" && o.uri.indexOf("mail:///messages/") === 0 ? o.uri : "mail:///messages/" + encodeURIComponent(id);
+    var uri = typeof o.uri === "string" && o.uri.indexOf(PREFIX) === 0 ? o.uri : mail.uriFor(id);
+    if (uri === o.uri) learnUriStyle(id, uri);
     var m = {
       id: id, key: U.keyOf(id), uri: uri,
       subject: String(o.subject || ""), sender: String(sender).trim(), senderName: String(senderName),

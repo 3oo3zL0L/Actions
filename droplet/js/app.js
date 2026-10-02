@@ -12,7 +12,6 @@
     mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3.5 6.5 8.5 6 8.5-6"/>',
     spark: '<path d="M12 3v5M12 16v5M3 12h5M16 12h5M5.6 5.6l3.2 3.2M15.2 15.2l3.2 3.2M5.6 18.4l3.2-3.2M15.2 8.8l3.2-3.2"/>',
     back: '<path d="M15 5 8 12l7 7"/>',
-    edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/>',
     chat: '<path d="M4 5h16v11h-8l-4 4v-4H4z"/>',
     down: '<path d="M12 4v15M6 13l6 6 6-6"/>',
     check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
@@ -27,10 +26,10 @@
 
   /* ---------------- State ---------------- */
   var S = {
-    view: 'list', cur: null, pane: 'list', restOpen: false, q: '', editing: false, chatOpen: false, scrollY: 0, toastTimer: null, anim: false,
+    view: 'list', cur: null, pane: 'list', restOpen: false, q: '', chatOpen: false, scrollY: 0, toastTimer: null, anim: false,
     me: null, items: [], byId: {}, loading: true, loaded: false, ranking: 0, syncAt: null, mcpOk: null,
     notes: { mail: null, rank: null, store: null }, rankings: {}, feedback: [], verdict: {}, doneNow: {},
-    drafts: {}, send: {}, detail: {}, chat: {}, undo: null
+    drafts: {}, touched: {}, drafting: {}, send: {}, detail: {}, chat: {}, undo: null
   };
   D.state = S;
   var $ = function (id) { return document.getElementById(id); };
@@ -86,9 +85,19 @@
     if (it.importance === 'high') return 'High importance';
     return '';
   }
+  /* Every mail gets a draft from Claude: written while ranking, or lazily when it opens. */
+  function claudeDraft(it) { return (it.r && it.r.draft) || it.lazyDraft || ''; }
   function draftOf(it) {
-    if (S.drafts[it.id] == null) S.drafts[it.id] = rk(it).kind === 'reply' ? rk(it).draft || '' : '';
+    if (S.drafts[it.id] == null) S.drafts[it.id] = claudeDraft(it);
     return S.drafts[it.id];
+  }
+  /* A draft from Claude replaces the text only while the viewer hasn't typed. */
+  function applyClaudeDraft(it) {
+    var st = sendState(it.id);
+    if (S.touched[it.id] || st.phase !== 'idle' || String(S.drafts[it.id] || '').trim()) return false;
+    if (!claudeDraft(it)) return false;
+    S.drafts[it.id] = claudeDraft(it);
+    return true;
   }
   function tag(it) { return U.firstName(it.senderName) || it.senderName || 'Mail'; }
 
@@ -212,7 +221,26 @@
     if (!st.message || st.phase === 'sent' || st.phase === 'sending' || st.phase === 'idle') return '';
     var link = U.safeOutlookLink(st.draftLink);
     return '<div class="warn is-problem" role="alert" data-problem="' + esc(st.phase) + '">' + ico('warn', 'ico-sm') + '<span>' + esc(st.message) +
-      (link ? ' <a class="draft-link" href="' + esc(link) + '" target="_blank" rel="noopener noreferrer">Open draft in Outlook</a>' : '') + '</span></div>';
+      (link ? ' <a class="draft-link" href="' + esc(link) + '" target="_blank" rel="noopener noreferrer">Open draft in Outlook</a>' : '') + '</span>' + diagHTML(st) + '</div>';
+  }
+  /* Which step stopped the send, the error code and Outlook's own words (text only). */
+  function diagHTML(st) {
+    if (!st.step) return '';
+    return '<div class="diag" data-diag><dl>' +
+      '<div><dt>Step</dt><dd data-diag-step>' + esc(st.step) + '</dd></div>' +
+      '<div><dt>Code</dt><dd data-diag-code>' + esc(st.code || 'unknown') + '</dd></div>' +
+      (st.detail ? '<div><dt>Outlook said</dt><dd data-diag-msg>' + esc(U.clip(st.detail, 200)) + '</dd></div>' : '') +
+      '</dl><button data-copydiag>Copy details</button></div>';
+  }
+  function draftFoot(it, locked, busy) {
+    var ds = S.drafting[it.id];
+    if (locked) return 'Sent once. This draft is locked.';
+    if (busy) return 'Sending… Don’t close this page.';
+    if (ds === 'loading' && !S.touched[it.id]) return 'Claude is writing a draft in your style…';
+    if (ds && ds.error && !S.touched[it.id] && !String(S.drafts[it.id] || '').trim()) {
+      return esc(ds.error) + '. Write your own, or <button data-redraft>Try again</button>';
+    }
+    return 'Click the text to edit it. Nothing is sent until you press Send.';
   }
   function renderItem() {
     var col = $('itemCol');
@@ -223,11 +251,11 @@
     var top = topItems(), rankIdx = top.indexOf(it), inFocus = rankIdx > -1;
     var n = inFocus ? rankIdx + 1 : restItems().indexOf(it) + top.length + 1;
     var fl = flag(it), outside = !U.isInternal(it.sender, mail.meDomain ? [mail.meDomain] : []);
-    var editable = S.editing && !locked && !busy;
+    var editable = !locked && !busy;
     var draftRows = '<div class="draft-row"><span class="k">To</span><span class="chips"><span class="chip addr" data-to>' + esc(it.sender) + '</span></span></div>' +
       '<div class="draft-row"><span class="k">Subject</span><span>' + esc(/^re:/i.test(it.subject) ? it.subject : 'RE: ' + it.subject) + '</span></div>';
-    var hint = locked ? 'Sent once. This draft is locked.' : busy ? 'Sending… Don’t close this page.' :
-      editable ? 'Edit freely. Nothing is sent until you press Send.' : 'Press Edit to change the text. Nothing is sent until you press Send.';
+    var hint = draftFoot(it, locked, busy);
+    var writing = S.drafting[it.id] === 'loading' && !S.touched[it.id];
     col.innerHTML =
       '<div class="iv-head">' +
         '<button class="btn-back" data-back aria-label="Back to the list">' + ico('back') + '<span class="lbl-phone">Back</span><span class="lbl-desk">Close</span></button>' +
@@ -242,10 +270,10 @@
         '<div class="iv-why"><span class="who" aria-hidden="true">' + ico('spark') + '</span><p><span class="sr">Claude: </span>' + esc(r.why) + '</p></div>' +
         '<div class="sec-label">' + ico('mail') + 'From your inbox</div>' +
         '<div class="card src-card">' + sourceHTML(it) + '</div>' +
-        '<div class="sec-label">' + ico('spark') + (r.kind === 'reply' && r.draft && !r.fallback ? 'Prepared draft' : 'Your reply') + ' · Reply · mail</div>' +
-        '<div class="card draft' + (editable ? ' is-editing' : '') + (locked ? ' is-locked' : '') + '">' + draftRows +
+        '<div class="sec-label">' + ico('spark') + (claudeDraft(it) ? 'Prepared draft' : 'Your reply') + ' · Reply · mail</div>' +
+        '<div class="card draft' + (locked ? ' is-locked' : '') + '">' + draftRows +
           '<label class="sr" for="draftText">Draft text</label>' +
-          '<textarea id="draftText"' + (editable ? '' : ' readonly') + ' placeholder="Write your reply…">' + esc(draftOf(it)) + '</textarea>' +
+          '<textarea id="draftText"' + (editable ? '' : ' readonly') + (writing ? ' aria-busy="true"' : '') + ' placeholder="' + (writing ? 'Claude is writing a draft…' : 'Write your reply…') + '">' + esc(draftOf(it)) + '</textarea>' +
           (outside ? '<div class="warn" data-outside>' + ico('warn', 'ico-sm') + 'Goes outside Planon. Check before sending.</div>' : '') +
           problemHTML(st) +
           '<div class="draft-foot">' + hint + '</div>' +
@@ -266,8 +294,8 @@
     else if (busy) btn = '<button class="btn-send" id="sendBtn" aria-disabled="true" aria-busy="true">' + ico('send') + 'Sending…</button>';
     else if (st.phase === 'unclear') btn = '<button class="btn-send is-confirm" id="sendBtn" data-send>' + (st.confirm ? 'Yes, send again' : 'Send again anyway') + '</button>';
     else btn = '<button class="btn-send" id="sendBtn" data-send' + (empty ? ' aria-disabled="true"' : '') + '>' + ico('send') + 'Send</button>';
-    return '<div class="quiet">' + q('edit', 'edit', 'Edit', 'e', S.editing) + q('chat', 'chat', 'Chat<span class="q-x"> about this</span>', 'c', S.chatOpen) +
-        q('star', 'star', 'Important', '', S.verdict[it.id] === 'up') + q('notimp', 'down', 'Not important', 'n') + q('done', 'check', 'Done', 'd') + '</div>' + btn +
+    return '<div class="quiet">' + q('chat', 'chat', 'Chat<span class="q-x"> about this</span>', 'c', S.chatOpen) +
+        q('notimp', 'down', 'Not important', 'n') + q('star', 'star', 'Important', '', S.verdict[it.id] === 'up') + q('done', 'check', 'Done', 'd') + '</div>' + btn +
       (locked ? '<div class="sent-note">' + (S.doneNow[it.id] ? 'Marked done · sent once' : 'Sent once') + '</div>' : '');
   }
   function renderPane() {
@@ -328,6 +356,7 @@
           keep[m.id] = 1;
           var saved = S.rankings[m.key];
           if (saved && saved.v === 1) m.r = saved;
+          else if (saved && saved.draftOnly && typeof saved.draft === 'string') m.lazyDraft = saved.draft;
           var sent = S.sentDb && S.sentDb[m.key];
           if (sent && (!S.send[m.id] || S.send[m.id].phase === 'idle')) S.send[m.id] = { phase: 'sent', sentAt: new Date(sent.sentAt) };
         });
@@ -361,7 +390,9 @@
       Object.keys(v.byId).forEach(function (id) {
         var m = S.byId[id]; if (!m) return;
         var r = Object.assign({ v: 1, pos: pos[id], rankedAt: at }, v.byId[id]);
+        if (!r.draft && m.lazyDraft) r.draft = m.lazyDraft;
         m.r = r; S.rankings[m.key] = r;
+        applyClaudeDraft(m);
         writes.push([m.key, r]);
       });
       writes.reduce(function (p, w) { return p.then(function () { return store.putRanking(w[0], w[1]); }); }, Promise.resolve());
@@ -369,7 +400,43 @@
       S.notes.rank = missing ? 'Claude skipped ' + missing + ' mail' + (missing === 1 ? '' : 's') + '; those are newest first.' : null;
     }, function (e) {
       S.notes.rank = rt.sampleCopy(e) + ', so new mail is newest first.';
-    }).then(function () { S.ranking = 0; renderAll(); });
+    }).then(function () {
+      S.ranking = 0; renderAll();
+      var cur = S.view === 'item' && S.byId[S.cur];
+      if (cur) ensureDraft(cur);
+    });
+  }
+
+  /* A draft for a mail Claude skipped while ranking: one sample call when it
+     opens, stored with its ranking so it is written once. */
+  function saveLazyDraft(it, text) {
+    it.lazyDraft = text;
+    if (it.r && !it.r.fallback && it.r.v === 1) {
+      it.r.draft = text; S.rankings[it.key] = it.r;
+      return store.putRanking(it.key, it.r);
+    }
+    var doc = { draftOnly: true, v: 0, draft: text, rankedAt: new Date().toISOString() };
+    S.rankings[it.key] = doc;
+    return store.putRanking(it.key, doc);
+  }
+  function ensureDraft(it, again) {
+    if (!it || claudeDraft(it) || S.touched[it.id] || sendState(it.id).phase !== 'idle') return;
+    var ds = S.drafting[it.id];
+    if (ds === 'loading' || (ds && !again)) return;
+    if (S.ranking && !it.r) return; /* the running ranking writes one; checked again when it ends */
+    if (!rt.sample) return;
+    var id = it.id;
+    S.drafting[id] = 'loading';
+    if (isCur(id)) rerenderItemKeepFocus();
+    readDetail(it).then(function (d) {
+      return rank.askDraft({ me: S.me, now: new Date(), item: it, mailText: d && d.state === 'ok' ? d.text : '' });
+    }).then(function (text) {
+      S.drafting[id] = null;
+      saveLazyDraft(it, text);
+      applyClaudeDraft(it);
+    }, function (e) {
+      S.drafting[id] = { error: rt.sampleCopy(e) };
+    }).then(function () { if (isCur(id)) rerenderItemKeepFocus(); });
   }
 
   /* ---------------- Item: open, read ---------------- */
@@ -379,8 +446,8 @@
     d = S.detail[it.id] = { state: 'loading' };
     d.promise = mail.read(it).then(function (x) {
       S.detail[it.id] = Object.assign({ state: 'ok' }, x);
-    }, function () {
-      S.detail[it.id] = { state: 'error' };
+    }, function (e) {
+      S.detail[it.id] = { state: 'error', code: String(e && e.code || 'unknown'), message: U.clip(e && e.message || '', 140) };
     }).then(function () {
       if (S.view === 'item' && S.cur === it.id) {
         var body = document.querySelector('.src-card');
@@ -394,17 +461,20 @@
     var it = S.byId[id]; if (!it) return;
     if (S.view === 'list') S.scrollY = window.scrollY;
     S.cur = id; S.view = 'item'; S.pane = 'item'; S.anim = true; S.chatOpen = false;
-    S.editing = !!focusDraft && !isSent(id);
     draftOf(it);
     renderAll();
     readDetail(it);
+    ensureDraft(it);
     if (!desk()) window.scrollTo(0, 0);
-    var t = focusDraft ? $('draftText') : $('ivTitle');
-    if (t) t.focus({ preventScroll: desk() });
+    var t = focusDraft && !isSent(id) ? $('draftText') : $('ivTitle');
+    if (t) {
+      t.focus({ preventScroll: desk() });
+      if (t.id === 'draftText') { try { t.setSelectionRange(t.value.length, t.value.length); } catch (e) { /* ignore */ } }
+    }
   }
   function back() {
     var prev = S.cur;
-    S.view = 'list'; S.pane = 'list'; S.cur = null; S.editing = false; S.chatOpen = false;
+    S.view = 'list'; S.pane = 'list'; S.cur = null; S.chatOpen = false;
     renderAll();
     if (!desk()) window.scrollTo(0, S.scrollY || 0);
     var el = prev && document.querySelector('[data-open="' + (window.CSS && CSS.escape ? CSS.escape(prev) : prev) + '"]');
@@ -424,19 +494,20 @@
     }
     var reuse = st.draftId ? { draftId: st.draftId, link: st.draftLink, text: st.draftText } : null;
     S.send[id] = st = { phase: 'sending', draftId: st.draftId, draftLink: st.draftLink, draftText: st.draftText };
-    S.editing = false;
     renderItem(); renderFocus();
     var d = S.detail[id];
     var conv = d && d.state === 'ok' ? Promise.resolve(d) : readDetail(it);
     conv.then(function (dd) {
       if (!dd || dd.state !== 'ok' || !dd.conversationId) {
-        return { phase: 'failed', message: 'Couldn’t read the original mail from Outlook, so nothing was sent. Try again.' };
+        return { phase: 'failed', step: flow.STEPS.original, code: dd && dd.state === 'ok' ? 'no_conversation_id' : (dd && dd.code) || 'unknown',
+          detail: dd && dd.message || '', message: 'Couldn’t read the original mail from Outlook, so nothing was sent. Try again.' };
       }
       return flow.send({ item: it, text: text, conversationId: dd.conversationId, reuse: reuse });
     }).then(function (res) {
-      var ns = S.send[id] = { phase: res.phase, message: res.message || '', sentAt: res.sentAt, draftId: res.draftId || '', draftLink: res.draftLink || '', draftText: res.draftText || '' };
+      var ns = S.send[id] = { phase: res.phase, message: res.message || '', sentAt: res.sentAt, draftId: res.draftId || '', draftLink: res.draftLink || '', draftText: res.draftText || '',
+        step: res.step || '', code: res.code || '', detail: res.detail || '', safeDetail: res.safeDetail || '' };
       if (res.phase === 'unclear') { ns.confirm = 0; ns.armAt = performance.now() + 700; }
-      if (res.phase === 'blocked') { ns.draftId = ''; }
+      if (res.phase === 'blocked' && !res.keepDraft) { ns.draftId = ''; }
       if (res.phase === 'sent') {
         S.doneNow[id] = { how: 'sent' };
         store.setDone(it.key, { at: new Date().toISOString(), how: 'sent', sentAt: res.sentAt.toISOString() });
@@ -457,13 +528,26 @@
     renderAll();
   }
 
-  /* ---------------- Quiet actions ---------------- */
-  function toggleEdit() {
-    S.editing = !S.editing; renderItem();
-    var ta = $('draftText');
-    if (S.editing && ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
-    else { var eb = document.querySelector('[data-edit]'); if (eb) eb.focus(); }
+  /* "Copy details": one line with step, code and message; no mail content, no addresses. */
+  function copyDetails() {
+    var st = S.cur && S.send[S.cur]; if (!st || !st.step) return;
+    var line = flow.detailsLine(st);
+    function fallback() {
+      var ta = document.createElement('textarea');
+      ta.value = line; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.left = '-9999px';
+      document.body.appendChild(ta); ta.select();
+      var ok = false; try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+      ta.remove();
+      return ok;
+    }
+    var p;
+    try { p = navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(line) : Promise.reject(); } catch (e) { p = Promise.reject(); }
+    Promise.resolve(p).then(function () { return true; }, function () { return fallback(); }).then(function (ok) {
+      toast(ok ? 'Copied the details (no mail content).' : 'Couldn’t copy. The details are shown on the card.');
+    });
   }
+
+  /* ---------------- Quiet actions ---------------- */
   function toggleChat() {
     S.chatOpen = !S.chatOpen; renderItem();
     if (S.chatOpen) { var ci = $('chatIn'); if (ci) { ci.focus({ preventScroll: true }); ci.scrollIntoView({ block: 'center' }); } }
@@ -547,7 +631,8 @@
     if (t.getAttribute('aria-disabled') === 'true') return;
     var cur = S.cur;
     if (t.hasAttribute('data-send') && cur) return onSend();
-    if (t.hasAttribute('data-edit') && cur) return toggleEdit();
+    if (t.hasAttribute('data-copydiag') && cur) return copyDetails();
+    if (t.hasAttribute('data-redraft') && cur) { var rit = S.byId[cur]; if (rit) ensureDraft(rit, true); return; }
     if (t.hasAttribute('data-chat') && cur) return toggleChat();
     if (t.hasAttribute('data-chip') && cur) return chatSay(cur, t.getAttribute('data-chip'));
     if (t.hasAttribute('data-star') && cur) return toggleStar();
@@ -564,7 +649,7 @@
   document.addEventListener('input', function (e) {
     if (e.target.id === 'q') { S.q = e.target.value; renderRest(); }
     if (e.target.id === 'draftText' && S.cur) {
-      S.drafts[S.cur] = e.target.value;
+      S.drafts[S.cur] = e.target.value; S.touched[S.cur] = true;
       var b = $('sendBtn'), st = sendState(S.cur);
       if (b && b.hasAttribute('data-send') && st.phase !== 'unclear') {
         if (e.target.value.trim()) b.removeAttribute('aria-disabled'); else b.setAttribute('aria-disabled', 'true');
@@ -578,7 +663,8 @@
   });
   document.addEventListener('keydown', function (e) {
     var tg = (e.target.tagName || '').toLowerCase(), typing = tg === 'input' || (tg === 'textarea' && !e.target.readOnly);
-    if (e.key === 'Escape') { if (S.view === 'item') return back(); return; }
+    /* Esc in the draft only leaves the text field; a second Esc closes. */
+    if (e.key === 'Escape') { if (e.target.id === 'draftText') { e.target.blur(); return; } if (S.view === 'item') return back(); return; }
     if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       var rows = [].slice.call($('listCol').querySelectorAll('[data-open]'));
@@ -593,8 +679,7 @@
     if (S.view !== 'item' || S.pane !== 'item' || !S.cur) return;
     var ph = sendState(S.cur).phase;
     if (ph === 'sent' || ph === 'sending') return;
-    if (e.key === 'e') { e.preventDefault(); toggleEdit(); }
-    else if (e.key === 'c') { e.preventDefault(); toggleChat(); }
+    if (e.key === 'c') { e.preventDefault(); toggleChat(); }
     else if (e.key === 'n') { e.preventDefault(); notImportant(); }
     else if (e.key === 'd') { e.preventDefault(); markDone(); }
   });

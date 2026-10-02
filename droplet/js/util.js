@@ -144,6 +144,12 @@
     return /[^\s@]+@[^\s@]+\.[a-z]{2,}/i.test(s) || /\b(?:https?:\/\/|www\.)/i.test(s) ||
       /\b[a-z0-9-]+\.(?:com|net|org|nl|io|de|eu|co|info|biz|ru|xyz|app|dev)\b/i.test(s);
   };
+  /* For a diagnostic line: no addresses, no links, one line, short. */
+  U.redact = function (s) {
+    return U.clip(String(s == null ? "" : s)
+      .replace(/[^\s@<>"'(),;:]+@[^\s@<>"'(),;:]+/g, "[address]")
+      .replace(/\b(?:https?:\/\/|www\.)[^\s"'<>]+/gi, "[link]"), 160);
+  };
   U.clip = function (s, n) {
     s = String(s == null ? "" : s).replace(/\s+/g, " ").trim();
     return s.length > n ? s.slice(0, n - 1).trim() + "…" : s;
