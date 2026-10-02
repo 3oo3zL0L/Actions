@@ -60,7 +60,6 @@ group :test do
   gem "selenium-webdriver"
 end
 
-gem "anthropic", "~> 1.73"
 
 # json 3 drops the options hash that Active Support 8.1 still passes to JSON.parse.
 gem "json", "~> 2.10"

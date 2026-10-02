@@ -1,7 +1,7 @@
 class Current < ActiveSupport::CurrentAttributes
-  attribute :session, :api_user
+  attribute :session
 
   def user
-    session&.user || api_user
+    session&.user
   end
 end

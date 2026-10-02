@@ -10,11 +10,6 @@ module Authentication
     def allow_unauthenticated_access(**options)
       skip_before_action :require_authentication, **options
     end
-
-    # Voor de Cowork-ochtendrun: Authorization: Bearer <api_token>, alleen JSON en markdown.
-    def allow_token_access(**options)
-      skip_forgery_protection if: :token_request?, **options
-    end
   end
 
   private
@@ -23,7 +18,7 @@ module Authentication
     end
 
     def require_authentication
-      resume_session || authenticate_by_token || request_authentication
+      resume_session || request_authentication
     end
 
     def resume_session
@@ -32,16 +27,6 @@ module Authentication
 
     def find_session_by_cookie
       Session.find_by(id: cookies.signed[:session_id]) if cookies.signed[:session_id]
-    end
-
-    def authenticate_by_token
-      if token_request?
-        authenticate_with_http_token { |token| Current.api_user = User.find_by(api_token: token) }
-      end
-    end
-
-    def token_request?
-      request.authorization.to_s.start_with?("Bearer") && !request.format.html?
     end
 
     def request_authentication

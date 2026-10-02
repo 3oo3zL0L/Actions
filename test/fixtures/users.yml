@@ -3,4 +3,3 @@
 thomas:
   email_address: thomas@example.com
   password_digest: <%= password_digest %>
-  api_token: token-for-the-morning-run
