@@ -1,4 +1,4 @@
-# Droplet: Claude Code prompt (draft v2)
+# Droplet: Claude Code prompt (draft v3)
 
 This prompt came out of a PO/analyst discovery round. Attach your colleague's Action Desk README, then paste the block under **The prompt** into a fresh Claude Code session.
 
@@ -13,7 +13,7 @@ This prompt came out of a PO/analyst discovery round. Attach your colleague's Ac
 | Left out of v1 | Team briefing tiles, people away, customer blockers, meeting prep, focus time, birthdays, Intouch news |
 | First screen | One focus list: top 3-5 items, each with a suggested action. The rest is collapsed by priority. |
 | Autonomy | Claude drafts, you approve. Nothing leaves without your click. |
-| Device | Laptop first, phone for quick triage |
+| Device | Laptop first, and the browser version must be fully mobile friendly. It runs only in the browser on claude.ai, so there is no native app and there are no push notifications (accepted). |
 | Priority signals | Your own decisions and tasks, who asks, your programs |
 | v1 sources | Mail, Teams, Jira, Confluence, your own to-do list |
 | Look | The UX agent proposes 2-3 directions and you pick one |
@@ -73,7 +73,11 @@ item ends in an action that Claude executes after my approval.
 - Most of my work is giving Claude tasks (today in Claude Cowork). Droplet
   replaces that with a global "Ask Claude" chat that can act on my sources
   and make Office files (Excel, Word, PowerPoint on the Planon template).
-- Laptop first, usable on phone for quick triage.
+- Laptop first, but fully mobile friendly in the phone browser: phone-width
+  layout, no sideways scrolling, tap targets of at least 44px, and the focus
+  list plus approve/send must work one-handed. It is browser-only on claude.ai
+  with no native app or push notifications (accepted). Every increment is
+  tested at phone width too.
 
 PHASES
 0. Study: read the Action Desk README and my old repo. The PO reports in
