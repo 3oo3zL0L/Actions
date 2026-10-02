@@ -1,7 +1,7 @@
 const { test, expect } = require('./helpers/harness');
 
 function writeCalls(calls) {
-  return calls.filter((c) => c.kind === 'mcp' && (c.tool !== 'read_resource' || /AAkALg/.test(c.input.uri)) && c.tool !== 'outlook_email_search' && c.tool !== 'get_me');
+  return calls.filter((c) => c.kind === 'mcp' && (c.tool !== 'read_resource' || /AAkALg/.test(c.input.uri)) && !['outlook_email_search', 'get_me', 'chat_message_search', 'outlook_calendar_search'].includes(c.tool));
 }
 
 test.describe('Send', () => {

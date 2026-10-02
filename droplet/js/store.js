@@ -1,11 +1,12 @@
 /* Droplet · what Droplet remembers (db capability; in-memory when absent).
    Collections: rankings/<msgKey>, done/<msgKey>, sent/<msgKey>, feedback/<msgKey>,
-   handoff/<itemKey> (a Teams reply copied out, waiting for you to post it). */
+   handoff/<itemKey> (a Teams reply copied out, waiting for you to post it),
+   actions/<docId> (your own actions; done ones stay stored with doneAt). */
 (function (D) {
   "use strict";
   var rt = D.rt;
   var store = D.store = { persistent: false, failed: false };
-  var mem = { rankings: {}, done: {}, sent: {}, feedback: {}, handoff: {} };
+  var mem = { rankings: {}, done: {}, sent: {}, feedback: {}, handoff: {}, actions: {} };
   var chains = {};
   var KEEP_RANKINGS_DAYS = 14, KEEP_FEEDBACK = 200;
 
@@ -28,14 +29,14 @@
 
   store.loadAll = function () {
     store.persistent = !!db();
-    return Promise.all([readAll("rankings"), readAll("done"), readAll("feedback"), readAll("sent"), readAll("handoff")]).then(function (r) {
+    return Promise.all([readAll("rankings"), readAll("done"), readAll("feedback"), readAll("sent"), readAll("handoff"), readAll("actions")]).then(function (r) {
       var fb = Object.keys(r[2]).map(function (k) { var v = Object.assign({}, r[2][k]); v.key = k; return v; })
         .sort(function (a, b) { return String(b.at || "").localeCompare(String(a.at || "")); });
       prune(r[0], fb, r[3], r[4]);
-      return { rankings: r[0], done: r[1], feedback: fb, sent: r[3], handoff: r[4], ok: true };
+      return { rankings: r[0], done: r[1], feedback: fb, sent: r[3], handoff: r[4], actions: r[5], ok: true };
     }, function () {
       store.failed = true;
-      return { rankings: {}, done: {}, feedback: [], sent: {}, handoff: {}, ok: false };
+      return { rankings: {}, done: {}, feedback: [], sent: {}, handoff: {}, actions: {}, ok: false };
     });
   };
   function prune(rankings, fb, sent, handoff) {
@@ -67,6 +68,9 @@
   store.clearDone = function (key) { return del("done", key); };
   /* A sent reply stays locked, also after Undo of its done mark and a reload. */
   store.setSent = function (key, d) { return set("sent", key, d); };
+  store.setAction = function (id, a) { return set("actions", id, a); };
+  store.deleteAction = function (id) { return del("actions", id); };
+  store.clearRanking = function (key) { return del("rankings", key); };
   store.setHandoff = function (key, d) { return set("handoff", key, d); };
   store.clearHandoff = function (key) { return del("handoff", key); };
   store.setFeedback = function (key, f) { return set("feedback", key, f); };

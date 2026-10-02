@@ -88,4 +88,55 @@ function baseConfig(over = {}) {
   }, over);
 }
 
-module.exports = { MAIL, DETAILS, RANK_PLAN, baseConfig, m, T };
+/* ---------- Teams (invented chats; real result shape) ---------- */
+const ME = { name: 'Sam de Vries', email: 'sam.devries@planonsoftware.com' };
+function tm(chatId, id, from, summary, created, extra = {}) {
+  return Object.assign({
+    id, chatId, createdDateTime: created, summary,
+    from: { displayName: from.name, email: from.email },
+    webUrl: 'https://teams.microsoft.com/l/message/' + encodeURIComponent(chatId) + '/' + id + '?context=%7B%7D'
+  }, extra);
+}
+const IRIS = { name: 'Iris Meijer', email: 'iris.meijer@planonsoftware.com' };
+const JOOST = { name: 'Joost Vos', email: 'joost.vos@planonsoftware.com' };
+const RUBEN = { name: 'Ruben Pol', email: 'ruben.pol@planonsoftware.com' };
+const EVA = { name: 'Eva Kramer', email: 'eva.kramer@planonsoftware.com' };
+const WIM = { name: 'Wim de Boer', email: 'wim.deboer@planonsoftware.com' };
+const TOMB = { name: 'Tom Bakker', email: 'tom.bakker@planonsoftware.com' };
+const EVE = { name: 'Eve Unknown', email: 'eve@unknown-party.example' };
+const CHAT = {
+  iris: '19:a1c4aexport@thread.v2',      // 1:1 (you and Iris seen): a burst of three after your question
+  joost: '19:b2replied@thread.v2',        // you wrote last: done (R4)
+  group: '19:c3groupfyi@thread.v2',       // group, no mention, no question
+  meeting: '19:meeting_d4siem@thread.v2', // meeting chat that mentions you
+  eve: '19:e5outside@unq.gbl.spaces'      // 1:1 from outside Planon
+};
+const TID = (k) => 'teams:' + CHAT[k];
+const TEAMS = [
+  tm(CHAT.iris, 'c1-0', ME, 'Iris, is the tenant export API ready for review?', T('14:00', '2026-10-01')),
+  tm(CHAT.iris, 'c1-1', IRIS, 'Checked it.', T('06:30')),
+  tm(CHAT.iris, 'c1-2', IRIS, 'The export API passes the contract tests.', T('06:31')),
+  tm(CHAT.iris, 'c1-3', IRIS, 'Can the C4A tenant export go into 26.4? Sales needs a date today.', T('06:32')),
+  tm(CHAT.joost, 'c2-1', JOOST, 'Is the CI cache review planned?', T('06:00')),
+  tm(CHAT.joost, 'c2-2', ME, 'Yes, Thursday.', T('06:20')),
+  tm(CHAT.group, 'c3-1', RUBEN, 'Deployed the new log shipper to staging.', T('05:00')),
+  tm(CHAT.group, 'c3-2', EVA, 'Nice, dashboards look fine.', T('05:10')),
+  tm(CHAT.group, 'c3-3', WIM, 'Build is green again.', T('05:20')),
+  tm(CHAT.meeting, 'c4-1', TOMB, 'Sam, the SIEM log volume estimate is in the doc.', T('07:00'), { webUrl: 'https://teams.evil.example/l/message/c4-1' }),
+  tm(CHAT.meeting, 'c4-2', EVA, 'Thanks Tom.', T('07:05'), { webUrl: 'https://teams.microsoft.com.evil.example/l/message/c4-2' })
+];
+const TEAMS_PLAN = {
+  [TID('iris')]: { group: 'now', rank: 2, project: 'Platform Stability › C4A', needsYou: true, title: 'Iris asks if the C4A tenant export makes 26.4',
+    why: 'C4A team member needs a date for Sales today.', action: 'reply', label: 'Reply to Iris in Teams',
+    draft: 'Hi Iris,\n\nYes, if the export API passes review by Wednesday \u2014 that said, 26.5 otherwise.\n\nKR\nSam' },
+  [TID('meeting')]: { group: 'later', rank: 9, project: 'SIEM Integration', needsYou: true, title: 'Tom shared the SIEM log volume estimate',
+    why: 'SIEM architect points you to the estimate.', action: 'reply', label: 'Reply to Tom in Teams', draft: 'Thanks Tom, I will read it today.' }
+};
+function teamsConfig(over = {}) {
+  const plan = Object.assign(JSON.parse(JSON.stringify(RANK_PLAN)), JSON.parse(JSON.stringify(TEAMS_PLAN)), over.planExtra || {});
+  const o = Object.assign({ teams: JSON.parse(JSON.stringify(TEAMS)), rankPlan: plan }, over);
+  delete o.planExtra;
+  return o;
+}
+
+module.exports = { MAIL, DETAILS, RANK_PLAN, baseConfig, m, T, tm, ME, IRIS, EVE, EVA, CHAT, TID, TEAMS, TEAMS_PLAN, teamsConfig };

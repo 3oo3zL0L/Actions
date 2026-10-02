@@ -2,7 +2,7 @@
   "name": "droplet",
   "private": true,
   "version": "0.1.0",
-  "description": "Droplet slice 1: a claude.ai Artifact (plain HTML/CSS/JS). Browser tests only.",
+  "description": "Droplet: a claude.ai Artifact (plain HTML/CSS/JS). Browser tests only.",
   "scripts": {
     "test": "playwright test"
   },

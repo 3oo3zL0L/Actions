@@ -1,4 +1,8 @@
 <title>Droplet</title>
+<!-- Publish: declare the Microsoft 365 tools get_me, outlook_email_search, read_resource,
+     outlook_create_reply_draft, outlook_send_draft, chat_message_search and
+     outlook_calendar_search (read only; Droplet never posts in Teams).
+     The full capabilities JSON is in README.md. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
@@ -14,12 +18,19 @@
           <span class="lambda" aria-hidden="true">λ</span>
           <span class="brand-name">Droplet</span>
         </div>
-        <div class="status" id="status"><span><i></i>M365 link</span><span><i></i>Claude</span><span>Sync ··:··</span><span>Nothing sends without you</span></div>
+        <div class="status" id="status"><span><i></i>M365 link</span><span><i></i>Teams</span><span><i></i>Claude</span><span>Sync ··:··</span><span>Nothing sends without you</span></div>
         <p class="date" id="dateLine"></p>
         <h1 class="h1">Do now</h1>
         <p class="sub" id="sub"></p>
         <div class="notes" id="notes" role="status" aria-live="polite"></div>
       </header>
+      <form class="addline" id="addForm" data-addform autocomplete="off">
+        <label class="add-k" for="addIn"><span aria-hidden="true">+ </span>Add action<span class="kbd" aria-hidden="true">a</span></label>
+        <div class="add-row">
+          <input id="addIn" type="text" maxlength="300" enterkeyhint="done" aria-keyshortcuts="a" placeholder="What needs doing? e.g. Plan DoD follow-up meeting, Friday">
+          <button class="add-btn" type="submit">Add</button>
+        </div>
+      </form>
       <ol class="focus" id="focus"></ol>
       <section class="rest" aria-label="Everything else">
         <button class="rest-toggle" id="restToggle" aria-expanded="false" aria-controls="restPanel" aria-keyshortcuts="/">
@@ -57,6 +68,9 @@
 <script src="js/runtime.js"></script>
 <script src="js/store.js"></script>
 <script src="js/mail.js"></script>
+<script src="js/teams.js"></script>
+<script src="js/meet.js"></script>
+<script src="js/mine.js"></script>
 <script src="js/rank.js"></script>
 <script src="js/send.js"></script>
 <script src="js/chat.js"></script>

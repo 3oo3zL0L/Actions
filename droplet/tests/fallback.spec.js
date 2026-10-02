@@ -84,7 +84,10 @@ test.describe('Degraded states', () => {
   test('no mcp capability: one calm line, no crash', async ({ app, page }) => {
     await app.boot({ noMcp: true });
     await expect(page.locator('[data-note="mail"]')).toContainText('Outlook isn’t available in this view.');
-    await expect(page.locator('.status i.off')).toHaveCount(1);
+    // M365 is off, and Teams (through the same connector) with it; still one calm line.
+    await expect(page.locator('.status [data-dot="m365"] i.off')).toHaveCount(1);
+    await expect(page.locator('.status [data-dot="teams"] i.off')).toHaveCount(1);
+    await expect(page.locator('.note-line')).toHaveCount(1);
   });
 
   test('no db capability: works for this visit and says it cannot save', async ({ app, page }) => {

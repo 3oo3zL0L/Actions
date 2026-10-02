@@ -12,10 +12,10 @@
 
   /* Data inside the delimited blocks can never close or open a block. */
   function data(s, n) {
-    return U.clip(String(s == null ? "" : s), n || 600).replace(/<<<|>>>/g, "‹‹").replace(/\bEND (EMAIL|TEAMS)\b/g, "END-$1");
+    return U.clip(String(s == null ? "" : s), n || 600).replace(/<<<|>>>/g, "‹‹").replace(/\bEND (EMAIL|TEAMS|ACTION)\b/g, "END-$1");
   }
   function dataBlock(s, n) {
-    return String(s == null ? "" : s).slice(0, n).replace(/<<<|>>>/g, "‹‹").replace(/\bEND (EMAIL|TEAMS)\b/g, "END-$1");
+    return String(s == null ? "" : s).slice(0, n).replace(/<<<|>>>/g, "‹‹").replace(/\bEND (EMAIL|TEAMS|ACTION)\b/g, "END-$1");
   }
 
   rank.rules = function () {
@@ -149,6 +149,7 @@
     var me = o.me || {}, name = me.displayName || "the user", first = U.firstName(me.displayName) || "the user", sign = rank.signName(me);
     var lines = [];
     var hasTeams = (o.items || []).some(function (m) { return m.src === "teams"; });
+    var hasMine = (o.items || []).some(function (m) { return m.src === "mine"; });
     lines.push("You rank unread email" + (hasTeams ? " and Teams chats" : "") + " for " + data(name, 80) + " (Planon). Today is " + U.dateLine(o.now) + ".");
     lines.push("For each " + (hasTeams ? "item (an EMAIL or a TEAMS chat)" : "email") + " in the DATA section decide its priority and the one next action.");
     lines.push("");
@@ -166,7 +167,7 @@
     if (o.ranked && o.ranked.length) {
       lines.push("Already ranked, for context only (do not return these):");
       o.ranked.slice(0, 40).forEach(function (r, i) {
-        lines.push((i + 1) + ". [" + r.group + "] " + (r.src === "teams" ? "Teams: " : "") + data(r.subject, 100) + " (" + data(r.senderName, 40) + ")" + (r.id ? " · ref " + data(r.id, 200) : ""));
+        lines.push((i + 1) + ". [" + r.group + "] " + (r.src === "teams" ? "Teams: " : r.src === "mine" ? "My action: " : "") + data(r.subject, 100) + " (" + data(r.senderName, 40) + ")" + (r.id ? " · ref " + data(r.id, 200) : ""));
       });
       lines.push("");
     }
@@ -180,7 +181,11 @@
     if (hasTeams) {
       lines.push("- For a TEAMS item also give \"title\": a one-line summary of what the chat is about or wants (max 80 characters, no addresses or links), and \"needsYou\": true or false (R4). Its draft is a short Teams chat reply in the chat style below (" + first + " sends it in Teams). Its label names the step, e.g. \"Reply to Melissa in Teams\".");
     }
-    lines.push("- Return exactly one entry per " + (hasTeams ? "" : "email ") + "id in DATA.");
+    if (hasMine) {
+      var today = D.mine.today(o.now);
+      lines.push("- An ACTION item is " + first + "'s own to-do, added by hand. Give its project (from the R2 list, or null), a one-line why, its rank among all items under the same rules, and \"due\": the date the text names as YYYY-MM-DD, or null. Today is " + today + " (Europe/Amsterdam); a weekday (\"Friday\", \"vrijdag\") means its next occurrence, today when it is today; \"morgen\"/\"tomorrow\" is " + D.mine.today(new Date((o.now || new Date()).getTime() + 864e5)) + ". A due date set by " + first + " stays as it is. A due date today or earlier means group \"now\". Never put an ACTION in group \"hidden\". Give \"next\": a short concrete next step only when the text clearly implies one (e.g. \"Draft a mail to Melissa\", \"Plan a meeting with Rakesh\"), else null. No draft for an ACTION.");
+    }
+    lines.push("- Return exactly one entry per " + (hasTeams || hasMine ? "" : "email ") + "id in DATA.");
     lines.push("");
     lines.push(rank.styleRules(sign));
     lines.push("");
@@ -189,6 +194,7 @@
     (o.items || []).forEach(function (m, i) {
       var n = i + 1;
       if (m.src === "teams") return teamsBlock(lines, m, n, first);
+      if (m.src === "mine") return actionBlock(lines, m, n, first);
       lines.push("<<<EMAIL " + n + ' id="' + m.id + '">>>');
       lines.push("From: " + data(m.senderName, 80) + " <" + data(m.sender, 120) + "> (" + (m.internal ? "colleague" : "external") + ")");
       lines.push("Received: " + U.whenLong(m.received) + " · recipients: " + m.recipients + " · importance: " + m.importance + (m.hasAttachments ? " · attachments" : ""));
@@ -202,6 +208,14 @@
     return lines.join("\n");
   };
 
+  function actionBlock(lines, m, n, first) {
+    lines.push("<<<ACTION " + n + ' id="' + m.id + '">>>');
+    lines.push("Added: " + U.whenLong(m.received));
+    if (m.due) lines.push("Due: " + m.due + (m.dueBy === "you" ? " (set by " + first + ")" : ""));
+    lines.push("Text: " + data(m.subject, 300));
+    if (m.notes) lines.push("Notes: " + data(m.notes, 600));
+    lines.push("<<<END ACTION " + n + ">>>");
+  }
   function teamsBlock(lines, m, n, first) {
     var kind = m.chatKind === "oneOnOne" ? "1:1 chat" : m.chatKind === "meeting" ? "meeting chat" : "group chat";
     var because = [m.oneOnOne ? "1:1" : "", m.mention ? "mentions " + first : "", m.question ? "asks a question" : ""].filter(Boolean).join(", ");
@@ -267,12 +281,21 @@
         v.title = title && !U.hasAddressOrUrl(title) ? title : "";
         if (!label || label === rank.defaultLabel(m, kind)) v.label = rank.defaultLabel(m, kind);
       }
+      if (m.src === "mine") {
+        if (v.group === "hidden") v.group = "later"; /* your own action is never hidden */
+        v.kind = "open"; v.draft = ""; v.dupOf = null;
+        v.due = typeof x.due === "string" && D.mine.validDate(x.due.trim()) ? x.due.trim() : null;
+        var next = typeof x.next === "string" ? U.clip(x.next, 70) : "";
+        v.next = next && !U.hasAddressOrUrl(next) ? next : "";
+        if (!label || U.hasAddressOrUrl(label)) v.label = rank.defaultLabel(m, "open");
+      }
       byId[x.id] = v;
     });
     return { byId: byId, dropped: dropped };
   };
 
   rank.defaultWhy = function (m) {
+    if (m.src === "mine") return m.due ? "Your own action. " + D.mine.dueLabel(m.due) + "." : "Your own action.";
     if (m.src === "teams") {
       var who = U.firstName(m.senderName) || "Someone";
       var n = m.pendingCount > 1 ? m.pendingCount + " messages" : "a message";
@@ -287,10 +310,14 @@
   rank.defaultLabel = function (m, kind) {
     var first = U.firstName(m.senderName) || "sender";
     if (m.src === "teams") return "Reply to " + first + " in Teams";
+    if (m.src === "mine") return "Open my action";
     return kind === "reply" ? "Draft reply to " + first : "Open mail from " + first;
   };
   /* Used when Claude can't rank: newest first, R1 on top (ordering in app). */
   rank.fallbackFor = function (m) {
+    if (m.src === "mine") {
+      return { group: "later", rank: 999, project: null, why: rank.defaultWhy(m), kind: "open", label: rank.defaultLabel(m, "open"), draft: "", dupOf: null, fallback: true, due: null, next: "" };
+    }
     if (m.src === "teams") {
       return { group: m.waits ? "now" : "hidden", rank: 999, project: null, why: rank.defaultWhy(m), kind: "reply", label: rank.defaultLabel(m, "reply"), draft: "", dupOf: null, fallback: true, title: "" };
     }

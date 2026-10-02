@@ -51,12 +51,20 @@ function installDropletStub(cfg) {
   var details = cfg.details || {};
   var drafts = {}, draftN = 0, sent = [];
   var draftReads = { fail: cfg.draftReadFail || 0, empty: cfg.draftReadEmpty || 0 };
+  /* ---------- teams + calendar ---------- */
+  var teamsList = (cfg.teams || []).slice();
+  var teamsBodies = cfg.teamsBodies || {};
+  var events = (cfg.events || []).slice();
   window.__stub = {
     addMail: function (m) { mailList.unshift(m); },
+    addTeams: function (t) { teamsList.unshift(t); },
+    setEvents: function (e) { events = e.slice(); },
     setFault: function (tool, f) { if (f == null) delete faults[tool]; else faults[tool] = f; },
     setRank: function (r) { cfg.rank = r; },
     setRankPlan: function (p) { cfg.rankPlan = p; },
     setDraftAnswer: function (d) { cfg.draftAnswer = d; },
+    setActionPlan: function (p) { cfg.actionPlan = p; },
+    setRankDelay: function (ms) { cfg.rankDelay = ms; },
     drafts: drafts, sent: sent
   };
   function findMail(id) { return mailList.filter(function (m) { return m.id === id; })[0]; }
@@ -96,7 +104,28 @@ function installDropletStub(cfg) {
       var blocks = [parts.slice(0, half).join(""), parts.slice(half).join("")].filter(Boolean);
       return result(blocks.join(""), blocks.length ? blocks : ["[]"]);
     },
+    /* Seen live (2026-10): one JSON object per message, concatenated, then {moreResults, nextOffset}. */
+    chat_message_search: function (input) {
+      var off = input.offset || 0, lim = input.limit || 25;
+      var parts = teamsList.slice(off, off + lim).map(function (t) {
+        return JSON.stringify(Object.assign({ uri: "teams:///chats/" + encodeURIComponent(t.chatId) + "/messages/" + t.id, chatUri: "teams:///chats/" + encodeURIComponent(t.chatId), subject: "", importance: "normal", lastModifiedDateTime: t.createdDateTime }, t));
+      });
+      parts.push(JSON.stringify({ moreResults: off + lim < teamsList.length, nextOffset: off + lim }));
+      return result(parts.join(""));
+    },
+    outlook_calendar_search: function () {
+      return result(events.map(function (e) { return JSON.stringify(e); }).join("") || "[]");
+    },
     read_resource: function (input) {
+      var tm = /^teams:\/\/\/chats\/([^/]+)\/messages\/(.+)$/.exec(input.uri || "");
+      if (tm) {
+        var chatId = decodeURIComponent(tm[1]), mid = decodeURIComponent(tm[2]);
+        var tmsg = teamsList.filter(function (t) { return t.chatId === chatId && t.id === mid; })[0];
+        if (!tmsg) throw err("tool_error", "Not found");
+        if (teamsBodies[mid] === "FAIL") throw err("tool_error", "Message not available");
+        return result(JSON.stringify({ id: mid, chatId: chatId, createdDateTime: tmsg.createdDateTime, from: { user: { displayName: tmsg.from.displayName, email: tmsg.from.email } },
+          body: { contentType: "html", content: teamsBodies[mid] != null ? teamsBodies[mid] : "<p>" + String(tmsg.summary).replace(/&/g, "&amp;").replace(/</g, "&lt;") + "</p>" } }));
+      }
       var m = /^mail:\/\/\/messages\/(.+)$/.exec(input.uri || "");
       var id = m && decodeURIComponent(m[1]);
       if (id && drafts[id] && draftReads.fail > 0) { draftReads.fail--; throw err("tool_error", "Tool call failed", "The specified object was not found in the store."); }
@@ -148,7 +177,7 @@ function installDropletStub(cfg) {
 
   /* ---------- sample ---------- */
   function idsIn(prompt) {
-    var re = /<<<EMAIL \d+ id="([^"]+)">>>/g, m, out = [];
+    var re = /<<<(?:EMAIL|TEAMS|ACTION) \d+ id="([^"]+)">>>/g, m, out = [];
     while ((m = re.exec(prompt))) out.push(m[1]);
     return out;
   }
@@ -156,8 +185,16 @@ function installDropletStub(cfg) {
     if (cfg.rank === "INVALID_JSON") throw { code: "invalid_json", message: "not json", text: "Sure! Here is" };
     if (cfg.rank && cfg.rank !== "AUTO") return JSON.parse(JSON.stringify(cfg.rank));
     var plan = cfg.rankPlan || {};
+    /* Own actions get random ids: cfg.actionPlan is keyed by a piece of their text. */
+    function actionPlan(id) {
+      var s = prompt.indexOf('id="' + id + '">>>'), block = s >= 0 ? prompt.slice(s, prompt.indexOf("<<<END ACTION", s)) : "";
+      var text = (/\nText: (.*)/.exec(block) || [])[1] || "";
+      var keys = Object.keys(cfg.actionPlan || {}).filter(function (k) { return text.indexOf(k) >= 0; });
+      return keys.length ? cfg.actionPlan[keys[0]] : null;
+    }
     var items = idsIn(prompt).map(function (id, i) {
-      return Object.assign({ id: id, group: "later", rank: 50 + i, project: null, why: "Routine mail.", action: "open", label: "Open it" }, plan[id] || {});
+      var p = plan[id] || (/^mine:/.test(id) ? actionPlan(id) : null);
+      return Object.assign({ id: id, group: "later", rank: 50 + i, project: null, why: "Routine mail.", action: "open", label: "Open it" }, p || {});
     });
     return { items: items.concat(cfg.rankExtra || []) };
   }
@@ -172,10 +209,11 @@ function installDropletStub(cfg) {
   function answer(input, options, asJson) {
     calls.push({ kind: "sample", json: asJson, input: JSON.parse(JSON.stringify(input)), options: options ? JSON.parse(JSON.stringify(options)) : null });
     var prompt = typeof input === "string" ? input : input.map(function (t) { return t.content; }).join("\n");
-    var extra = /You draft one email reply/.test(prompt) ? cfg.draftDelay || 0 : 0;
+    var isDraft = /You draft one (email|Teams chat) reply/.test(prompt);
+    var extra = isDraft ? cfg.draftDelay || 0 : /You rank unread email/.test(prompt) ? cfg.rankDelay || 0 : 0;
     return later(null).then(function () { return new Promise(function (r) { setTimeout(r, extra); }); }).then(function () {
       if (cfg.sampleFault) throw { code: cfg.sampleFault, message: cfg.sampleFault };
-      var a = /You rank unread email/.test(prompt) ? rankAnswer(prompt) : /You draft one email reply/.test(prompt) ? draftAnswer(prompt) :
+      var a = /You rank unread email/.test(prompt) ? rankAnswer(prompt) : isDraft ? draftAnswer(prompt) :
         (chatQueue.length > 1 ? chatQueue.shift() : chatQueue[0] || { reply: "OK.", draft: null });
       return asJson ? a : { text: JSON.stringify(a), truncated: false, modelTierApplied: "default" };
     });
