@@ -3,7 +3,8 @@
    approved Lambda v3 design. */
 (function (D) {
   "use strict";
-  var U = D.util, rt = D.rt, store = D.store, mail = D.mail, rank = D.rank, flow = D.sendflow, chat = D.chat, teams = D.teams, meet = D.meet, mine = D.mine;
+  var U = D.util, rt = D.rt, store = D.store, mail = D.mail, rank = D.rank, flow = D.sendflow, chat = D.chat, teams = D.teams, meet = D.meet, mine = D.mine,
+    waits = D.waits, tx = D.tx, ns = D.ns;
   var esc = U.esc, pad = U.pad;
   var FOCUS_MAX = 5;
 
@@ -26,7 +27,8 @@
     warn: '<path d="M12 4 21 20H3z"/><path d="M12 10v4M12 17v.5"/>',
     arrowUp: '<path d="M12 20V5M6 11l6-6 6 6"/>',
     star: '<path d="m12 3.5 2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.8z"/>',
-    out: '<path d="M14 4h6v6M20 4l-9 9M18 14v5H5V6h5"/>'
+    out: '<path d="M14 4h6v6M20 4l-9 9M18 14v5H5V6h5"/>',
+    wait: '<path d="M7 3h10M7 21h10"/><path d="M8 3c0 5 8 5.5 8 9s-8 4-8 9M16 3c0 5-8 5.5-8 9s8 4 8 9"/>'
   };
   function ico(name, cls) { return '<svg class="ico ' + (cls || '') + '" viewBox="0 0 24 24" aria-hidden="true">' + P[name] + '</svg>'; }
 
@@ -35,7 +37,8 @@
     view: 'list', cur: null, pane: 'list', restOpen: false, q: '', chatOpen: false, scrollY: 0, toastTimer: null, anim: false,
     me: null, items: [], byId: {}, loading: true, loaded: false, ranking: 0, syncAt: null, mcpOk: null, teamsOk: null,
     notes: { mail: null, teams: null, cal: null, rank: null, store: null }, rankings: {}, feedback: [], verdict: {}, doneNow: {},
-    drafts: {}, touched: {}, drafting: {}, send: {}, detail: {}, chat: {}, undo: null, handoff: {}, meetings: [], actions: {}, confirmDel: null, rankAgain: false, fresh: {}, actEdit: {}
+    drafts: {}, touched: {}, drafting: {}, send: {}, detail: {}, chat: {}, undo: null, handoff: {}, meetings: [], actions: {}, confirmDel: null, rankAgain: false, fresh: {}, actEdit: {},
+    waits: {}, asksDb: {}, meetingsDb: {}, waitPre: [], scanning: false, teams10: [], sentMsgs: [], chaseMail: {}, ns: {}
   };
   D.state = S;
   var $ = function (id) { return document.getElementById(id); };
@@ -48,6 +51,7 @@
     var g = rk(it).group;
     if (it.standstill) return 'now';
     if (S.verdict[it.id] === 'up') return 'now';
+    if (it.src === 'wait' && g === 'hidden') return 'later';
     if (it.src === 'mine') {
       /* Your own action: due today or earlier is "now"; a new one shows in
          Do now while Claude places it; it is never hidden. */
@@ -100,12 +104,16 @@
   function alsoIn(it) {
     return S.items.filter(function (o) { return o !== it && rk(o).dupOf === it.id && o.src !== it.src; });
   }
-  var SRC = { mail: 'Mail', teams: 'Teams', mine: 'My action' };
+  var SRC = { mail: 'Mail', teams: 'Teams', mine: 'My action', wait: 'Waiting', meeting: 'Meeting' };
   function isMine(it) { return it && it.src === 'mine'; }
+  function isWait(it) { return it && it.src === 'wait'; }
+  /* An own action made from a meeting commitment (R6). */
+  function fromMeeting(it) { return isMine(it) && it.origin && it.origin.eventId ? it.origin : null; }
+  function srcLabel(it) { var o = fromMeeting(it); return o ? 'From meeting ' + U.clip(o.subject || 'a meeting', 40) : SRC[it.src]; }
   /* The list item mirrors its stored action. */
   function syncAction(it) {
     var a = S.actions[it.docId]; if (!a) return it;
-    it.subject = a.text; it.due = a.due || null; it.dueBy = a.dueBy || null; it.notes = a.notes || ''; it.summary = a.notes || '';
+    it.subject = a.text; it.due = a.due || null; it.dueBy = a.dueBy || null; it.notes = a.notes || ''; it.summary = a.notes || ''; it.origin = a.origin || null;
     return it;
   }
   function isTeams(it) { return it && it.src === 'teams'; }
@@ -115,7 +123,7 @@
   function isSent(id) { return sendState(id).phase === 'sent'; }
   function isClosed(id) { return !!S.doneNow[id]; }
   function isCur(id) { return S.view === 'item' && S.cur === id; }
-  function project(it) { return rk(it).project || (isMine(it) ? 'Own' : it.internal ? (isTeams(it) ? 'Chat' : 'Inbox') : 'Outside Planon'); }
+  function project(it) { return rk(it).project || (isWait(it) ? it.project0 || 'Follow-up' : isMine(it) ? 'Own' : it.internal ? (isTeams(it) ? 'Chat' : 'Inbox') : 'Outside Planon'); }
   function flag(it) {
     if (it.standstill) return 'Standstill';
     if (S.verdict[it.id] === 'up') return '★ Important';
@@ -162,16 +170,19 @@
     var noun = S.rankingTeams ? ' new item' : ' new mail';
     if (S.ranking) line('ranking', 'Claude is ranking ' + S.ranking + noun + (S.ranking === 1 ? '' : 's') + '…', false);
     else if (S.notes.rank) line('rank', S.notes.rank, true);
+    if (S.notes.waits) line('waits', S.notes.waits, false);
     if (S.notes.store) line('store', S.notes.store, false);
     $('notes').innerHTML = h;
   }
   function renderHeader() {
     var top = topItems(), open = top.filter(function (it) { return !isClosed(it.id); }).length, rest = restItems().length;
     $('sub').textContent = S.loading && !S.loaded ? 'Reading your inbox…' :
-      open ? open + ' action' + (open === 1 ? '' : 's') + ' queued · ' + rest + ' deferred' : 'All clear · ' + rest + ' deferred';
+      (open ? open + ' action' + (open === 1 ? '' : 's') + ' queued · ' + rest + ' deferred' : 'All clear · ' + rest + ' deferred') +
+      (S.waitPre.length ? ' · ' + S.waitPre.length + ' waiting on others' : '');
     renderStatus(); renderNotes();
   }
-  function srcHTML(it) { var k = isTeams(it) ? 'teams' : isMine(it) ? 'mine' : 'mail'; return '<span class="src" data-src="' + k + '">' + ico(k) + SRC[k] + '</span>'; }
+  function srcKind(it) { return isTeams(it) ? 'teams' : isWait(it) ? 'wait' : fromMeeting(it) ? 'meeting' : isMine(it) ? 'mine' : 'mail'; }
+  function srcHTML(it) { var k = srcKind(it); return '<span class="src" data-src="' + k + '">' + ico(k) + esc(srcLabel(it)) + '</span>'; }
   function dueHTML(it) { return isMine(it) && it.due ? '<span class="flag" data-due>' + esc(mine.dueLabel(it.due)) + '</span>' : ''; }
   function meetingHTML(it) { return it.meeting ? '<span class="flag" data-meeting>Meeting ' + esc(it.meeting.hhmm) + '</span>' : ''; }
   function alsoTag(it) {
@@ -183,6 +194,7 @@
   function stateChip(id) {
     var s = sendState(id);
     if (s.phase === 'sent') return '<span class="state-chip">' + ico('check') + 'Sent ' + U.hhmm(s.sentAt) + ' · done</span>';
+    if (S.doneNow[id] && S.doneNow[id].how === 'chased') return '<span class="state-chip">' + ico('check') + 'Chased in Teams ' + esc(U.hhmm(new Date(S.doneNow[id].at))) + '</span>';
     if (S.doneNow[id]) return '<span class="state-chip">' + ico('check') + 'Done</span>';
     return '';
   }
@@ -218,19 +230,22 @@
   function renderRest() {
     var all = restItems(), q = S.q.trim().toLowerCase(), base = topItems().length;
     $('restCount').textContent = all.length;
-    var list = all.filter(function (it) {
+    /* Waits younger than 3 working days are not listed, only found by search. */
+    var list = all.concat(q ? S.waitPre : []).filter(function (it) {
       if (!q) return true;
       var extra = isTeams(it) ? ' ' + it.subject + ' ' + (it.people || []).join(' ') + ' ' + (it.participants || []).join(' ') :
-        isMine(it) ? ' ' + (it.notes || '') + ' mine ' + (it.due ? mine.dueLabel(it.due) : '') : '';
-      return (titleOf(it) + ' ' + project(it) + ' ' + it.senderName + ' ' + it.sender + ' ' + rk(it).why + ' ' + SRC[it.src] + extra +
+        isMine(it) ? ' ' + (it.notes || '') + ' mine ' + (it.due ? mine.dueLabel(it.due) : '') + (it.origin ? ' meeting ' + it.origin.subject : '') :
+        isWait(it) ? ' waiting on others ' + it.what + ' ' + it.summary : '';
+      return (titleOf(it) + ' ' + project(it) + ' ' + it.senderName + ' ' + it.sender + ' ' + rk(it).why + ' ' + srcLabel(it) + extra +
         (it.meeting ? ' meeting ' + it.meeting.hhmm : '')).toLowerCase().indexOf(q) !== -1;
     });
     var h = '';
     list.forEach(function (it) {
-      var n = all.indexOf(it) + base + 1, cur = isCur(it.id);
+      var n = all.indexOf(it) > -1 ? all.indexOf(it) + base + 1 : 0, cur = isCur(it.id);
       h += '<li><button class="rr' + (isClosed(it.id) ? ' is-closed' : '') + (cur ? ' is-current' : '') + '" data-open="' + esc(it.id) + '"' + (cur ? ' aria-current="true"' : '') + '>' +
-        '<span class="rr-n">' + pad(n) + '</span>' + ico(isTeams(it) ? 'teams' : isMine(it) ? 'mine' : 'mail') +
-        '<span class="rr-t"><span class="rr-title">' + esc(titleOf(it)) + '</span><span class="rr-sub">' + SRC[it.src] + ' · ' + esc(project(it)) + ' · ' + esc(it.senderName) +
+        '<span class="rr-n">' + (n ? pad(n) : '··') + '</span>' + ico(srcKind(it)) +
+        '<span class="rr-t"><span class="rr-title">' + esc(titleOf(it)) + '</span><span class="rr-sub">' + esc(srcLabel(it)) + ' · ' + esc(project(it)) + ' · ' + esc(it.senderName) +
+        (isWait(it) && !n ? ' · asked ' + it.n + ' working day' + (it.n === 1 ? '' : 's') + ' ago' : '') +
         (it.meeting ? ' · meeting ' + esc(it.meeting.hhmm) : '') + (waitingTeams(it.id) ? ' · waiting for you to send in Teams' : '') +
         (isMine(it) && it.due ? ' · ' + esc(mine.dueLabel(it.due).toLowerCase()) : '') +
         (S.verdict[it.id] === 'down' ? ' · marked not important' : '') + '</span></span></button></li>';
