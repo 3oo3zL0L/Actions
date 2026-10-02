@@ -55,7 +55,7 @@ Daaronder staat de rest, ingeklapt en doorzoekbaar. Daarnaast is er één global
 10. Meeting vandaag (R5).
 11. Jira-mentions met comment, en de standstill-regel (R1).
 12. Confluence-pagina's.
-13. **Ask Claude** globaal. Twee doelen staan vast: *een Confluence-pagina aanpassen* en *mails naar klanten sturen*. Bij mail naar buiten Planon verschijnt een waarschuwing.
+13. **Ask Claude** globaal. Twee doelen staan vast: *een Confluence-pagina aanpassen* en *mails naar leveranciers sturen*. Bij mail naar buiten Planon verschijnt een waarschuwing.
 14. Eigen to-do met snelle invoer.
 
 **Later:** Office-bestanden (Excel, Word, PowerPoint op het Planon-template), OneDrive en PowerPoint als bron.
