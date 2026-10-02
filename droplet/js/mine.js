@@ -29,6 +29,30 @@
     return Math.round((Date.UTC(y[0], y[1], y[2]) - Date.UTC(x[0], x[1], x[2])) / 864e5);
   };
 
+  /* Working days (Mon-Fri, Europe/Amsterdam), for R3 and R6. */
+  mine.isWorkday = function (iso) { var d = dow(iso); return d >= 1 && d <= 5; };
+  /* Working days d with from < d <= to (both YYYY-MM-DD). An ask on Tue
+     counts 3 on Fri; weekends are skipped. */
+  mine.workdaysBetween = function (from, to) {
+    if (!parts(from) || !parts(to) || to <= from) return 0;
+    var n = 0, d = from;
+    for (var guard = 0; guard < 400 && d < to; guard++) { d = addDays(d, 1); if (mine.isWorkday(d)) n++; }
+    return n;
+  };
+  mine.addWorkdays = function (iso, n) {
+    var d = iso;
+    for (var i = 0; i < n; ) { d = addDays(d, 1); if (mine.isWorkday(d)) i++; }
+    return d;
+  };
+  /* The n-th working day before iso (n = 0: iso itself). */
+  mine.workdaysBack = function (iso, n) {
+    var d = iso;
+    for (var i = 0; i < n; ) { d = addDays(d, -1); if (mine.isWorkday(d)) i++; }
+    return d;
+  };
+  mine.addDays = function (iso, n) { return addDays(iso, n); };
+  mine.dayOf = function (t) { var d = new Date(t); return isNaN(d) ? "" : fDate.format(d); };
+
   var DAYS = [["sunday", "zondag", "sun", "zo"], ["monday", "maandag", "mon", "ma"], ["tuesday", "dinsdag", "tue", "di"],
     ["wednesday", "woensdag", "wed", "wo"], ["thursday", "donderdag", "thu", "do"], ["friday", "vrijdag", "fri", "vr"], ["saturday", "zaterdag", "sat", "za"]];
   var MONTHS = [["january", "januari", "jan"], ["february", "februari", "feb"], ["march", "maart", "mar", "mrt"], ["april", "apr"],

@@ -123,22 +123,27 @@
     return items;
   };
 
-  /* The last 2 days of chat messages, up to 3 pages of 25. Resolves the
-     items; rejects with the connector error. */
-  teams.load = function (me, now, extraDomains) {
+  /* Chat messages of the last `days` days, up to `pages` pages of 25,
+     normalised. Rejects with the connector error. */
+  teams.search = function (days, pages) {
     var all = [], page = 0;
     function next(offset) {
       page++;
-      return rt.call("chat_message_search", { query: "*", afterDateTime: DAYS + " days ago", limit: PAGE, offset: offset }).then(function (res) {
+      return rt.call("chat_message_search", { query: "*", afterDateTime: days + " days ago", limit: PAGE, offset: offset }).then(function (res) {
         var more = null;
         U.resultObjects(res).forEach(function (o) {
           if (o.id && (o.chatId || URI_RE.test(String(o.uri || "")))) all.push(normMsg(o));
           else if (o.moreResults !== undefined || o.nextOffset !== undefined) more = o;
         });
-        if (more && more.moreResults && typeof more.nextOffset === "number" && more.nextOffset > offset && page < MAX_PAGES) return next(more.nextOffset);
+        if (more && more.moreResults && typeof more.nextOffset === "number" && more.nextOffset > offset && page < pages) return next(more.nextOffset);
       });
     }
-    return next(0).then(function () { return teams.build(all, me, now, extraDomains); });
+    return next(0).then(function () { return all; });
+  };
+  /* The last 2 days of chat messages, up to 3 pages of 25. Resolves the
+     items; rejects with the connector error. */
+  teams.load = function (me, now, extraDomains) {
+    return teams.search(DAYS, MAX_PAGES).then(function (all) { return teams.build(all, me, now, extraDomains); });
   };
 
   /* The full text of the newest messages from others (read_resource), as

@@ -139,6 +139,66 @@
     });
   };
 
+  /* Read-back check for a new mail: a draft, going to exactly the chosen
+     addresses (case-insensitive), containing the start of the user's text. */
+  flow.verifyNew = function (d, o) {
+    function no(code, reason) { return { ok: false, code: code, reason: reason }; }
+    if (!d || !d.id) return no("unreadable", "Couldn’t read the draft back from Outlook.");
+    if (d.isDraft !== true) return no("not_draft", "What Outlook returned isn’t a draft.");
+    var want = U.alnum(o.text).slice(0, 40);
+    if (!want || U.alnum(d.text).indexOf(want) === -1) return no("text_mismatch", "The draft’s text doesn’t match what you wrote.");
+    var to = (d.to || []).concat(d.cc || []).map(function (a) { return String(a).toLowerCase(); }).sort();
+    if (!to.length) return no("no_recipients", "Couldn’t check who the draft goes to.");
+    var exp = (o.to || []).map(function (a) { return String(a).trim().toLowerCase(); }).sort();
+    if (to.join(",") !== exp.join(",")) return no("other_recipient", "Outlook would send this to " + to.join(", ") + " instead of " + exp.join(", ") + ".");
+    return { ok: true };
+  };
+
+  /* A new mail: create the draft, read it back and check it, only then
+     send. o: {to:[emails], subject, text, reuse:{draftId, link, text}}.
+     Resolves the same shape as flow.send. */
+  flow.sendNew = function (o) {
+    var text = o.text, draftId = "", link = "", S = flow.STEPS;
+    var reuse = o.reuse && o.reuse.draftId && o.reuse.text === text ? o.reuse : null;
+    var step = reuse ? Promise.resolve({ id: reuse.draftId, link: reuse.link }) :
+      rt.call("outlook_create_draft", { to: o.to.slice(), subject: String(o.subject || "").slice(0, 255), body: U.textToHtml(text), bodyType: "html" }).then(function (res) {
+        var got = flow.extractDraft(res, "");
+        if (!got.id) throw {
+          phase: "blocked", step: S.create, code: "no_draft_id", draftLink: got.link, detail: U.clip(U.resultText(res), 200), safeDetail: shapeOf(res),
+          message: "The mail may be in your Outlook Drafts, but Droplet couldn’t find the draft’s id in Outlook’s answer, so nothing was sent. Check Drafts in Outlook."
+        };
+        return got;
+      }, function (e) {
+        var base = { step: S.create, code: codeOf(e), detail: errText(e) };
+        throw Object.assign(base, rt.isClear(e)
+          ? { phase: "failed", message: "Outlook didn’t make the draft" + (errText(e) ? ": " + errText(e) : "") + ". Nothing was sent; your text is kept." }
+          : { phase: "unclear", message: "Outlook didn’t confirm the draft. Nothing was sent, but check your Drafts and Sent Items before sending again." });
+      });
+    return step.then(function (got) {
+      draftId = got.id; link = got.link;
+      return readDraft(draftId).then(function (r) { return r.d ? r : wait(flow.READ_RETRY_MS).then(function () { return readDraft(draftId); }); });
+    }).then(function (r) {
+      if (!r.d) throw {
+        phase: "blocked", step: S.read, code: codeOf(r.err), detail: errText(r.err), draftId: draftId, draftLink: link, draftText: text, keepDraft: true,
+        message: "Outlook made the draft, but Droplet couldn’t read it back to check it, so nothing was sent. " +
+          (U.safeOutlookLink(link) ? "Open the draft in Outlook to check it and send it from there." : "Find it in your Outlook Drafts to check it and send it from there.")
+      };
+      var v = flow.verifyNew(r.d, { to: o.to, text: text });
+      if (!v.ok) throw { phase: "blocked", step: S.check, code: v.code, detail: "", draftLink: link, message: v.reason + " Nothing was sent. The draft stays in your Outlook Drafts." };
+      return rt.call("outlook_send_draft", { messageId: draftId }).then(function () {
+        return { phase: "sent", draftId: draftId, draftLink: link, sentAt: new Date() };
+      }, function (e) {
+        var base = { step: S.send, code: codeOf(e), detail: errText(e), draftId: draftId, draftLink: link, draftText: text };
+        throw Object.assign(base, rt.isClear(e)
+          ? { phase: "failed", message: "Outlook didn’t send it" + (errText(e) ? ": " + errText(e) : "") + ". The draft is kept in your Drafts." }
+          : { phase: "unclear", message: "Outlook didn’t confirm. It may have gone out: check Sent Items before sending again." });
+      });
+    }).catch(function (r) {
+      if (r && r.phase) return r;
+      return { phase: "unclear", step: "unknown", code: "internal", detail: "", draftId: draftId, draftLink: link, draftText: text, message: "Something went wrong mid-way. Check Sent Items before sending again." };
+    });
+  };
+
   /* One line for "Copy details": step, code and message. No mail content, no addresses, no links. */
   flow.detailsLine = function (st) {
     var msg = st.safeDetail || st.detail || "";

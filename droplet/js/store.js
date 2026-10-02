@@ -1,12 +1,15 @@
 /* Droplet · what Droplet remembers (db capability; in-memory when absent).
    Collections: rankings/<msgKey>, done/<msgKey>, sent/<msgKey>, feedback/<msgKey>,
    handoff/<itemKey> (a Teams reply copied out, waiting for you to post it),
-   actions/<docId> (your own actions; done ones stay stored with doneAt). */
+   actions/<docId> (your own actions; done ones stay stored with doneAt),
+   waits/<docId> (R3: your asks to others: open, answered or dismissed),
+   asks/<msgKey> (R3: a sent message Claude already checked for asks),
+   meetings/<eventKey> (R6: a meeting whose transcript was read, or "none"). */
 (function (D) {
   "use strict";
   var rt = D.rt;
   var store = D.store = { persistent: false, failed: false };
-  var mem = { rankings: {}, done: {}, sent: {}, feedback: {}, handoff: {}, actions: {} };
+  var mem = { rankings: {}, done: {}, sent: {}, feedback: {}, handoff: {}, actions: {}, waits: {}, asks: {}, meetings: {} };
   var chains = {};
   var KEEP_RANKINGS_DAYS = 14, KEEP_FEEDBACK = 200;
 
@@ -29,14 +32,16 @@
 
   store.loadAll = function () {
     store.persistent = !!db();
-    return Promise.all([readAll("rankings"), readAll("done"), readAll("feedback"), readAll("sent"), readAll("handoff"), readAll("actions")]).then(function (r) {
+    return Promise.all([readAll("rankings"), readAll("done"), readAll("feedback"), readAll("sent"), readAll("handoff"), readAll("actions"),
+      readAll("waits"), readAll("asks"), readAll("meetings")]).then(function (r) {
       var fb = Object.keys(r[2]).map(function (k) { var v = Object.assign({}, r[2][k]); v.key = k; return v; })
         .sort(function (a, b) { return String(b.at || "").localeCompare(String(a.at || "")); });
       prune(r[0], fb, r[3], r[4]);
-      return { rankings: r[0], done: r[1], feedback: fb, sent: r[3], handoff: r[4], actions: r[5], ok: true };
+      pruneScan(r[7], r[8]);
+      return { rankings: r[0], done: r[1], feedback: fb, sent: r[3], handoff: r[4], actions: r[5], waits: r[6], asks: r[7], meetings: r[8], ok: true };
     }, function () {
       store.failed = true;
-      return { rankings: {}, done: {}, feedback: [], sent: {}, handoff: {}, actions: {}, ok: false };
+      return { rankings: {}, done: {}, feedback: [], sent: {}, handoff: {}, actions: {}, waits: {}, asks: {}, meetings: {}, ok: false };
     });
   };
   function prune(rankings, fb, sent, handoff) {
@@ -54,6 +59,17 @@
       if (n < 60 && (!t || t < Date.now() - 3 * 864e5)) { n++; del("handoff", k); }
     });
     fb.slice(KEEP_FEEDBACK).forEach(function (f) { del("feedback", f.key); });
+  }
+  /* Scan caches older than 30 days can go: their messages and meetings are
+     out of the scan window by then. */
+  function pruneScan(asks, meetings) {
+    var cutoff = Date.now() - 30 * 864e5, n = 0;
+    [["asks", asks], ["meetings", meetings]].forEach(function (p) {
+      Object.keys(p[1] || {}).forEach(function (k) {
+        var t = Date.parse(p[1][k].at || "");
+        if (n < 40 && (!t || t < cutoff)) { n++; del(p[0], k); }
+      });
+    });
   }
   function set(name, key, data) {
     if (!db()) { mem[name][key] = data; return Promise.resolve(); }
@@ -73,6 +89,9 @@
   store.clearRanking = function (key) { return del("rankings", key); };
   store.setHandoff = function (key, d) { return set("handoff", key, d); };
   store.clearHandoff = function (key) { return del("handoff", key); };
+  store.setWait = function (id, w) { return set("waits", id, w); };
+  store.setAsk = function (key, d) { return set("asks", key, d); };
+  store.setMeeting = function (key, d) { return set("meetings", key, d); };
   store.setFeedback = function (key, f) { return set("feedback", key, f); };
   store.clearFeedback = function (key) { return del("feedback", key); };
 })(window.Droplet = window.Droplet || {});
