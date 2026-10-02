@@ -55,10 +55,19 @@ function installDropletStub(cfg) {
   var teamsList = (cfg.teams || []).slice();
   var teamsBodies = cfg.teamsBodies || {};
   var events = (cfg.events || []).slice();
+  /* ---------- increment 3: sent mail, calendar, transcripts, new drafts, invites ---------- */
+  var sentList = (cfg.sent || []).slice();
+  var calendar = (cfg.calendar || []).slice();
+  var transcripts = cfg.transcripts || {};
+  var created = [];
   window.__stub = {
     addMail: function (m) { mailList.unshift(m); },
     addTeams: function (t) { teamsList.unshift(t); },
     setEvents: function (e) { events = e.slice(); },
+    addSent: function (m) { sentList.unshift(m); },
+    setCalendar: function (c) { calendar = c.slice(); },
+    setEventFault: function (f) { cfg.eventFault = f; },
+    created: created,
     setFault: function (tool, f) { if (f == null) delete faults[tool]; else faults[tool] = f; },
     setRank: function (r) { cfg.rank = r; },
     setRankPlan: function (p) { cfg.rankPlan = p; },
@@ -67,7 +76,25 @@ function installDropletStub(cfg) {
     setRankDelay: function (ms) { cfg.rankDelay = ms; },
     drafts: drafts, sent: sent
   };
-  function findMail(id) { return mailList.filter(function (m) { return m.id === id; })[0]; }
+  function findMail(id) { return mailList.concat(sentList).filter(function (m) { return m.id === id; })[0]; }
+  function isSentMail(id) { return sentList.some(function (m) { return m.id === id; }); }
+  /* Calendar fixtures: {id, subject, start, end, organizer:{name,address}, people:[{name,address}], isCancelled, showAs, transcript}. */
+  function calWhen(dt) { return window.Droplet.meet.toInstant(dt); }
+  function calSearchShape(e) {
+    return { uri: "calendar:///events/" + encodeURIComponent(e.id), id: e.id, subject: e.subject, organizer: e.organizer.address,
+      attendees: (e.people || []).map(function (p) { return p.address; }), start: e.start, end: e.end, isCancelled: !!e.isCancelled,
+      showAs: e.showAs || "busy", isAllDay: !!e.isAllDay, isOrganizer: e.organizer.address === (cfg.me || {}).mail, webLink: "https://outlook.office365.com/calendar/item/" + e.id };
+  }
+  function bound(s, end) {
+    if (!s) return end ? Infinity : -Infinity;
+    if (s === "tomorrow") return Date.parse("2026-10-03T00:00:00+02:00");
+    var d = /^\d{4}-\d{2}-\d{2}$/.test(s) ? Date.parse(s + "T00:00:00+02:00") : Date.parse(s);
+    return isNaN(d) ? (end ? Infinity : -Infinity) : d;
+  }
+  function inWindow(list, input) {
+    var a = bound(input.afterDateTime, false), b = bound(input.beforeDateTime, true);
+    return list.filter(function (e) { return calWhen(e.start) >= a && calWhen(e.end) <= b; });
+  }
   function convOf(id) { return "AAQkADInventedConv" + String(id).replace(/[^A-Za-z0-9]/g, "") + "AAA="; }
   function readOf(id) {
     if (drafts[id]) {
@@ -94,11 +121,12 @@ function installDropletStub(cfg) {
     get_me: function () { return result(JSON.stringify(cfg.me || { displayName: "Sam de Vries", mail: "sam.devries@planonsoftware.com", id: "u1" })); },
     outlook_email_search: function (input) {
       var off = input.offset || 0, lim = input.limit || 10;
-      var page = mailList.slice(off, off + lim).map(function (m, i) {
+      var list = input.folderName === "Sent Items" ? sentList : mailList;
+      var page = list.slice(off, off + lim).map(function (m, i) {
         var o = Object.assign({ uri: "mail:///messages/" + encodeURIComponent(m.id) }, m); o.offset = off + i; return o;
       });
       var parts = page.map(function (o) { return JSON.stringify(o); });
-      if (off + lim < mailList.length) parts.push(JSON.stringify({ moreResults: true, nextOffset: off + lim, totalResultCount: mailList.length }));
+      if (off + lim < list.length) parts.push(JSON.stringify({ moreResults: true, nextOffset: off + lim, totalResultCount: list.length }));
       /* Like the real connector: concatenated objects, split over two content blocks. */
       var half = Math.ceil(parts.length / 2);
       var blocks = [parts.slice(0, half).join(""), parts.slice(half).join("")].filter(Boolean);
@@ -113,10 +141,38 @@ function installDropletStub(cfg) {
       parts.push(JSON.stringify({ moreResults: off + lim < teamsList.length, nextOffset: off + lim }));
       return result(parts.join(""));
     },
-    outlook_calendar_search: function () {
-      return result(events.map(function (e) { return JSON.stringify(e); }).join("") || "[]");
+    outlook_calendar_search: function (input) {
+      if (input.afterDateTime === "today") return result(events.map(function (e) { return JSON.stringify(e); }).join("") || "[]");
+      var list = calendar;
+      if (input.calendarOwnerEmail) {
+        var other = (cfg.othersCalendars || {})[String(input.calendarOwnerEmail).toLowerCase()];
+        if (!other) throw err("tool_error", "Access is denied. Check credentials and try again.");
+        list = other;
+      }
+      var got = inWindow(list, input).map(calSearchShape);
+      return result(got.map(function (e) { return JSON.stringify(e); }).join("") || "[]");
     },
     read_resource: function (input) {
+      var cm = /^calendar:\/\/\/events\/(.+)$/.exec(input.uri || "");
+      if (cm) {
+        var eid = decodeURIComponent(cm[1]), ev = calendar.filter(function (e) { return e.id === eid; })[0];
+        if (!ev) throw err("tool_error", "Not found");
+        var full = { id: ev.id, subject: ev.subject, body: { contentType: "html", content: "<p>Invented agenda</p>" },
+          organizer: { name: ev.organizer.name, address: ev.organizer.address },
+          attendees: (ev.people || []).map(function (p) { return { name: p.name, address: p.address, type: "required", responseStatus: "accepted" }; }),
+          start: ev.start, end: ev.end, location: { displayName: "Room 1" }, isCancelled: !!ev.isCancelled, showAs: ev.showAs || "busy", isAllDay: false,
+          onlineMeeting: { joinUrl: "https://teams.microsoft.com/l/meetup-join/invented" }, webLink: "https://outlook.office365.com/calendar/item/" + ev.id };
+        if (ev.transcript !== undefined) full.meetingTranscriptUrl = "meeting-transcript:///events/tok" + encodeURIComponent(ev.id) + "?start=" + ev.start.dateTime + "&end=" + ev.end.dateTime;
+        return result(JSON.stringify(full));
+      }
+      var mt = /^meeting-transcript:\/\/\/events\/tok([^?]+)\?/.exec(input.uri || "");
+      if (mt) {
+        var tev = calendar.filter(function (e) { return e.id === decodeURIComponent(mt[1]); })[0];
+        var tr = tev && tev.transcript;
+        if (!tev || tr === "FAIL") throw err("tool_error", "No transcript is available for this meeting.");
+        if (tr && typeof tr === "object") return result(JSON.stringify(tr));
+        return result(String(tr || ""));
+      }
       var tm = /^teams:\/\/\/chats\/([^/]+)\/messages\/(.+)$/.exec(input.uri || "");
       if (tm) {
         var chatId = decodeURIComponent(tm[1]), mid = decodeURIComponent(tm[2]);
@@ -143,7 +199,7 @@ function installDropletStub(cfg) {
       var n = ("000" + (++draftN)).slice(-4);
       var id = "AAkALgAAAAAAHYQDInventedXyzAC-EWg0AZnzTVwCYQECtK1RmE-l8iwACkVS" + n + "AAA";
       var link = "https://outlook.office365.com/owa/?ItemID=" + encodeURIComponent(id.replace(/-/g, "/").replace(/_/g, "+")) + "&exvsurl=1&viewmodel=ReadMessageItem";
-      var to = orig.sender.replace(/(^|[.@])([a-z])/g, function (x, p, c) { return p + c.toUpperCase(); }); /* mixed case, like Outlook */
+      var to = (isSentMail(orig.id) ? orig.recipients[0] : orig.sender).replace(/(^|[.@])([a-z])/g, function (x, p, c) { return p + c.toUpperCase(); }); /* mixed case, like Outlook */
       drafts[id] = {
         id: id, subject: "RE: " + orig.subject, bodyPreview: "", isDraft: true, conversationId: convOf(orig.id),
         body: { contentType: "html", content: "\r\n" + input.body + "<hr><p>From: " + orig.sender + "</p><p>" + orig.summary + "</p>" },
@@ -157,6 +213,24 @@ function installDropletStub(cfg) {
       if (shape === "linkOnly") return result("Draft created with 1 recipient(s).\nwebLink: " + link);
       if (shape === "noId") return result("Draft created with 1 recipient(s).");
       return result("Draft created with 1 recipient(s).\nid: " + id + "\nwebLink: " + link);
+    },
+    /* Plain text, like the reply draft (shape given by the PO). */
+    outlook_create_draft: function (input) {
+      var n = ("000" + (++draftN)).slice(-4);
+      var id = "AAkALgAAAAAAHYQDInventedNewMail" + n + "AAA";
+      var link = "https://outlook.office365.com/owa/?ItemID=" + encodeURIComponent(id) + "&exvsurl=1&viewmodel=ReadMessageItem";
+      drafts[id] = {
+        id: id, subject: input.subject || "", bodyPreview: "", isDraft: true, conversationId: "AAQkADnewconv" + n + "AAA=",
+        body: { contentType: "html", content: input.body || "" }, sender: { name: null, address: null },
+        toRecipients: (input.to || []).map(function (a) { return { name: "", address: a }; }), ccRecipients: [],
+        webLink: link, parentFolderId: "AAMkADinventedDrafts"
+      };
+      return result("Draft created with " + (input.to || []).length + " recipient(s).\nid: " + id + "\nwebLink: " + link);
+    },
+    outlook_create_event: function (input) {
+      if (cfg.eventFault) { var f = cfg.eventFault; cfg.eventFault = null; throw err(f); }
+      created.push(input);
+      return result("Event created.\nid: AAMkADinventedEvent" + created.length + "\nwebLink: https://outlook.office365.com/calendar/item/new" + created.length);
     },
     outlook_send_draft: function (input) {
       if (!drafts[input.messageId]) throw err("tool_error", "Draft not found");
@@ -174,10 +248,14 @@ function installDropletStub(cfg) {
     },
     listTools: function () { return Promise.resolve({ servers: [] }); }
   };
+  if (cfg.eventSchema) mcp.describeTool = function (server, tool) {
+    calls.push({ kind: "describe", tool: tool });
+    return tool === "outlook_create_event" ? Promise.resolve({ name: tool, inputSchema: cfg.eventSchema }) : Promise.reject(err("not_in_manifest"));
+  };
 
   /* ---------- sample ---------- */
   function idsIn(prompt) {
-    var re = /<<<(?:EMAIL|TEAMS|ACTION) \d+ id="([^"]+)">>>/g, m, out = [];
+    var re = /<<<(?:EMAIL|TEAMS|ACTION|WAIT) \d+ id="([^"]+)">>>/g, m, out = [];
     while ((m = re.exec(prompt))) out.push(m[1]);
     return out;
   }
@@ -209,14 +287,33 @@ function installDropletStub(cfg) {
   function answer(input, options, asJson) {
     calls.push({ kind: "sample", json: asJson, input: JSON.parse(JSON.stringify(input)), options: options ? JSON.parse(JSON.stringify(options)) : null });
     var prompt = typeof input === "string" ? input : input.map(function (t) { return t.content; }).join("\n");
-    var isDraft = /You draft one (email|Teams chat) reply/.test(prompt);
+    var isDraft = /You draft one (email|Teams chat) reply|You draft one Teams chat chase for/.test(prompt) && !/<<<ACTION>>>/.test(prompt);
     var extra = isDraft ? cfg.draftDelay || 0 : /You rank unread email/.test(prompt) ? cfg.rankDelay || 0 : 0;
     return later(null).then(function () { return new Promise(function (r) { setTimeout(r, extra); }); }).then(function () {
       if (cfg.sampleFault) throw { code: cfg.sampleFault, message: cfg.sampleFault };
-      var a = /You rank unread email/.test(prompt) ? rankAnswer(prompt) : isDraft ? draftAnswer(prompt) :
+      var a = /You rank unread email/.test(prompt) ? rankAnswer(prompt) : isDraft ? draftAnswer(prompt) : extraAnswer(prompt) ||
         (chatQueue.length > 1 ? chatQueue.shift() : chatQueue[0] || { reply: "OK.", draft: null });
       return asJson ? a : { text: JSON.stringify(a), truncated: false, modelTierApplied: "default" };
     });
+  }
+  /* Increment 3 prompts: asks in sent messages, commitments in a transcript,
+     an invite agenda, a new mail and a chase for an own action. */
+  function extraAnswer(prompt) {
+    if (/^You find requests that/.test(prompt)) {
+      if (cfg.asksFault) throw { code: cfg.asksFault, message: cfg.asksFault };
+      var re = /<<<SENT \d+ id="([^"]+)">>>/g, mm, msgs = [];
+      while ((mm = re.exec(prompt))) msgs.push({ id: mm[1], asks: JSON.parse(JSON.stringify((cfg.asksPlan || {})[mm[1]] || [])) });
+      return { messages: msgs };
+    }
+    if (/^You read one meeting transcript/.test(prompt)) {
+      var subj = (/\nMeeting: "([^"]*)"/.exec(prompt) || [])[1] || "";
+      var plan = cfg.commitPlan || {}, key = Object.keys(plan).filter(function (k) { return subj.indexOf(k) >= 0; })[0];
+      return { commitments: key ? JSON.parse(JSON.stringify(plan[key])) : [] };
+    }
+    if (/^You draft a short meeting invite/.test(prompt)) return cfg.inviteAnswer || { title: "DoD follow-up", agenda: "Agree the final DoD.\n\n- Walk through the draft\n- Decide what goes to PST" };
+    if (/^You draft one new email/.test(prompt)) return cfg.newMailAnswer || { subject: "The DoD draft", draft: "Hi Anna,\n\nHere is the DoD draft we discussed. Can you review it by Tuesday?\n\nKR\nSam" };
+    if (/^You draft one Teams chat chase for/.test(prompt)) return cfg.chaseAnswer || { draft: "Any news on this? I need it to plan the next step." };
+    return null;
   }
   var sample = function (input, options) { return answer(input, options, false); };
   sample.json = function (input, options) { return answer(input, options, true); };

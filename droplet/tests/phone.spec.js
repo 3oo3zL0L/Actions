@@ -93,3 +93,44 @@ test.describe('Phone (390 px): your own actions', () => {
     for (const [w, h] of q) { expect(w).toBeGreaterThanOrEqual(44); expect(h).toBeGreaterThanOrEqual(44); }
   });
 });
+
+test.describe('Phone (390 px), increment 3', () => {
+  const { waitsConfig, WAIT1, meetingsConfig } = require('./helpers/fixtures3');
+  test('a wait item and the invite card fit: no horizontal scroll, 44 px targets', async ({ app, page }) => {
+    await app.boot(Object.assign(waitsConfig(), meetingsConfig()));
+    expect(await noSideScroll(page)).toBe(true);
+    await page.tap(`[data-act="${WAIT1}"]`);
+    await expect(page.locator('#ivTitle')).toBeVisible();
+    expect(await noSideScroll(page)).toBe(true);
+    const sizes = async (sel) => page.$$eval(sel, (els) => els.filter((e) => e.offsetParent).map((e) => { const r = e.getBoundingClientRect(); return [r.width, r.height]; }));
+    for (const [w, h] of await sizes('.qbtn, .btn-back, #sendBtn')) { expect(w).toBeGreaterThanOrEqual(44); expect(h).toBeGreaterThanOrEqual(44); }
+    const box = await page.locator('#sendBtn').boundingBox();
+    expect(box.y + box.height).toBeLessThanOrEqual(844);
+
+    await page.tap('[data-back]');
+    const id = await page.locator('[data-src="meeting"]').first().evaluate((e) => e.closest('[data-id]').getAttribute('data-id'));
+    await page.tap(`[data-open="${id}"]`);
+    await page.tap('[data-ns-start="meeting"]');
+    await expect(page.locator('[data-ns-slot]')).toHaveCount(3);
+    expect(await noSideScroll(page)).toBe(true);
+    const card = await page.locator('[data-ns-card]').boundingBox();
+    expect(card.x).toBeGreaterThanOrEqual(0);
+    expect(card.x + card.width).toBeLessThanOrEqual(390);
+    for (const [w, h] of await sizes('[data-ns-card] button, [data-ns-card] input:not([type=checkbox]), .ns-toggle')) { expect(w).toBeGreaterThanOrEqual(44); expect(h).toBeGreaterThanOrEqual(44); }
+  });
+});
+
+test.describe('No λ mark', () => {
+  test('the rendered page has no λ anywhere, on the list, the standby panel and an item', async ({ app, page }) => {
+    await page.setViewportSize({ width: 1280, height: 860 });
+    await app.boot();
+    const has = () => page.evaluate(() => {
+      const css = [...document.querySelectorAll('*')].some((e) => /λ/.test(getComputedStyle(e, '::before').content + getComputedStyle(e, '::after').content));
+      return /λ/i.test(document.documentElement.outerHTML) || /lambda/i.test(document.documentElement.outerHTML) || css;
+    });
+    expect(await has()).toBe(false);
+    await app.openItem('a3-bram');
+    expect(await has()).toBe(false);
+    await expect(page.locator('.brand-name')).toHaveText('Droplet');
+  });
+});

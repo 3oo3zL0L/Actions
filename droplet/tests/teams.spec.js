@@ -20,7 +20,7 @@ async function captureCopyOpen(page, { clipboardFails = false } = {}) {
 test.describe('Teams as a source', () => {
   test('one row per chat: a burst is one item, a chat you answered last is not, a quiet group chat is not', async ({ app, page }) => {
     await app.boot(teamsConfig());
-    const searches = (await app.calls('mcp')).filter((c) => c.tool === 'chat_message_search');
+    const searches = (await app.calls('mcp')).filter((c) => c.tool === 'chat_message_search' && c.input.afterDateTime === '2 days ago'); // R3 reads 10 days separately
     expect(searches.map((c) => c.input)).toEqual([{ query: '*', afterDateTime: '2 days ago', limit: 25, offset: 0 }]);
     expect(searches.every((c) => c.server === 'Microsoft 365')).toBe(true);
 
@@ -41,7 +41,7 @@ test.describe('Teams as a source', () => {
     await expect(page.locator(sel(TID('meeting')) + ' .rr-sub')).toHaveText(/^Teams · SIEM Integration · Eva Kramer/);
 
     // Same prompt as mail: one ranking call, with the chats as delimited data and the rule hints.
-    const samples = await app.calls('sample');
+    const samples = (await app.calls('sample')).filter((c) => /^You rank unread email/.test(c.input)); // R3 also checks your own messages for asks
     expect(samples).toHaveLength(1);
     const p = samples[0].input;
     expect(p).toContain('You rank unread email and Teams chats for Sam de Vries');
@@ -87,7 +87,7 @@ test.describe('Teams as a source', () => {
     const filler = [];
     for (let i = 0; i < 90; i++) filler.push(tm('19:filler@thread.v2', 'f' + i, { name: 'Filler Person', email: 'filler@planonsoftware.com' }, 'Note ' + i + '.', T('05:00')));
     await app.boot(teamsConfig({ teams: filler }));
-    const offs = (await app.calls('mcp')).filter((c) => c.tool === 'chat_message_search').map((c) => c.input.offset);
+    const offs = (await app.calls('mcp')).filter((c) => c.tool === 'chat_message_search' && c.input.afterDateTime === '2 days ago').map((c) => c.input.offset);
     expect(offs).toEqual([0, 25, 50]);
   });
 

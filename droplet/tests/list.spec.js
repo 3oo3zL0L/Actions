@@ -27,7 +27,7 @@ test.describe('Load and rank', () => {
 
   test('loads unread Inbox mail of the last 3 days, paging by offset (max 25 per page)', async ({ app }) => {
     await app.boot();
-    const searches = (await app.calls('mcp')).filter((c) => c.tool === 'outlook_email_search');
+    const searches = (await app.calls('mcp')).filter((c) => c.tool === 'outlook_email_search' && c.input.folderName === 'Inbox' && c.input.afterDateTime === '3 days ago');
     expect(searches.map((c) => c.input)).toEqual([
       { folderName: 'Inbox', afterDateTime: '3 days ago', limit: 25, offset: 0 },
       { folderName: 'Inbox', afterDateTime: '3 days ago', limit: 25, offset: 25 }

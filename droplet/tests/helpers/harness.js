@@ -49,7 +49,7 @@ const test = base.test.extend({
         if (opts.wait !== false) await app.ready();
       },
       async ready() {
-        await page.waitForFunction(() => window.Droplet && window.Droplet.state && window.Droplet.state.loaded && !window.Droplet.state.ranking && !window.Droplet.state.loading);
+        await page.waitForFunction(() => window.Droplet && window.Droplet.state && window.Droplet.state.loaded && !window.Droplet.state.ranking && !window.Droplet.state.loading && !window.Droplet.state.scanning);
       },
       calls: (kind) => page.evaluate((k) => window.__calls.filter((c) => !k || c.kind === k), kind),
       mcpTools: () => page.evaluate(() => window.__calls.filter((c) => c.kind === 'mcp').map((c) => c.tool)),

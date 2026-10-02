@@ -1,6 +1,6 @@
 /* Droplet · slice 1 app: Outlook mail → ranked focus list → suggested
    action → your click. Markup, classes and interactions follow the
-   approved Lambda v3 design. */
+   approved v3 HUD design. */
 (function (D) {
   "use strict";
   var U = D.util, rt = D.rt, store = D.store, mail = D.mail, rank = D.rank, flow = D.sendflow, chat = D.chat, teams = D.teams, meet = D.meet, mine = D.mine,
@@ -314,7 +314,7 @@
   function emptyHTML() {
     return '<div class="iv-head"><span class="iv-crumb"><span class="tag"><i style="background:var(--faint)"></i>Item</span><span class="sep" aria-hidden="true">//</span><span class="c-sec">Standby</span></span></div>' +
       '<div class="empty"><div>' +
-      '<svg class="empty-mark" viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="44" fill="none" stroke="currentColor" stroke-width="2"/><path d="M44 88 60 52M54 32c6 0 8 4 10 10l14 46" fill="none" stroke="#ff8a1f" stroke-width="5" stroke-linecap="square"/></svg>' +
+      '<svg class="empty-mark" viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="44" fill="none" stroke="currentColor" stroke-width="2"/><path d="M60 4v16M60 100v16M4 60h16M100 60h16" fill="none" stroke="#ff8a1f" stroke-width="4" stroke-linecap="square"/><rect x="54" y="54" width="12" height="12" fill="#ff8a1f"/></svg>' +
       '<h2>Standing by.</h2><p>Select an item to load its next action.</p><p style="margin-top:6px">Nothing is sent without your click.</p>' +
       '<div class="keys"><span><span class="kbd">↑</span><span class="kbd">↓</span>Move</span><span><span class="kbd">Enter</span>Open</span><span><span class="kbd">/</span>Search</span><span><span class="kbd">Esc</span>Close</span></div>' +
       '</div></div>';
@@ -336,7 +336,7 @@
   }
   function draftFoot(it, locked, busy) {
     var ds = S.drafting[it.id];
-    if (isTeams(it)) {
+    if (isTeams(it) || isWait(it)) {
       if (ds === 'loading' && !S.touched[it.id]) return 'Claude is writing a reply in your chat style…';
       if (ds && ds.error && !S.touched[it.id] && !String(S.drafts[it.id] || '').trim()) return esc(ds.error) + '. Write your own, or <button data-redraft>Try again</button>';
       return 'Click the text to edit it. Droplet never posts it for you.';
@@ -374,6 +374,8 @@
           '<textarea id="actText" rows="2" maxlength="' + mine.MAX_TEXT + '" spellcheck="true">' + esc(ed.text != null ? ed.text : a.text || '') + '</textarea></h2>' +
         '<div class="iv-why"><span class="who" aria-hidden="true">' + ico('spark') + '</span><p><span class="sr">Claude: </span>' + esc(r.why) + '</p></div>' +
         (next ? '<p class="act-next" data-next>' + ico('spark', 'ico-sm') + '<span>Next step: ' + esc(next.charAt(0).toLowerCase() + next.slice(1)) + '</span></p>' : '') +
+        nextHTML(it) +
+        originHTML(it) +
         alsoHTML(it) +
         '<div class="sec-label">' + ico('mine') + 'Details</div>' +
         '<div class="card act-card">' +
@@ -387,11 +389,259 @@
       '</div>' +
       '<div class="iv-bar">' + barHTML(it) + '</div>';
   }
+
+  /* ---------------- Render: a wait (R3) ---------------- */
+  function waitDoc(it) { return it && S.waits[it.docId] || null; }
+  function isExternal(addr) { return !!addr && !U.isInternal(addr, mail.meDomain ? [mail.meDomain] : []); }
+  /* Chase by mail is possible for an ask by mail to a known address. It is
+     the primary chase for people outside Planon; Teams for everyone else. */
+  function canMailChase(it) { var w = waitDoc(it); return !!(w && w.src === 'mail' && w.who.email && w.ref.id); }
+  function chaseByMail(it) {
+    if (!canMailChase(it)) return false;
+    if (S.chaseMail[it.id] != null) return S.chaseMail[it.id];
+    return isExternal(waitDoc(it).who.email);
+  }
+  function waitLink(it) {
+    var w = waitDoc(it); if (!w) return null;
+    return w.src === 'teams' ? U.safeTeamsLink(w.ref.webUrl) : waits.chatLink(w.who.email);
+  }
+  /* The draft the textarea edits: the Teams chase, or its mail version. */
+  function draftKey(it) { return isWait(it) && chaseByMail(it) ? it.id + '#mail' : it.id; }
+  function mailChaseText(it) {
+    var k = it.id + '#mail';
+    if (S.drafts[k] == null) {
+      var base = String(draftOf(it) || '').trim() || 'A quick check on my question: ' + it.what + '.';
+      S.drafts[k] = rank.normalizeDraft(base, { senderFirst: it.senderName, sign: rank.signName(S.me) });
+    }
+    return S.drafts[k];
+  }
+  function waitItemHTML(it) {
+    var w = waitDoc(it) || { ref: {}, who: {} }, r = rk(it), st = sendState(it.id), locked = st.phase === 'sent', busy = st.phase === 'sending';
+    var top = topItems(), i = top.indexOf(it), inFocus = i > -1, pre = S.waitPre.indexOf(it) > -1;
+    var n = inFocus ? i + 1 : pre ? 0 : restItems().indexOf(it) + top.length + 1;
+    var byMail = chaseByMail(it), first = U.firstName(it.senderName) || it.senderName, fl = flag(it);
+    var srcLink = w.src === 'teams' ? U.safeTeamsLink(w.ref.webUrl) : U.safeOutlookLink(w.ref.webLink);
+    var h = '<div class="iv-head">' +
+        '<button class="btn-back" data-back aria-label="Back to the list">' + ico('back') + '<span class="lbl-phone">Back</span><span class="lbl-desk">Close</span></button>' +
+        '<span class="iv-crumb" aria-label="Location"><span class="c-sec">' + (inFocus ? 'Do now' : pre ? 'Waiting on others' : 'Everything else') + '</span><span class="sep" aria-hidden="true">›</span>' +
+          (n ? '<span class="c-n">#' + pad(n) + '</span><span class="sep" aria-hidden="true">›</span>' : '') + '<b>' + esc(first) + '</b></span>' +
+        '<span class="kbd" aria-hidden="true">Esc</span>' +
+      '</div>' +
+      '<div class="iv-scroll' + (S.anim ? ' enter' : '') + '">' +
+        '<div class="iv-meta">' + srcHTML(it) + '<span class="sep" aria-hidden="true">·</span><span>' + esc(project(it)) + '</span>' +
+          (fl ? '<span class="flag">' + esc(fl) + '</span>' : '') + meetingHTML(it) + '<span class="sep" aria-hidden="true">·</span><span>Asked ' + esc(U.whenLong(it.received)) + '</span></div>' +
+        '<h2 class="iv-title" id="ivTitle" tabindex="-1">' + esc(titleOf(it)) + '</h2>' +
+        '<div class="iv-why"><span class="who" aria-hidden="true">' + ico('spark') + '</span><p><span class="sr">Claude: </span>' + esc(r.why) + '</p></div>' +
+        '<div class="sec-label">' + ico('wait') + 'Your message' + (w.src === 'teams' ? ' · Teams' : ' · mail') + '</div>' +
+        '<div class="card src-card" data-wait-src>' +
+          '<div class="mail-from"><span><b>To ' + esc(it.senderName) + '</b>' + (w.ref.subject ? ' · ' + esc(w.ref.subject) : '') + '</span><span>' + esc(U.when(it.received, new Date())) + '</span></div>' +
+          '<div class="thread"><div class="msg me"><span class="av" aria-hidden="true">Y</span><div><div class="msg-h"><b>You</b>' + esc(U.whenLong(it.received)) + '</div>' +
+            '<div class="msg-t">' + (it.summary ? esc(it.summary) : '<span class="muted">(no text)</span>') + '</div></div></div></div>' +
+          '<div class="src-note">' + ico('clock', 'ico-sm') + '<span>No answer from ' + esc(first) + ' since ' + esc(U.whenLong(it.received)) +
+            (w.chasedAt ? ' · chased ' + esc(U.whenLong(w.chasedAt)) : '') + '</span></div>' +
+          (srcLink ? '<div class="src-note">' + ico('out', 'ico-sm') + '<a href="' + esc(srcLink) + '" target="_blank" rel="noopener noreferrer">' + (w.src === 'teams' ? 'Open in Teams' : 'Open in Outlook') + '</a></div>' : '') +
+        '</div>' +
+        '<div class="sec-label">' + ico('spark') + 'Prepared chase' + (byMail ? ' · Reply · mail' : ' · Teams') + '</div>';
+    if (byMail) {
+      h += '<div class="card draft' + (locked ? ' is-locked' : '') + '" data-chase="mail">' +
+        '<div class="draft-row"><span class="k">To</span><span class="chips"><span class="chip addr" data-to>' + esc(w.who.email) + '</span></span></div>' +
+        '<div class="draft-row"><span class="k">Subject</span><span>' + esc(/^re:/i.test(w.ref.subject || '') ? w.ref.subject : 'RE: ' + (w.ref.subject || '')) + '</span></div>' +
+        '<label class="sr" for="draftText">Draft text</label>' +
+        '<textarea id="draftText"' + (locked || busy ? ' readonly' : '') + '>' + esc(mailChaseText(it)) + '</textarea>' +
+        (isExternal(w.who.email) ? '<div class="warn" data-outside>' + ico('warn', 'ico-sm') + 'Goes outside Planon. Check before sending.</div>' : '') +
+        problemHTML(st) +
+        '<div class="draft-foot">' + (locked ? 'Sent once. This draft is locked.' : busy ? 'Sending… Don’t close this page.' : 'A reply to your own mail. Nothing is sent until you press Send.') + '</div></div>';
+    } else {
+      var link = waitLink(it), writing = S.drafting[it.id] === 'loading' && !S.touched[it.id];
+      h += '<div class="card draft" data-chase="teams">' +
+        '<div class="draft-row"><span class="k">To</span><span class="chips"><span class="chip" data-to>' + esc(it.senderName) + '</span></span></div>' +
+        '<div class="draft-row"><span class="k">Via</span><span>' + (w.src === 'teams' ? 'The same Teams chat' : 'Teams 1:1 chat') + ' · you post it</span></div>' +
+        '<label class="sr" for="draftText">Draft text</label>' +
+        '<textarea id="draftText"' + (writing ? ' aria-busy="true"' : '') + ' placeholder="' + (writing ? 'Claude is writing a chase…' : 'Write your chase…') + '">' + esc(draftOf(it)) + '</textarea>' +
+        (!link ? '<div class="warn is-wait" data-nolink>' + ico('warn', 'ico-sm') + '<span>' + (w.src === 'teams' ? 'Droplet has no link to this chat. It copies the text; open the chat in Teams yourself.' : 'Droplet doesn’t know ' + esc(first) + '’s address, so it can’t open a chat. It copies the text.') + '</span></div>' : '') +
+        '<div class="src-note" data-teams-note>' + ico('warn', 'ico-sm') + '<span>Droplet can’t post in Teams (no permission), so it copies your chase and opens the chat.</span></div>' +
+        '<div class="draft-foot">' + draftFoot(it, false, false) + '</div></div>';
+    }
+    h += (S.chatOpen && !byMail && !locked ? chatHTML(it) : '') + '</div>' +
+      '<div class="iv-bar">' + barHTML(it) + '</div>';
+    return h;
+  }
+  function waitBarHTML(it) {
+    var st = sendState(it.id), locked = st.phase === 'sent', busy = st.phase === 'sending', byMail = chaseByMail(it), w = waitDoc(it) || {};
+    var off = locked || busy ? ' aria-disabled="true"' : '';
+    var q = function (key, icon, label, k, pressed) {
+      return '<button class="qbtn" data-' + key + off + (pressed !== undefined ? ' aria-pressed="' + pressed + '"' : '') + (k ? ' aria-keyshortcuts="' + k + '"' : '') + '>' +
+        ico(icon) + '<span>' + label + '</span>' + (k ? '<span class="kbd" aria-hidden="true">' + k + '</span>' : '') + '</button>';
+    };
+    var btns = [];
+    if (!byMail) btns.push(q('chat', 'chat', 'Chat<span class="q-x"> about this</span>', 'c', S.chatOpen));
+    btns.push(q('notwaiting', 'check', 'Not waiting<span class="q-x"> anymore</span>', 'd'));
+    btns.push(q('snooze', 'clock', 'Snooze 2 days'));
+    if (canMailChase(it)) btns.push(byMail ? q('chaseteams', 'teams', 'Chase by Teams') : q('chasemail', 'mail', 'Chase by mail'));
+    var empty = !String(S.drafts[draftKey(it)] || '').trim(), btn;
+    if (byMail) {
+      if (locked) btn = '<button class="btn-send is-sent" id="sendBtn" aria-disabled="true">Sent ✓ ' + U.hhmm(st.sentAt) + ' · locked</button>';
+      else if (busy) btn = '<button class="btn-send" id="sendBtn" aria-disabled="true" aria-busy="true">' + ico('send') + 'Sending…</button>';
+      else if (st.phase === 'unclear') btn = '<button class="btn-send is-confirm" id="sendBtn" data-send>' + (st.confirm ? 'Yes, send again' : 'Send again anyway') + '</button>';
+      else btn = '<button class="btn-send" id="sendBtn" data-send' + (empty ? ' aria-disabled="true"' : '') + '>' + ico('send') + 'Send</button>';
+    } else {
+      btn = '<button class="btn-send" id="sendBtn" data-copyopen' + (empty ? ' aria-disabled="true"' : '') + '>' + ico('copy') +
+        (S.doneNow[it.id] ? 'Copy & open again' : w.src === 'teams' ? 'Copy & open in Teams' : 'Chase by Teams') + '</button>';
+    }
+    return '<div class="quiet' + (btns.length === 3 ? ' is-3' : '') + '">' + btns.join('') + '</div>' + btn +
+      (locked ? '<div class="sent-note">Chased once by mail</div>' : '');
+  }
+
+  /* ---------------- Render: meeting origin and next steps (R6) ---------------- */
+  var fDay = new Intl.DateTimeFormat('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+  function originHTML(it) {
+    var o = fromMeeting(it); if (!o) return '';
+    var d = new Date(o.date);
+    return '<div class="sec-label">' + ico('meeting') + 'From the meeting transcript</div>' +
+      '<div class="card src-card" data-origin>' +
+        '<div class="mail-from"><span><b data-origin-subject>' + esc(o.subject || 'Meeting') + '</b></span><span data-origin-date>' + esc(isNaN(d) ? '' : fDay.format(d).replace(/,/g, '') + ' · ' + U.hhmm(d)) + '</span></div>' +
+        '<div class="thread"><div class="msg me hl"><span class="av" aria-hidden="true">Y</span><div><div class="msg-h"><b>You</b>said</div>' +
+          '<div class="msg-t" data-quote>' + esc(o.quote || '') + '</div></div></div></div>' +
+      '</div>';
+  }
+  function directory() {
+    var lists = [];
+    S.items.forEach(function (m) {
+      if (m.src === 'mail') lists.push([{ email: m.sender, name: m.senderName }]);
+      if (m.src === 'teams') lists.push(m.msgs.map(function (x) { return { email: x.email, name: x.name }; }));
+    });
+    lists.push(S.teams10.map(function (x) { return { email: x.email, name: x.name }; }));
+    S.sentMsgs.forEach(function (m) { lists.push(m.to); });
+    Object.keys(S.waits).forEach(function (k) { lists.push([S.waits[k].who]); });
+    S.meetings.forEach(function (ev) { lists.push(ev.people.map(function (e) { return { email: e }; })); });
+    Object.keys(S.actions).forEach(function (k) { var o = S.actions[k].origin; if (o && o.attendees) lists.push(o.attendees); });
+    return ns.directory(lists, S.me);
+  }
+  function nsKind(it) { return ns.kindOf(it.r, S.actions[it.docId]); }
+  function whoNames(it) {
+    var a = S.actions[it.docId] || {}, r = it.r || {};
+    if (r.nextWho && r.nextWho.length) return r.nextWho;
+    if (a.origin && a.origin.who && a.origin.who.length) return a.origin.who;
+    return ns.namesIn(r.next || mine.nextStep(a.text) || a.text);
+  }
+  var NS_START = { meeting: ['clock', 'Find a time'], mail: ['mail', 'Draft a mail'], chase: ['teams', 'Chase in Teams'] };
+  function nextHTML(it) {
+    var kind = nsKind(it); if (!kind) return '';
+    var st = S.ns[it.docId];
+    if (!st || st.kind !== kind) {
+      return '<div class="ns-start"><button class="ns-btn" data-ns-start="' + kind + '">' + ico(NS_START[kind][0]) + esc(NS_START[kind][1]) + '</button></div>';
+    }
+    return nsCardHTML(it, st);
+  }
+  function okPeople(st) { return st.people.filter(function (p) { return p.state === 'ok'; }); }
+  function openPeople(st) { return st.people.filter(function (p) { return p.state !== 'ok'; }); }
+  function peopleHTML(st, locked) {
+    var h = '<div class="draft-row ns-to"><span class="k">' + (st.kind === 'meeting' ? 'Invite' : 'To') + '</span><span class="chips" data-ns-people>';
+    var ok = okPeople(st);
+    ok.forEach(function (p) {
+      var i = st.people.indexOf(p);
+      h += '<span class="chip addr" data-ns-person>' + esc(p.name) + ' · ' + esc(p.email) +
+        (locked ? '' : '<button class="chip-x" data-ns-drop="' + i + '" aria-label="Leave out ' + esc(p.name) + '">×</button>') + '</span>';
+    });
+    if (!ok.length) h += '<span class="muted">Nobody yet</span>';
+    h += '</span></div>';
+    if (locked) return h;
+    st.people.forEach(function (p, i) {
+      if (p.state === 'ambiguous') {
+        h += '<div class="ns-ask" data-ns-ambiguous="' + i + '"><p>Which ' + esc(p.name) + '?</p><div class="ns-opts">' +
+          p.options.map(function (o) { return '<button class="ns-opt" data-ns-pick="' + i + '" data-email="' + esc(o.email) + '">' + esc(o.name) + ' · ' + esc(o.email) + '</button>'; }).join('') +
+          '<button class="ns-opt is-quiet" data-ns-drop="' + i + '">Leave out</button></div></div>';
+      } else if (p.state === 'unknown') {
+        h += '<div class="ns-ask" data-ns-unknown="' + i + '"><label for="nsAddr' + i + '">Droplet doesn’t know an address for ' + esc(p.name) + '. Type it, or leave ' + esc(p.name) + ' out.</label>' +
+          '<div class="ns-addr"><input type="email" id="nsAddr' + i + '" autocomplete="off" placeholder="name@planonsoftware.com" value="' + esc(p.typed || '') + '">' +
+          '<button class="ns-opt" data-ns-use="' + i + '">Use</button><button class="ns-opt is-quiet" data-ns-drop="' + i + '">Leave out</button></div>' +
+          (p.bad ? '<p class="ns-bad" role="alert">That isn’t an email address.</p>' : '') + '</div>';
+      }
+    });
+    h += '<form class="ns-add" data-ns-addform autocomplete="off"><label class="sr" for="nsAdd">Add someone</label><input id="nsAdd" placeholder="Add a name or address"><button class="ns-opt" type="submit">Add</button></form>';
+    return h;
+  }
+  function nsDraftNote(st) {
+    if (st.drafting === 'loading') return '<p class="muted ns-note">Claude is drafting…</p>';
+    if (st.drafting && st.drafting.error) return '<p class="muted ns-note">' + esc(st.drafting.error) + '. Write it yourself, or <button data-ns-redraft>Try again</button></p>';
+    return '';
+  }
+  function doneOffer(it) {
+    return '<button class="ns-btn" data-ns-done>' + ico('check') + 'Mark action done</button>';
+  }
+  function nsCardHTML(it, st) {
+    var h = '<div class="sec-label">' + ico(NS_START[st.kind][0]) + (st.kind === 'meeting' ? 'Invite · Find a time' : st.kind === 'mail' ? 'New mail · Draft' : 'Chase · Teams') + '</div>' +
+      '<div class="card draft ns-card" data-ns-card="' + st.kind + '">';
+    var ok = okPeople(st), waiting = openPeople(st).length;
+    if (st.kind === 'meeting') {
+      var inv = st.inv, locked = inv.phase === 'sent' || inv.phase === 'sending';
+      h += peopleHTML(st, locked);
+      h += '<div class="ns-slots-wrap">';
+      if (waiting) h += '<p class="muted ns-note">Choose who first, then Droplet looks for a time.</p>';
+      else if (!ok.length) h += '<p class="muted ns-note">Add who to invite.</p>';
+      else if (st.slotState === 'loading') h += '<p class="muted ns-note">Looking at calendars…</p>';
+      else if (st.slotState === 'error') h += '<p class="muted ns-note">' + esc(st.calErr || 'Couldn’t read your calendar') + ' <button data-ns-slots>Try again</button></p>';
+      else if (st.slotState === 'none') h += '<p class="muted ns-note">No free 30 minutes in working hours in the next weeks.</p>';
+      else if (st.slotState === 'ok') {
+        h += '<div class="ns-slots" role="group" aria-label="Choose a time">' + st.slots.map(function (sl, k) {
+          return '<button class="ns-slot" data-ns-slot="' + k + '" aria-pressed="' + (k === st.slot) + '"' + (locked ? ' aria-disabled="true"' : '') + '>' + esc(ns.slotLabel(sl)) + '</button>';
+        }).join('') + '</div>' + (st.calNote ? '<p class="muted ns-note" data-cal-note>' + esc(st.calNote) + '</p>' : '');
+      }
+      h += '</div>' +
+        '<label class="k ns-k" for="nsTitle">Title</label><input class="ns-in" id="nsTitle" maxlength="255"' + (locked ? ' readonly' : '') + ' value="' + esc(st.title) + '">' +
+        '<label class="ns-toggle"><input type="checkbox" id="nsOnline"' + (st.online ? ' checked' : '') + (locked ? ' disabled' : '') + '><span>Teams meeting</span></label>' +
+        '<label class="k ns-k" for="nsAgenda">Agenda</label><textarea id="nsAgenda"' + (locked ? ' readonly' : '') + ' placeholder="' + (st.drafting === 'loading' ? 'Claude is drafting an agenda…' : 'A short agenda') + '">' + esc(st.agenda) + '</textarea>' +
+        nsDraftNote(st) + nsProblem(inv);
+      if (inv.phase === 'sent') h += '<div class="ns-done" data-ns-sent><span class="state-chip">' + ico('check') + 'Invite sent · ' + esc(inv.label) + '</span>' + doneOffer(it) + '</div>';
+      else {
+        var label = inv.phase === 'sending' ? 'Sending…' : inv.phase === 'unclear' ? (inv.confirm ? 'Yes, send again' : 'Send invite again anyway') : 'Send invite';
+        h += '<button class="btn-send ns-go' + (inv.phase === 'unclear' ? ' is-confirm' : '') + '" data-ns-invite' + (nsReady(st) && inv.phase !== 'sending' ? '' : ' aria-disabled="true"') + '>' + ico('send') + esc(label) + '</button>';
+      }
+    } else if (st.kind === 'mail') {
+      var sd = st.send, mlocked = sd.phase === 'sent' || sd.phase === 'sending';
+      h += peopleHTML(st, mlocked);
+      h += '<label class="k ns-k" for="nsSubject">Subject</label><input class="ns-in" id="nsSubject" maxlength="255"' + (mlocked ? ' readonly' : '') + ' value="' + esc(st.subject) + '">' +
+        '<label class="sr" for="nsBody">Mail text</label><textarea id="nsBody"' + (mlocked ? ' readonly' : '') + ' placeholder="' + (st.drafting === 'loading' ? 'Claude is writing in your style…' : 'Write your mail…') + '">' + esc(st.body) + '</textarea>' +
+        (ok.some(function (p) { return isExternal(p.email); }) ? '<div class="warn" data-outside>' + ico('warn', 'ico-sm') + 'Goes outside Planon. Check before sending.</div>' : '') +
+        nsDraftNote(st) + problemHTML(sd);
+      if (sd.phase === 'sent') h += '<div class="ns-done" data-ns-sent><span class="state-chip">' + ico('check') + 'Sent ' + esc(U.hhmm(sd.sentAt)) + ' · once</span>' + doneOffer(it) + '</div>';
+      else {
+        var ml = sd.phase === 'sending' ? 'Sending…' : sd.phase === 'unclear' ? (sd.confirm ? 'Yes, send again' : 'Send again anyway') : 'Send';
+        h += '<button class="btn-send ns-go' + (sd.phase === 'unclear' ? ' is-confirm' : '') + '" data-ns-send' + (nsReady(st) && sd.phase !== 'sending' ? '' : ' aria-disabled="true"') + '>' + ico('send') + esc(ml) + '</button>';
+      }
+    } else {
+      h += peopleHTML(st, false) +
+        '<label class="sr" for="nsChase">Chase text</label><textarea id="nsChase" placeholder="' + (st.drafting === 'loading' ? 'Claude is writing a chase…' : 'Write your chase…') + '">' + esc(st.chase) + '</textarea>' +
+        nsDraftNote(st) +
+        '<div class="src-note">' + ico('warn', 'ico-sm') + '<span>Droplet can’t post in Teams, so it copies your text and opens a chat.</span></div>';
+      if (st.chased) h += '<div class="ns-done" data-ns-sent><span class="state-chip">' + ico('check') + 'Copied ' + esc(U.hhmm(st.chased)) + '</span>' + doneOffer(it) + '</div>';
+      h += '<button class="btn-send ns-go" data-ns-chase' + (nsReady(st) ? '' : ' aria-disabled="true"') + '>' + ico('copy') + (st.chased ? 'Copy & open again' : 'Copy & open in Teams') + '</button>';
+    }
+    return h + '</div>';
+  }
+  function nsProblem(inv) {
+    if (inv.phase !== 'failed' && inv.phase !== 'unclear') return '';
+    return '<div class="warn is-problem" role="alert" data-problem="' + esc(inv.phase) + '">' + ico('warn', 'ico-sm') + '<span>' + esc(inv.message) + '</span>' + diagHTML(inv) + '</div>';
+  }
+  function nsReady(st) {
+    var ok = okPeople(st);
+    if (!ok.length || openPeople(st).length) return false;
+    if (st.kind === 'meeting') return st.slotState === 'ok' && !!st.slots[st.slot] && !!String(st.title).trim();
+    if (st.kind === 'mail') return !!String(st.body).trim() && !!String(st.subject).trim();
+    return !!String(st.chase).trim();
+  }
+  function nsGate() {
+    var it = curAction(), st = it && S.ns[it.docId]; if (!st) return;
+    var b = document.querySelector('[data-ns-invite], [data-ns-send], [data-ns-chase]');
+    var busy = (st.inv && st.inv.phase === 'sending') || (st.send && st.send.phase === 'sending');
+    if (b) { if (nsReady(st) && !busy) b.removeAttribute('aria-disabled'); else b.setAttribute('aria-disabled', 'true'); }
+  }
   function renderItem() {
     var col = $('itemCol');
     var it = S.cur && S.byId[S.cur];
     col.classList.toggle('is-idle', S.view !== 'item' || !it);
     if (S.view !== 'item' || !it) { col.innerHTML = emptyHTML(); return; }
+    if (isWait(it)) { col.innerHTML = waitItemHTML(it); S.anim = false; return; }
     if (isMine(it)) {
       var top0 = topItems(), i0 = top0.indexOf(it);
       col.innerHTML = actionItemHTML(it, i0 > -1, i0 > -1 ? i0 + 1 : restItems().indexOf(it) + top0.length + 1);
@@ -448,6 +698,7 @@
       return '<button class="qbtn" data-' + key + (key === 'star' ? ' title="Important"' : '') + (locked || busy ? ' aria-disabled="true"' : '') + (pressed !== undefined ? ' aria-pressed="' + pressed + '"' : '') +
         (k ? ' aria-keyshortcuts="' + k + '"' : '') + '>' + ico(icon) + '<span>' + label + '</span>' + (k ? '<span class="kbd" aria-hidden="true">' + k + '</span>' : '') + '</button>';
     };
+    if (isWait(it)) return waitBarHTML(it);
     if (isMine(it)) {
       return '<div class="quiet is-3">' + q('delete', 'trash', 'Delete') + q('notimp', 'down', 'Not important', 'n') +
         q('star', 'star', '<span class="q-l">Important</span>', '', S.verdict[it.id] === 'up') + '</div>' +
@@ -524,6 +775,9 @@
         S.handoffDb = res[1].handoff || {};
         /* Actions added while this was loading stay. */
         S.actions = Object.assign({}, res[1].actions || {}, S.actions);
+        S.waits = Object.assign({}, res[1].waits || {}, S.waits);
+        S.asksDb = Object.assign({}, res[1].asks || {}, S.asksDb);
+        S.meetingsDb = Object.assign({}, res[1].meetings || {}, S.meetingsDb);
         S.verdict = {};
         S.feedback.forEach(function (f) { if (f.msgId && !S.verdict[f.msgId]) S.verdict[f.msgId] = f.verdict; });
         if (!res[1].ok) S.notes.store = 'Couldn’t read what Droplet remembers; ranking and done marks start fresh.';
@@ -559,6 +813,8 @@
         var a = S.actions[docId], it = syncAction(mine.toItem(docId, a));
         if (a.done) doneIds[it.id] = 1; else items.push(it);
       });
+      var wi = waitItemsNow(now);
+      items = items.concat(wi.due); S.waitPre = wi.pre;
       if (!items.length) return [items, cal, doneIds];
       return meet.load(S.me, now).then(function (r) { S.notes.cal = null; return [items, { ok: true, r: r }, doneIds]; },
         function () { S.notes.cal = 'Couldn’t read today’s calendar, so meetings aren’t weighed this time.'; return [items, { ok: false, r: S.meetings }, doneIds]; });
@@ -567,23 +823,7 @@
       var items = got[0], doneIds = got[2] || {};
       S.meetings = got[1].r || [];
       var keep = {};
-      items.forEach(function (m) {
-        keep[m.id] = 1;
-        m.meeting = meet.forItem(m, S.meetings);
-        var saved = S.rankings[m.key], meetKey = m.meeting ? m.meeting.key : '';
-        var fix = function (t) {
-          return m.src === 'teams' ? rank.normalizeChat(t, { sign: rank.signName(S.me) }) : rank.normalizeDraft(t, { senderFirst: m.senderName, sign: rank.signName(S.me) });
-        };
-        /* Drafts cached by an earlier version go through the same format safety net (idempotent).
-           A ranking made without today's meeting (R5) is asked again. */
-        if (saved && saved.v === 1 && (saved.meet || '') === meetKey) { m.r = saved; if (saved.draft) saved.draft = fix(saved.draft); }
-        else if (saved && saved.v === 1 && saved.draft) m.lazyDraft = fix(saved.draft);
-        else if (saved && saved.draftOnly && typeof saved.draft === 'string') m.lazyDraft = fix(saved.draft);
-        var sent = S.sentDb && S.sentDb[m.key];
-        if (sent && (!S.send[m.id] || S.send[m.id].phase === 'idle')) S.send[m.id] = { phase: 'sent', sentAt: new Date(sent.sentAt) };
-        var ho = S.handoffDb && S.handoffDb[m.key];
-        if (ho && !S.handoff[m.id]) S.handoff[m.id] = ho;
-      });
+      items.forEach(function (m) { keep[m.id] = 1; attach(m); });
       /* R8: an item merged into one that is done is done too. */
       items = items.filter(function (m) { return !(m.r && m.r.dupOf && doneIds[m.r.dupOf]); });
       S.items = items;
@@ -598,10 +838,155 @@
         }
       });
       S.byId = {}; S.items.forEach(function (m) { S.byId[m.id] = m; });
+      S.waitPre.forEach(function (m) { S.byId[m.id] = m; });
       S.loading = false; S.loaded = true;
       renderAll();
-      return rankNew(false);
+      var ranked = rankNew(false);
+      return Promise.all([ranked, scan()]);
     });
+  }
+  /* A saved ranking, a sent lock and a Teams hand-off, back on a fresh item. */
+  function attach(m) {
+    m.meeting = meet.forItem(m, S.meetings);
+    var saved = S.rankings[m.key], meetKey = m.meeting ? m.meeting.key : '';
+    var fix = function (t) {
+      return m.src === 'teams' || m.src === 'wait' ? rank.normalizeChat(t, { sign: rank.signName(S.me) }) : rank.normalizeDraft(t, { senderFirst: m.senderName, sign: rank.signName(S.me) });
+    };
+    /* Drafts cached by an earlier version go through the same format safety net (idempotent).
+       A ranking made without today's meeting (R5) is asked again. */
+    if (saved && saved.v === 1 && (saved.meet || '') === meetKey) { m.r = saved; if (saved.draft) saved.draft = fix(saved.draft); }
+    else if (saved && saved.v === 1 && saved.draft) m.lazyDraft = fix(saved.draft);
+    else if (saved && saved.draftOnly && typeof saved.draft === 'string') m.lazyDraft = fix(saved.draft);
+    var sent = S.sentDb && S.sentDb[m.key];
+    if (sent && (!S.send[m.id] || S.send[m.id].phase === 'idle')) S.send[m.id] = { phase: 'sent', sentAt: new Date(sent.sentAt) };
+    var ho = S.handoffDb && S.handoffDb[m.key];
+    if (ho && !S.handoff[m.id]) S.handoff[m.id] = ho;
+    if (isWait(m) && m.r) m.r.why = m.whyText;
+  }
+
+  /* ---------------- R3 waits and R6 meetings: the scan ----------------
+     Runs after the list is shown. Sent mail and your Teams messages of the
+     last 10 days → asks → waits; replies answer them. Ended meetings with a
+     transcript → your commitments → own actions. */
+  function waitItemsNow(now) {
+    var due = [], pre = [], dom = mail.meDomain ? [mail.meDomain] : [];
+    Object.keys(S.waits).forEach(function (docId) {
+      var w = S.waits[docId];
+      if (!w || w.status !== 'open') return;
+      var it = waits.toItem(docId, w, now, dom);
+      if (it.due || S.doneNow[it.id]) due.push(it); else pre.push(it);
+    });
+    pre.sort(function (a, b) { return String(a.received).localeCompare(String(b.received)); });
+    return { due: due, pre: pre };
+  }
+  /* Rebuild the wait items in the list from S.waits. */
+  function refreshWaits() {
+    var now = new Date(), wi = waitItemsNow(now);
+    S.items = S.items.filter(function (m) { return !isWait(m); });
+    Object.keys(S.byId).forEach(function (id) { if (/^wait:/.test(id)) delete S.byId[id]; });
+    wi.due.forEach(function (m) { attach(m); S.items.push(m); S.byId[m.id] = m; });
+    S.waitPre = wi.pre;
+    wi.pre.forEach(function (m) { S.byId[m.id] = m; });
+  }
+  function scan() {
+    if (S.scanning || !S.me || !S.me.mail || !rt.mcp) return Promise.resolve();
+    var now = new Date();
+    S.scanning = true;
+    return Promise.all([scanWaits(now).catch(function () {}), scanMeetings(now).catch(function () {})]).then(function () {
+      var before = {};
+      S.items.forEach(function (m) { before[m.id] = 1; });
+      refreshWaits();
+      Object.keys(S.actions).forEach(function (docId) {
+        var a = S.actions[docId], id = 'mine:' + docId;
+        if (a && !a.done && !S.byId[id]) { var it = syncAction(mine.toItem(docId, a)); attach(it); S.items.push(it); S.byId[id] = it; }
+      });
+      /* Only something new is ranked; earlier unranked items wait for Try again. */
+      var added = S.items.some(function (m) { return !before[m.id] && !m.r; });
+      S.scanning = false;
+      renderAllKeepFocus();
+      return added ? rankNew(false) : null;
+    });
+  }
+  function scanWaits(now) {
+    var ok = function (r) { return { ok: true, r: r }; }, bad = function (e) { return { ok: false, e: e }; };
+    return Promise.all([waits.loadSent().then(ok, bad), teams.search(waits.DAYS, 4).then(ok, bad)]).then(function (got) {
+      var sent = got[0].ok ? got[0].r : [], chats = got[1].ok ? got[1].r : [];
+      S.sentMsgs = sent; S.teams10 = chats;
+      S.notes.waits = !got[0].ok && S.mcpOk ? 'Couldn’t read your sent mail, so “waiting on others” may miss some.' : null;
+      var cutoff = now.getTime() - waits.DAYS * 864e5 - 36e5;
+      var msgs = sent.concat(waits.ownTeams(chats, S.me)).filter(function (m) { return m.t >= cutoff && !S.asksDb[m.key]; })
+        .sort(function (a, b) { return b.t - a.t; });
+      var detect = !msgs.length || !rt.sample ? Promise.resolve() : waits.batches(msgs).reduce(function (p, batch) {
+        return p.then(function () {
+          return waits.ask({ me: S.me, now: now, msgs: batch }).then(function (v) {
+            batch.forEach(function (m) {
+              var asks = v[m.key];
+              if (!asks) return; /* Claude skipped it: asked again next time */
+              asks.forEach(function (a, i) {
+                var doc = waits.docFor(m, a), id = waits.docId(m, i);
+                if (S.waits[id] || waits.covered(S.waits, doc)) return;
+                S.waits[id] = doc; store.setWait(id, doc);
+              });
+              var c = { at: now.toISOString(), n: asks.length };
+              S.asksDb[m.key] = c; store.setAsk(m.key, c);
+            });
+          }, function () { /* Claude couldn't answer: these are checked again on the next sync */ });
+        });
+      }, Promise.resolve());
+      return detect.then(function () {
+        var open = Object.keys(S.waits).filter(function (k) { return S.waits[k].status === 'open'; });
+        if (!open.length) return;
+        var needMail = open.some(function (k) { return S.waits[k].src === 'mail'; });
+        return (needMail ? waits.loadReplies().then(ok, bad) : Promise.resolve({ ok: false })).then(function (rep) {
+          open.forEach(function (k) {
+            var w = S.waits[k];
+            if (w.src === 'mail' && !rep.ok) return;
+            if (w.src === 'teams' && !got[1].ok) return;
+            if (waits.answered(w, rep.ok ? rep.r : [], chats, S.me)) {
+              w.status = 'answered'; w.answeredAt = now.toISOString();
+              store.setWait(k, w);
+            }
+          });
+        });
+      });
+    });
+  }
+  function scanMeetings(now) {
+    if (!rt.sample) return Promise.resolve();
+    return tx.loadEvents(now).then(function (evs) {
+      return evs.filter(function (e) { return !S.meetingsDb[e.key]; }).reduce(function (p, ev) {
+        return p.then(function () { return meetingOnce(ev, now); });
+      }, Promise.resolve());
+    }, function () { /* the calendar is read again on the next sync */ });
+  }
+  function cacheMeeting(ev, d) {
+    d = Object.assign({ at: new Date().toISOString(), subject: U.clip(ev.subject, 160) }, d);
+    S.meetingsDb[ev.key] = d; store.setMeeting(ev.key, d);
+  }
+  /* One meeting: read once; "no transcript" is remembered quietly. */
+  function meetingOnce(ev, now) {
+    return tx.readEvent(ev).then(function (d) {
+      if (d.isCancelled || !d.transcriptUrl) return cacheMeeting(ev, { state: 'none' });
+      return tx.readTranscript(d.transcriptUrl).then(function (t) {
+        if (!t) return cacheMeeting(ev, { state: 'none' });
+        var mineAddr = String(S.me.mail || '').toLowerCase();
+        var others = d.attendees.filter(function (p) { return p.email !== mineAddr; });
+        var existing = Object.keys(S.actions).filter(function (k) { return !S.actions[k].done; }).map(function (k) { return S.actions[k].text; });
+        return tx.extract({ me: S.me, now: now, subject: d.subject || ev.subject, start: ev.start, attendees: others, text: t.text, lines: t.lines, existing: existing }).then(function (list) {
+          var made = 0;
+          list.forEach(function (c) {
+            if (existing.some(function (x) { return tx.similar(x, c.what); })) return;
+            var docId = mine.newId(), a = {
+              text: mine.clean(c.what), created: new Date().toISOString(), done: false, doneAt: null, due: c.due || null, dueBy: c.due ? 'claude' : null, notes: '',
+              origin: { eventId: ev.id, quote: c.quote, subject: U.clip(d.subject || ev.subject, 160), date: new Date(ev.start).toISOString(), kind: c.kind, who: c.who, project: c.project || null,
+                attendees: others.slice(0, 20) }
+            };
+            S.actions[docId] = a; store.setAction(docId, a); existing.push(a.text); made++;
+          });
+          cacheMeeting(ev, { state: 'done', n: made });
+        }, function () { /* Claude couldn't answer: read again on the next sync */ });
+      });
+    }, function () { /* the event couldn't be read: tried again on the next sync */ });
   }
   function teamsCopy(e) {
     var c = rt.mcpCopy(e, 'Teams');
@@ -690,7 +1075,7 @@
     var id = it.id;
     S.drafting[id] = 'loading';
     if (isCur(id)) rerenderItemKeepFocus();
-    readDetail(it).then(function (d) {
+    (isWait(it) ? Promise.resolve(null) : readDetail(it)).then(function (d) {
       return rank.askDraft({ me: S.me, now: new Date(), item: it, mailText: sourceText(it, d) });
     }).then(function (text) {
       S.drafting[id] = null;
@@ -733,7 +1118,8 @@
     if (!isMine(it)) draftOf(it);
     S.confirmDel = null;
     renderAll();
-    if (!isMine(it)) { readDetail(it); ensureDraft(it); }
+    if (isWait(it)) ensureDraft(it);
+    else if (!isMine(it)) { readDetail(it); ensureDraft(it); }
     if (!desk()) window.scrollTo(0, 0);
     var t = focusDraft && !isSent(id) ? $('draftText') : $('ivTitle');
     if (t) {
@@ -755,7 +1141,8 @@
     var id = S.cur, it = S.byId[id]; if (!it) return;
     var st = sendState(id);
     if (st.phase === 'sending' || st.phase === 'sent') return;
-    var text = String(S.drafts[id] || '').trim(); if (!text) return;
+    if (isWait(it) && !chaseByMail(it)) return;
+    var text = String(S.drafts[draftKey(it)] || '').trim(); if (!text) return;
     var t = performance.now();
     if (st.phase === 'unclear') {
       if (t < (st.armAt || 0)) return;
@@ -764,20 +1151,28 @@
     var reuse = st.draftId ? { draftId: st.draftId, link: st.draftLink, text: st.draftText } : null;
     S.send[id] = st = { phase: 'sending', draftId: st.draftId, draftLink: st.draftLink, draftText: st.draftText };
     renderItem(); renderFocus();
-    var d = S.detail[id];
-    var conv = d && d.state === 'ok' ? Promise.resolve(d) : readDetail(it);
+    var d = S.detail[id], w = waitDoc(it);
+    /* A chase by mail replies to your own sent mail, to the person asked. */
+    var target = w ? { id: w.ref.id, sender: w.who.email } : it;
+    var conv = w ? mail.read({ uri: mail.uriFor(w.ref.id) }).then(function (x) { return Object.assign({ state: 'ok' }, x); },
+      function (e) { return { state: 'error', code: String(e && e.code || 'unknown'), message: U.clip(e && e.message || '', 140) }; })
+      : d && d.state === 'ok' ? Promise.resolve(d) : readDetail(it);
     conv.then(function (dd) {
       if (!dd || dd.state !== 'ok' || !dd.conversationId) {
         return { phase: 'failed', step: flow.STEPS.original, code: dd && dd.state === 'ok' ? 'no_conversation_id' : (dd && dd.code) || 'unknown',
           detail: dd && dd.message || '', message: 'Couldn’t read the original mail from Outlook, so nothing was sent. Try again.' };
       }
-      return flow.send({ item: it, text: text, conversationId: dd.conversationId, reuse: reuse });
+      return flow.send({ item: target, text: text, conversationId: dd.conversationId, reuse: reuse });
     }).then(function (res) {
       var ns = S.send[id] = { phase: res.phase, message: res.message || '', sentAt: res.sentAt, draftId: res.draftId || '', draftLink: res.draftLink || '', draftText: res.draftText || '',
         step: res.step || '', code: res.code || '', detail: res.detail || '', safeDetail: res.safeDetail || '' };
       if (res.phase === 'unclear') { ns.confirm = 0; ns.armAt = performance.now() + 700; }
       if (res.phase === 'blocked' && !res.keepDraft) { ns.draftId = ''; }
-      if (res.phase === 'sent') {
+      if (res.phase === 'sent' && w) {
+        S.doneNow[id] = { how: 'sent' };
+        w.chasedAt = res.sentAt.toISOString(); store.setWait(it.docId, w);
+        toast('Chase sent by mail.');
+      } else if (res.phase === 'sent') {
         S.doneNow[id] = { how: 'sent' };
         store.setDone(it.key, { at: new Date().toISOString(), how: 'sent', sentAt: res.sentAt.toISOString() });
         store.setSent(it.key, { sentAt: res.sentAt.toISOString() });
@@ -799,7 +1194,9 @@
 
   /* "Copy details": one line with step, code and message; no mail content, no addresses. */
   function copyDetails() {
-    var st = S.cur && S.send[S.cur]; if (!st || !st.step) return;
+    var st = S.cur && S.send[S.cur];
+    if (!st || !st.step) { var nx = nsTarget(); st = nx && (nx[1].send.step ? nx[1].send : nx[1].inv); }
+    if (!st || !st.step) return;
     var line = flow.detailsLine(st);
     function fallback() {
       var ta = document.createElement('textarea');
@@ -820,24 +1217,205 @@
      Copies the edited text, opens the chat (only on teams.microsoft.com),
      and marks the item as waiting for you to post it. It never calls a tool. */
   function copyOpen() {
-    var id = S.cur, it = S.byId[id]; if (!it || !isTeams(it)) return;
+    var id = S.cur, it = S.byId[id]; if (!it || !(isTeams(it) || isWait(it))) return;
     var text = String(S.drafts[id] || '').trim(); if (!text) return;
-    var p;
-    try { p = navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(text) : Promise.reject(); } catch (e) { p = Promise.reject(); }
-    var link = U.safeTeamsLink(it.webUrl);
+    var p = copyText(text);
+    var link = isWait(it) ? waitLink(it) : U.safeTeamsLink(it.webUrl);
     if (link) { try { window.open(link, '_blank', 'noopener,noreferrer'); } catch (e) { /* the Open in Teams link stays on the card */ } }
-    var ho = S.handoff[id] = { at: new Date().toISOString(), key: it.key };
-    if (S.handoffDb) S.handoffDb[it.key] = ho;
-    store.setHandoff(it.key, ho);
+    var undo = null;
+    if (isWait(it)) {
+      /* The chase is yours to post; the wait comes back 3 working days after it. */
+      var w = waitDoc(it), prev = w.chasedAt || null, at = new Date().toISOString();
+      w.chasedAt = at; store.setWait(it.docId, w);
+      S.doneNow[id] = { how: 'chased', at: at };
+      undo = function () { if (prev) w.chasedAt = prev; else delete w.chasedAt; store.setWait(it.docId, w); delete S.doneNow[id]; renderAll(); };
+    } else {
+      var ho = S.handoff[id] = { at: new Date().toISOString(), key: it.key };
+      if (S.handoffDb) S.handoffDb[it.key] = ho;
+      store.setHandoff(it.key, ho);
+    }
     Promise.resolve(p).then(function () { return true; }, function () { return false; }).then(function (ok) {
       renderAll();
       if (ok) {
-        toast(link ? 'Copied. Paste it in the Teams chat that just opened.' : 'Copied. Open the chat in Teams and paste it.');
+        toast(link ? 'Copied. Paste it in the Teams chat that just opened.' : 'Copied. Open the chat in Teams and paste it.', undo);
       } else {
         var ta = $('draftText');
         if (ta && S.cur === id) { ta.focus({ preventScroll: true }); ta.select(); }
         toast('Couldn’t copy. The text is selected: press Ctrl+C (⌘C), then paste it in Teams.');
       }
+    });
+  }
+
+  function copyText(text) {
+    try { return navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(text) : Promise.reject(); } catch (e) { return Promise.reject(); }
+  }
+
+  /* ---------------- Waits: not waiting, snooze, chase mode ---------------- */
+  function changeWait(it, change, msg) {
+    var w = waitDoc(it); if (!w) return;
+    var prev = JSON.parse(JSON.stringify(w));
+    change(w); store.setWait(it.docId, w);
+    refreshWaits();
+    back();
+    toast(msg, function () {
+      S.waits[it.docId] = prev; store.setWait(it.docId, prev);
+      refreshWaits(); renderAll();
+      rankNew(false);
+    });
+  }
+  function notWaiting() {
+    var it = S.byId[S.cur]; if (!isWait(it)) return;
+    changeWait(it, function (w) { w.status = 'dismissed'; w.dismissedAt = new Date().toISOString(); }, 'No longer waiting on ' + (U.firstName(it.senderName) || 'them') + '.');
+  }
+  function snoozeWait() {
+    var it = S.byId[S.cur]; if (!isWait(it)) return;
+    changeWait(it, function (w) { w.snoozeUntil = mine.addWorkdays(mine.today(), 2); }, 'Snoozed for 2 working days.');
+  }
+  function setChaseMode(byMail) {
+    var it = S.byId[S.cur]; if (!isWait(it)) return;
+    S.chaseMail[it.id] = byMail; S.chatOpen = false;
+    renderItem();
+    var ta = $('draftText'); if (ta) ta.focus({ preventScroll: true });
+  }
+
+  /* ---------------- Next steps for your own actions ---------------- */
+  function startNs(kind) {
+    var it = curAction(); if (!it) return;
+    var a = S.actions[it.docId]; if (!a) return;
+    var dir = directory(), pref = a.origin && a.origin.attendees || [], seen = {};
+    var people = whoNames(it).map(function (n) { return ns.resolve(n, dir, pref); }).filter(function (p) {
+      var k = p.state === 'ok' ? p.email : 'name:' + p.name.toLowerCase();
+      if (seen[k]) return false; seen[k] = 1; return true;
+    });
+    var st = S.ns[it.docId] = { kind: kind, people: people, online: true, title: U.clip(a.text, 80), agenda: '', subject: U.clip(a.text, 80), body: '', chase: '',
+      slots: [], slot: 0, slotState: null, inv: { phase: 'idle' }, send: { phase: 'idle' }, chased: null };
+    rerenderItemKeepFocus();
+    var card = document.querySelector('[data-ns-card]'); if (card) card.scrollIntoView({ block: 'nearest' });
+    nsDraft(it, st);
+    nsSlots(it, st);
+  }
+  function nsRerender(it) { if (S.view === 'item' && S.cur === it.id) rerenderItemKeepFocus(); }
+  function nsDraft(it, st) {
+    if (!rt.sample) { st.drafting = { error: rt.sampleCopy({ code: 'not_granted' }) }; return nsRerender(it); }
+    var a = S.actions[it.docId], people = st.people.map(function (p) { return { name: p.name }; });
+    var o = { me: S.me, now: new Date(), action: a, people: people };
+    st.drafting = 'loading'; nsRerender(it);
+    var p = st.kind === 'meeting' ? ns.askInvite(o) : st.kind === 'mail' ? ns.askMail(o) : ns.askChase(o);
+    p.then(function (r) {
+      st.drafting = null;
+      if (st.kind === 'meeting') { if (!st.titleTouched && r.title) st.title = r.title; if (!st.agendaTouched) st.agenda = r.agenda; }
+      else if (st.kind === 'mail') { if (!st.subjectTouched && r.subject) st.subject = r.subject; if (!st.bodyTouched) st.body = r.draft; }
+      else if (!st.chaseTouched) st.chase = r;
+    }, function (e) { st.drafting = { error: rt.sampleCopy(e) }; }).then(function () { nsRerender(it); });
+  }
+  function nsSlots(it, st, again) {
+    if (st.kind !== 'meeting') return;
+    var ok = okPeople(st);
+    if (!ok.length || openPeople(st).length) { st.slotState = null; return nsRerender(it); }
+    var key = ok.map(function (p) { return p.email; }).sort().join(',');
+    if (!again && st.slotKey === key && (st.slotState === 'ok' || st.slotState === 'loading')) return;
+    st.slotKey = key; st.slotState = 'loading'; nsRerender(it);
+    ns.loadBusy(ok.map(function (p) { return p.email; }), new Date()).then(function (r) {
+      if (st.slotKey !== key) return;
+      st.slots = ns.slots(r.busy, new Date()); st.slot = 0;
+      st.slotState = st.slots.length ? 'ok' : 'none';
+      var names = function (list) { return list.map(function (e) { var p = ok.filter(function (x) { return x.email === e; })[0]; return U.firstName(p && p.name) || e; }).join(', '); };
+      st.calNote = r.unread.length ? 'Only your calendar was checked for ' + names(r.unread) + ': theirs isn’t readable here.'
+        : 'Free in your calendar and in ' + names(ok.map(function (p) { return p.email; })) + '’s.';
+    }, function (e) {
+      if (st.slotKey !== key) return;
+      st.slotState = 'error'; st.calErr = rt.mcpCopy(e, 'your calendar');
+    }).then(function () { nsRerender(it); });
+  }
+  function nsPeopleChanged(it, st) { rerenderItemKeepFocus(); nsSlots(it, st); }
+  function nsPick(i, email) {
+    var it = curAction(), st = it && S.ns[it.docId], p = st && st.people[i]; if (!p) return;
+    var o = (p.options || []).filter(function (x) { return x.email === email; })[0]; if (!o) return;
+    st.people[i] = { state: 'ok', name: o.name, email: o.email, options: [] };
+    nsPeopleChanged(it, st);
+  }
+  function nsDrop(i) {
+    var it = curAction(), st = it && S.ns[it.docId]; if (!st || !st.people[i]) return;
+    st.people.splice(i, 1);
+    nsPeopleChanged(it, st);
+  }
+  /* An address you typed yourself (the only way an unknown name gets one). */
+  function nsUse(i) {
+    var it = curAction(), st = it && S.ns[it.docId], p = st && st.people[i]; if (!p) return;
+    var inp = $('nsAddr' + i), v = inp ? inp.value.trim().toLowerCase() : '';
+    if (!ns.isEmail(v)) { p.bad = true; p.typed = v; rerenderItemKeepFocus(); return; }
+    st.people[i] = { state: 'ok', name: p.name, email: v, options: [] };
+    nsPeopleChanged(it, st);
+  }
+  function nsAdd() {
+    var it = curAction(), st = it && S.ns[it.docId]; if (!st) return;
+    var inp = $('nsAdd'), v = inp ? inp.value.trim() : ''; if (!v) return;
+    var a = S.actions[it.docId];
+    var p = ns.isEmail(v) ? { state: 'ok', name: U.nameFromAddress(v), email: v.toLowerCase(), options: [] } : ns.resolve(v, directory(), a.origin && a.origin.attendees || []);
+    if (p.state === 'ok' && okPeople(st).some(function (x) { return x.email === p.email; })) { inp.value = ''; return; }
+    st.people.push(p);
+    nsPeopleChanged(it, st);
+    var ni = $('nsAdd'); if (ni) ni.focus({ preventScroll: true });
+  }
+  function nsTarget() { var it = curAction(); return it && S.ns[it.docId] ? [it, S.ns[it.docId]] : null; }
+  /* Send invite: outlook_create_event, only on this click, once. */
+  function sendInvite() {
+    var x = nsTarget(); if (!x) return;
+    var it = x[0], st = x[1], inv = st.inv;
+    if (inv.phase === 'sending' || inv.phase === 'sent' || !nsReady(st)) return;
+    var t = performance.now();
+    if (inv.phase === 'unclear') {
+      if (t < (inv.armAt || 0)) return;
+      if (!inv.confirm) { inv.confirm = 1; inv.armAt = t + 700; rerenderItemKeepFocus(); return; }
+    }
+    var slot = st.slots[st.slot], people = okPeople(st).map(function (p) { return { email: p.email, name: p.name }; });
+    st.inv = { phase: 'sending' }; rerenderItemKeepFocus();
+    ns.eventSchema().then(function (schema) {
+      var input = ns.eventInput({ subject: String(st.title).trim(), start: slot.start, end: slot.end, attendees: people, agenda: st.agenda, online: st.online }, schema);
+      return rt.call('outlook_create_event', input);
+    }).then(function () {
+      st.inv = { phase: 'sent', label: ns.slotLabel(slot) };
+      toast('Invite sent for ' + ns.slotLabel(slot) + '.');
+    }, function (e) {
+      var base = { step: 'create event', code: String(e && e.code || 'unknown').replace(/[^A-Za-z0-9_.-]/g, '').slice(0, 40), detail: U.clip(e && e.message || '', 140) };
+      st.inv = Object.assign(base, rt.isClear(e)
+        ? { phase: 'failed', message: 'Outlook didn’t create the invite' + (base.detail ? ': ' + base.detail : '') + '. Nothing was sent.' }
+        : { phase: 'unclear', message: 'Outlook didn’t confirm the invite. Check your calendar before sending again.', confirm: 0, armAt: performance.now() + 700 });
+    }).then(function () { nsRerender(it); });
+  }
+  /* Send a new mail: create draft → read back → check → send, once. */
+  function sendNsMail() {
+    var x = nsTarget(); if (!x) return;
+    var it = x[0], st = x[1], sd = st.send;
+    if (sd.phase === 'sending' || sd.phase === 'sent' || !nsReady(st)) return;
+    var t = performance.now();
+    if (sd.phase === 'unclear') {
+      if (t < (sd.armAt || 0)) return;
+      if (!sd.confirm) { sd.confirm = 1; sd.armAt = t + 700; rerenderItemKeepFocus(); return; }
+    }
+    var text = String(st.body).trim();
+    var reuse = sd.draftId ? { draftId: sd.draftId, link: sd.draftLink, text: sd.draftText } : null;
+    st.send = { phase: 'sending', draftId: sd.draftId, draftLink: sd.draftLink, draftText: sd.draftText };
+    rerenderItemKeepFocus();
+    flow.sendNew({ to: okPeople(st).map(function (p) { return p.email; }), subject: String(st.subject).trim(), text: text, reuse: reuse }).then(function (res) {
+      var ns2 = st.send = { phase: res.phase, message: res.message || '', sentAt: res.sentAt, draftId: res.draftId || '', draftLink: res.draftLink || '', draftText: res.draftText || '',
+        step: res.step || '', code: res.code || '', detail: res.detail || '', safeDetail: res.safeDetail || '' };
+      if (res.phase === 'unclear') { ns2.confirm = 0; ns2.armAt = performance.now() + 700; }
+      if (res.phase === 'blocked' && !res.keepDraft) ns2.draftId = '';
+      if (res.phase === 'sent') toast('Sent.');
+      nsRerender(it);
+    });
+  }
+  function chaseNs() {
+    var x = nsTarget(); if (!x || !nsReady(x[1])) return;
+    var st = x[1], text = String(st.chase).trim();
+    var link = U.safeTeamsLink('https://teams.microsoft.com/l/chat/0/0?users=' + okPeople(st).map(function (p) { return encodeURIComponent(p.email); }).join(','));
+    var p = copyText(text);
+    if (link) { try { window.open(link, '_blank', 'noopener,noreferrer'); } catch (e) { /* ignore */ } }
+    st.chased = new Date();
+    Promise.resolve(p).then(function () { return true; }, function () { return false; }).then(function (ok) {
+      nsRerender(x[0]);
+      toast(ok ? 'Copied. Paste it in the Teams chat that just opened.' : 'Couldn’t copy. Select the text and copy it, then paste it in Teams.');
     });
   }
 
@@ -949,6 +1527,7 @@
   function markDone() {
     var it = S.byId[S.cur]; if (!it) return;
     if (isMine(it)) return markActionDone(it);
+    if (isWait(it)) return notWaiting();
     S.doneNow[it.id] = { how: 'manual' };
     store.setDone(it.key, { at: new Date().toISOString(), how: 'manual' });
     back();
@@ -1001,6 +1580,21 @@
     var cur = S.cur;
     if (t.hasAttribute('data-send') && cur) return onSend();
     if (t.hasAttribute('data-copyopen') && cur) return copyOpen();
+    if (t.hasAttribute('data-notwaiting') && cur) return notWaiting();
+    if (t.hasAttribute('data-snooze') && cur) return snoozeWait();
+    if (t.hasAttribute('data-chasemail') && cur) return setChaseMode(true);
+    if (t.hasAttribute('data-chaseteams') && cur) return setChaseMode(false);
+    if ((id = t.getAttribute('data-ns-start')) && cur) return startNs(id);
+    if (t.hasAttribute('data-ns-pick') && cur) return nsPick(+t.getAttribute('data-ns-pick'), t.getAttribute('data-email'));
+    if (t.hasAttribute('data-ns-drop') && cur) return nsDrop(+t.getAttribute('data-ns-drop'));
+    if (t.hasAttribute('data-ns-use') && cur) return nsUse(+t.getAttribute('data-ns-use'));
+    if (t.hasAttribute('data-ns-slot') && cur) { var sx = nsTarget(); if (sx && sx[1].inv.phase === 'idle' || sx && sx[1].inv.phase === 'failed') { sx[1].slot = +t.getAttribute('data-ns-slot'); rerenderItemKeepFocus(); } return; }
+    if (t.hasAttribute('data-ns-slots') && cur) { var sy = nsTarget(); if (sy) nsSlots(sy[0], sy[1], true); return; }
+    if (t.hasAttribute('data-ns-redraft') && cur) { var sz = nsTarget(); if (sz) nsDraft(sz[0], sz[1]); return; }
+    if (t.hasAttribute('data-ns-invite') && cur) return sendInvite();
+    if (t.hasAttribute('data-ns-send') && cur) return sendNsMail();
+    if (t.hasAttribute('data-ns-chase') && cur) return chaseNs();
+    if (t.hasAttribute('data-ns-done') && cur) { var dx = curAction(); if (dx) markActionDone(dx); return; }
     if (t.hasAttribute('data-done-primary') && cur) return markDone();
     if (t.hasAttribute('data-delete') && cur) {
       S.confirmDel = cur; renderItem();
@@ -1025,6 +1619,7 @@
       if (ai && addAction(ai.value)) { ai.value = ''; ai.focus({ preventScroll: true }); }
       return;
     }
+    if (e.target.hasAttribute('data-ns-addform')) { nsAdd(); return; }
     if (e.target.hasAttribute('data-chatform')) {
       var inp = $('chatIn'), v = inp ? inp.value.trim() : '';
       if (v && S.cur) { inp.value = ''; chatSay(S.cur, v); }
@@ -1036,9 +1631,16 @@
       var ed = S.actEdit[curAction().docId] = S.actEdit[curAction().docId] || {};
       ed[e.target.id === 'actText' ? 'text' : 'notes'] = e.target.value;
     }
+    var nx = /^ns(Title|Agenda|Subject|Body|Chase)$/.exec(e.target.id || '');
+    if (nx && nsTarget()) {
+      var nst = nsTarget()[1], f = nx[1].charAt(0).toLowerCase() + nx[1].slice(1);
+      nst[f] = e.target.value; nst[f + 'Touched'] = true;
+      nsGate();
+    }
+    if (/^nsAddr\d+$/.test(e.target.id || '') && nsTarget()) { var pi = nsTarget()[1].people[+e.target.id.slice(6)]; if (pi) pi.typed = e.target.value; }
     if (e.target.id === 'draftText' && S.cur) {
-      var first = !S.touched[S.cur];
-      S.drafts[S.cur] = e.target.value; S.touched[S.cur] = true;
+      var first = !S.touched[S.cur], dk = S.byId[S.cur] ? draftKey(S.byId[S.cur]) : S.cur;
+      S.drafts[dk] = e.target.value; S.touched[S.cur] = true;
       if (first) { var ft = document.querySelector('.draft-foot'), cit = S.byId[S.cur]; if (ft && cit) ft.innerHTML = draftFoot(cit, false, false); }
       var b = $('sendBtn'), st = sendState(S.cur);
       if (b && (b.hasAttribute('data-send') || b.hasAttribute('data-copyopen')) && st.phase !== 'unclear') {
@@ -1050,6 +1652,7 @@
     if (e.target.id === 'actText') commitActionField('text', e.target.value);
     else if (e.target.id === 'actNotes') commitActionField('notes', e.target.value);
     else if (e.target.id === 'actDue') commitActionField('due', e.target.value);
+    else if (e.target.id === 'nsOnline' && nsTarget()) nsTarget()[1].online = !!e.target.checked;
   });
   document.addEventListener('focusin', function (e) {
     if (S.view !== 'item') return;
@@ -1065,6 +1668,7 @@
       if (S.view === 'item') return back();
       return;
     }
+    if (e.key === 'Enter' && /^nsAddr\d+$/.test(e.target.id || '')) { e.preventDefault(); nsUse(+e.target.id.slice(6)); return; }
     /* Enter in the action text saves it (it is one line of text). */
     if (e.key === 'Enter' && e.target.id === 'actText' && !e.shiftKey) { e.preventDefault(); e.target.blur(); return; }
     if (typing || e.metaKey || e.ctrlKey || e.altKey) return;

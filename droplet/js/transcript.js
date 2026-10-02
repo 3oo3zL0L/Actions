@@ -153,8 +153,10 @@
     if (!lines || !lines.length) return null;
     var text = lines.map(function (l) { return (l.who ? l.who + ": " : "") + l.text; }).join("\n");
     if (text.length > tx.MAX_CHARS) {
+      /* Keep the end; drop a cut-off first line when it is short. */
       text = text.slice(text.length - tx.MAX_CHARS);
-      text = text.slice(text.indexOf("\n") + 1 || 0);
+      var nl = text.indexOf("\n");
+      if (nl >= 0 && nl < 400) text = text.slice(nl + 1);
     }
     return { lines: lines, text: text };
   };

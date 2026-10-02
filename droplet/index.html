@@ -1,7 +1,8 @@
 <title>Droplet</title>
 <!-- Publish: declare the Microsoft 365 tools get_me, outlook_email_search, read_resource,
-     outlook_create_reply_draft, outlook_send_draft, chat_message_search and
-     outlook_calendar_search (read only; Droplet never posts in Teams).
+     outlook_create_reply_draft, outlook_create_draft, outlook_send_draft,
+     outlook_create_event, chat_message_search and outlook_calendar_search.
+     The four create/send tools write, and only on a click. Droplet never posts in Teams.
      The full capabilities JSON is in README.md. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -15,7 +16,6 @@
     <div class="list-main">
       <header class="lh">
         <div class="brand">
-          <span class="lambda" aria-hidden="true">λ</span>
           <span class="brand-name">Droplet</span>
         </div>
         <div class="status" id="status"><span><i></i>M365 link</span><span><i></i>Teams</span><span><i></i>Claude</span><span>Sync ··:··</span><span>Nothing sends without you</span></div>
@@ -71,7 +71,10 @@
 <script src="js/teams.js"></script>
 <script src="js/meet.js"></script>
 <script src="js/mine.js"></script>
+<script src="js/waits.js"></script>
+<script src="js/transcript.js"></script>
 <script src="js/rank.js"></script>
 <script src="js/send.js"></script>
+<script src="js/nextstep.js"></script>
 <script src="js/chat.js"></script>
 <script src="js/app.js"></script>

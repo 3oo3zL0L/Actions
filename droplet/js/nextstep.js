@@ -45,6 +45,7 @@
     var seen = {};
     hits = hits.filter(function (p) { if (seen[p.email]) return false; seen[p.email] = 1; return true; });
     if (hits.length === 1) return { state: "ok", name: hits[0].name, email: hits[0].email, options: hits };
+    hits.sort(function (a, b) { return a.name.localeCompare(b.name) || a.email.localeCompare(b.email); });
     if (hits.length > 1) return { state: "ambiguous", name: name, options: hits.slice(0, 6) };
     return { state: "unknown", name: name, options: [] };
   };
