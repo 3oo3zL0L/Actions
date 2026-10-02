@@ -1,0 +1,857 @@
+<title>Droplet · Lambda</title>
+<style>
+/* ============================================================
+   Droplet · Lambda (refined)
+   Terminal calm: black base, mono UI, tmux-style pane title bars.
+   Orange = the one primary action + the selection marker. Nothing else.
+   ============================================================ */
+:root {
+  color-scheme: dark;
+  --bg: #000000;          /* base: list pane, phone list screen */
+  --bg-1: #0a0b0d;        /* hover, status line */
+  --raised: #121418;      /* item pane, phone item screen, selected row */
+  --raised-2: #191c21;    /* active title bar, phone item top bar, action bar */
+  --well: #08090b;        /* cards set into the raised surface */
+  --ink: #e8e4dc;
+  --ink-2: #cdc9c1;
+  --muted: #8d939a;
+  --faint: #565c63;
+  --line: #1c1f23;
+  --line-2: #2c3036;
+  --divider: #565d67;
+  --accent: #ff8a1f;
+  --accent-hi: #ffa04a;
+  --accent-ink: #140a01;
+  --accent-soft: rgba(255, 138, 31, 0.08);
+  --accent-line: rgba(255, 138, 31, 0.55);
+  --focus: #ffb36b;
+  --ok: #93c79d;
+  --mono: "JetBrains Mono", "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+  --sans: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+/* ---------- Base ---------- */
+*, *::before, *::after { box-sizing: border-box; }
+html { color-scheme: dark; -webkit-text-size-adjust: 100%; background: var(--bg); }
+html[data-view="item"] { background: var(--raised); }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font-family: var(--mono); font-size: 14px; line-height: 1.55;
+  overflow-x: hidden; -webkit-font-smoothing: antialiased;
+}
+button, input, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; background: none; border: 0; padding: 0; text-align: left; }
+.sr { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+:focus { outline: none; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+[hidden] { display: none !important; }
+
+/* ---------- Status line (top) ---------- */
+.statusline {
+  display: flex; align-items: center; gap: 0; min-height: 36px; padding: 0 16px;
+  font-size: 12px; color: var(--muted); background: var(--bg-1); border-bottom: 1px solid var(--line);
+  white-space: nowrap; overflow: hidden;
+}
+.statusline > span { display: inline-flex; align-items: center; gap: 6px; }
+.statusline > span + span::before { content: "│"; color: var(--faint); margin: 0 10px; }
+.sl-brand { color: var(--ink); font-weight: 600; letter-spacing: 0.02em; }
+.sl-brand b { color: var(--ink); font-weight: 600; }
+.sl-ok i { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--ok); }
+.sl-promise { margin-left: auto; }
+.statusline > .sl-promise::before { display: none; }
+@media (max-width: 959.98px) {
+  .sl-promise, .sl-sync { display: none !important; }
+  html[data-view="item"] .statusline { display: none; }
+}
+
+/* ---------- Pane title bar (tmux-ish) ---------- */
+.tbar {
+  display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 12px 0 14px;
+  font-size: 12px; color: var(--faint); border-bottom: 1px solid var(--line); background: transparent;
+  white-space: nowrap; user-select: none;
+}
+.tb-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; box-shadow: inset 0 0 0 1px var(--faint); }
+.tb-rule { flex: 1; min-width: 12px; height: 1px; background: currentColor; opacity: 0.45; }
+.tb-rule.short { flex: none; width: 12px; }
+.tb-t { color: inherit; font-weight: 500; }
+.tb-r { color: inherit; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.pane.is-active > .tbar { color: var(--ink-2); }
+.pane.is-active > .tbar .tb-t { color: var(--ink); }
+.pane.is-active > .tbar .tb-dot { background: var(--accent); box-shadow: none; }
+
+/* ---------- App layout ---------- */
+.app { display: block; }
+.pane { position: relative; }
+.list-col { display: flex; flex-direction: column; min-height: calc(100vh - 37px); min-height: calc(100dvh - 37px); background: var(--bg); }
+.list-scroll { flex: 1; }
+.item-col { display: flex; flex-direction: column; background: var(--raised); min-height: 100vh; min-height: 100dvh; }
+@media (max-width: 959.98px) {
+  .app[data-view="item"] .list-col { display: none; }
+  .app[data-view="list"] .item-col { display: none; }
+  .item-col > .tbar { display: none; }
+}
+@media (min-width: 960px) {
+  body { height: 100vh; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+  html[data-view="item"] { background: var(--bg); }
+  .statusline { flex: none; }
+  .app {
+    flex: 1; min-height: 0; width: 100%;
+    display: grid; grid-template-columns: minmax(400px, 460px) minmax(0, 1fr); align-items: stretch;
+    padding: 12px 16px 16px 0;
+  }
+  .list-col { min-height: 0; }
+  /* The vertical divider belongs to the list side, so the selected row can cover it and flow into the panel. */
+  .list-col > .tbar, .askbar-wrap { box-shadow: inset -1px 0 0 var(--divider); }
+  .list-scroll {
+    min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none;
+    background-image: linear-gradient(var(--divider), var(--divider));
+    background-size: 1px 100%; background-position: right top; background-repeat: no-repeat; background-attachment: local;
+  }
+  .list-scroll::-webkit-scrollbar { display: none; }
+  .item-col {
+    min-height: 0; margin-top: 0;
+    border: 1px solid var(--line-2); border-left: 0;
+    box-shadow: 0 24px 60px -30px rgba(0, 0, 0, 0.9);
+  }
+  .item-col > .tbar { background: transparent; }
+  .item-col.is-active > .tbar { background: var(--raised-2); border-bottom-color: var(--line-2); }
+  .list-col > .tbar { padding-left: 16px; }
+  .list-col.is-active > .tbar { background: var(--bg-1); }
+  .iv-scroll { overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
+  .iv-top { display: none !important; }
+}
+
+/* ---------- List header ---------- */
+.lh { padding: 22px 16px 8px; }
+.h1 { margin: 0; font-family: var(--sans); font-weight: 500; font-size: 26px; line-height: 1.15; letter-spacing: -0.01em; color: var(--ink); }
+.h1 .pr { font-family: var(--mono); color: var(--faint); font-weight: 400; margin-right: 10px; font-size: 22px; }
+.sub { margin: 6px 0 0; color: var(--muted); font-size: 12.5px; }
+
+/* ---------- Focus list ---------- */
+.focus { list-style: none; margin: 10px 0 0; padding: 0; border-top: 1px solid var(--line); }
+.fi { position: relative; border-bottom: 1px solid var(--line); background: transparent; }
+.fi-open {
+  display: grid; grid-template-columns: 14px 24px minmax(0, 1fr); gap: 0 8px; width: 100%;
+  padding: 14px 16px 6px 12px; min-height: 44px;
+}
+.fi-mark { color: transparent; font-size: 13px; line-height: 20px; }
+.fi-rank { color: var(--faint); font-size: 12.5px; line-height: 20px; }
+.fi-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.fi-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 2px 8px; font-size: 12px; color: var(--muted); line-height: 20px; }
+.fi-meta .sep { color: var(--faint); }
+.fi-meta .t { margin-left: auto; color: var(--faint); }
+.flag { color: var(--ink-2); border: 1px solid var(--line-2); padding: 0 6px; line-height: 17px; font-size: 11.5px; }
+.fi-title { font-family: var(--sans); font-size: 16.5px; line-height: 1.3; font-weight: 500; color: var(--ink); overflow-wrap: anywhere; }
+.fi-why { font-size: 12.5px; line-height: 1.5; color: var(--muted); }
+.fi-why .k { color: var(--faint); margin-right: 6px; }
+.fi-act { padding: 6px 16px 14px 58px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.btn-act {
+  min-height: 44px; padding: 0 14px; display: inline-flex; align-items: center; gap: 10px; max-width: 100%;
+  font-size: 13px; color: var(--ink-2); box-shadow: inset 0 0 0 1px var(--line-2);
+}
+.btn-act .g { color: var(--muted); }
+.btn-act:hover { color: var(--ink); box-shadow: inset 0 0 0 1px var(--divider); background: var(--bg-1); }
+/* One primary per screen: the first item's action is orange only while the list is the screen. */
+.app[data-view="list"] .fi.is-first .btn-act { background: var(--accent); color: var(--accent-ink); box-shadow: none; font-weight: 600; }
+.app[data-view="list"] .fi.is-first .btn-act .g { color: var(--accent-ink); }
+.app[data-view="list"] .fi.is-first .btn-act:hover { background: var(--accent-hi); }
+.state-chip { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; font-size: 12.5px; color: var(--ok); }
+.fi.is-closed .fi-title, .fi.is-closed .fi-why { opacity: 0.5; }
+.fi:hover:not(.is-current) { background: var(--bg-1); }
+/* Selected row: marker, orange edge, raised surface that runs into the panel. */
+.fi.is-current { background: var(--raised); box-shadow: inset 2px 0 0 var(--accent); border-bottom-color: var(--line-2); }
+.fi.is-current .fi-mark { color: var(--accent); }
+.fi.is-current .fi-rank { color: var(--ink-2); }
+@media (min-width: 960px) {
+  .fi.is-current { box-shadow: inset 2px 0 0 var(--accent), 0 -1px 0 var(--line-2); }
+}
+.allclear { padding: 24px 16px; color: var(--muted); }
+
+/* ---------- Everything else ---------- */
+.rest { margin: 18px 0 8px; }
+.rest-toggle {
+  width: 100%; min-height: 48px; display: flex; align-items: center; gap: 10px;
+  padding: 0 16px 0 12px; color: var(--ink-2); font-size: 13px;
+}
+.rest-toggle .chev { width: 14px; color: var(--muted); }
+.rest-toggle .count { color: var(--muted); }
+.rest-toggle .kbd { margin-left: auto; color: var(--faint); font-size: 12px; }
+.rest-toggle:hover { background: var(--bg-1); }
+.search { position: relative; margin: 2px 16px 8px; }
+.search .pr { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
+.search input {
+  width: 100%; min-height: 44px; padding: 0 12px 0 30px;
+  background: var(--bg-1); border: 1px solid var(--line-2); border-radius: 0; color: var(--ink); font-size: 16px; font-family: var(--mono);
+}
+@media (min-width: 960px) { .search input { font-size: 13.5px; } }
+.search input::placeholder { color: var(--faint); }
+.search input:focus-visible { outline: 1px solid var(--focus); outline-offset: 0; }
+.rest-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+.rr {
+  width: 100%; min-height: 52px; display: grid; grid-template-columns: 14px 24px minmax(0, 1fr); align-items: center; gap: 8px;
+  padding: 6px 16px 6px 12px; border-bottom: 1px solid var(--line);
+}
+.rr:hover { background: var(--bg-1); }
+.rr-m { color: transparent; }
+.rr-n { font-size: 12px; color: var(--faint); }
+.rr-t { display: flex; flex-direction: column; min-width: 0; }
+.rr-title { font-family: var(--sans); font-size: 14.5px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rr-sub { font-size: 11.5px; color: var(--muted); }
+.rr.is-closed .rr-title { text-decoration: line-through; text-decoration-color: var(--faint); color: var(--muted); }
+.rr.is-current { background: var(--raised); box-shadow: inset 2px 0 0 var(--accent); }
+.rr.is-current .rr-m { color: var(--accent); }
+.rest-empty { padding: 14px 16px; color: var(--muted); font-size: 13px; }
+
+/* ---------- Ask Claude prompt line ---------- */
+.askbar-wrap { position: sticky; bottom: 0; z-index: 5; background: var(--bg); border-top: 1px solid var(--line-2); padding: 0 0 env(safe-area-inset-bottom); }
+.askbar {
+  width: 100%; min-height: 54px; display: flex; align-items: center; gap: 10px; padding: 0 16px;
+  color: var(--muted); font-size: 14px;
+}
+.askbar .pr { color: var(--ink); font-weight: 600; }
+.askbar .lbl { color: var(--ink-2); white-space: nowrap; }
+.cursor { display: inline-block; width: 8px; height: 17px; background: var(--ink-2); margin-left: -6px; flex: none; }
+.askbar .hint { margin-left: auto; min-width: 0; font-size: 12px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.askbar:hover { background: var(--bg-1); }
+.askbar:hover .lbl { color: var(--ink); }
+
+/* ---------- Item view ---------- */
+.iv-top {
+  position: sticky; top: 0; z-index: 6; display: flex; align-items: center; gap: 6px;
+  min-height: 52px; padding: 0 12px 0 4px; background: var(--raised-2); border-bottom: 1px solid var(--line-2);
+}
+.btn-back { min-height: 44px; min-width: 44px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; color: var(--ink); font-size: 14px; }
+.btn-back .g { font-size: 18px; line-height: 1; color: var(--ink-2); }
+.btn-back:hover { background: var(--accent-soft); }
+.crumb { min-width: 0; font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-left: auto; }
+.crumb .sep { color: var(--faint); margin: 0 6px; }
+.crumb b { color: var(--ink); font-weight: 500; }
+.btn-close { min-height: 40px; min-width: 44px; padding: 0 10px; margin-right: -8px; color: var(--muted); font-size: 12px; display: inline-flex; align-items: center; gap: 6px; }
+.btn-close:hover { color: var(--ink); background: var(--raised); }
+.iv-scroll { flex: 1; padding: 18px 16px 20px; }
+.iv-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; font-size: 12px; color: var(--muted); }
+.iv-meta .sep { color: var(--faint); }
+.iv-title { margin: 8px 0 0; font-family: var(--sans); font-weight: 500; font-size: 23px; line-height: 1.25; overflow-wrap: anywhere; color: var(--ink); }
+.iv-why { margin: 16px 0 0; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; padding: 12px 14px; background: var(--well); border: 1px solid var(--line-2); font-size: 13.5px; color: var(--ink); }
+.iv-why .k { color: var(--muted); }
+.iv-why p { margin: 0; }
+.sec-label { margin: 26px 0 10px; display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.sec-label::before { content: ""; width: 12px; height: 1px; background: var(--faint); flex: none; }
+.sec-label::after { content: ""; flex: 1; height: 1px; background: var(--line-2); }
+.sec-label b { color: var(--ink-2); font-weight: 500; }
+.card { background: var(--well); border: 1px solid var(--line-2); padding: 14px; }
+.mail-from { font-size: 12.5px; color: var(--muted); }
+.mail-from b { color: var(--ink); font-weight: 500; }
+.mail-subj { margin: 6px 0 10px; font-family: var(--sans); font-weight: 500; font-size: 15px; overflow-wrap: anywhere; color: var(--ink); }
+.mail-body p { margin: 0 0 9px; font-size: 13.5px; color: var(--ink-2); overflow-wrap: anywhere; }
+.mail-body p:last-child { margin-bottom: 0; }
+.thread { display: flex; flex-direction: column; gap: 10px; }
+.msg { font-size: 13.5px; }
+.msg-h { font-size: 12px; color: var(--muted); }
+.msg-h b { color: var(--ink); font-weight: 500; margin-right: 8px; }
+.msg.me .msg-h b::before { content: "› "; color: var(--muted); }
+.msg-t { color: var(--ink-2); overflow-wrap: anywhere; }
+.msg.hl .msg-t { color: var(--ink); background: var(--raised-2); box-shadow: inset 2px 0 0 var(--ink-2); padding: 4px 10px; margin: 2px 0 0 -10px; }
+.src-note { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--line-2); font-size: 12px; color: var(--muted); }
+.draft-row { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 8px; align-items: center; min-height: 34px; font-size: 13px; border-bottom: 1px solid var(--line); padding: 4px 0; }
+.draft-row .k { color: var(--muted); font-size: 12px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { display: inline-flex; align-items: center; min-height: 24px; padding: 0 8px; background: var(--raised-2); border: 1px solid var(--line-2); font-size: 12.5px; }
+.draft textarea {
+  display: block; width: 100%; margin-top: 12px; min-height: 168px; resize: vertical; padding: 12px;
+  background: var(--bg); border: 1px solid var(--line); border-radius: 0; color: var(--ink);
+  font-family: var(--mono); font-size: 16px; line-height: 1.6;
+}
+@media (min-width: 960px) { .draft textarea { font-size: 14px; } }
+.draft textarea:focus-visible { outline: 1px solid var(--focus); outline-offset: 0; }
+.draft.is-editing { border-color: var(--divider); }
+.draft.is-editing textarea { border-color: var(--muted); }
+.draft.is-locked textarea { opacity: 0.6; resize: none; }
+.warn { margin-top: 10px; font-size: 12.5px; color: var(--ink-2); }
+.warn::before { content: "! "; color: var(--accent-hi); font-weight: 600; }
+.draft-foot { margin-top: 10px; font-size: 12px; color: var(--muted); }
+
+/* chat about this */
+.chat { margin-top: 14px; }
+.chat-log { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; font-size: 13.5px; }
+.cm { color: var(--ink-2); }
+.cm.u { color: var(--ink); }
+.cm.u::before { content: "› "; color: var(--muted); }
+.cm.c::before { content: "λ "; color: var(--muted); }
+.chat-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.chat-chip { min-height: 44px; padding: 0 12px; box-shadow: inset 0 0 0 1px var(--line-2); color: var(--ink-2); font-size: 13px; }
+.chat-chip:hover { color: var(--ink); box-shadow: inset 0 0 0 1px var(--divider); }
+.chat-form { display: flex; gap: 0; border: 1px solid var(--line-2); background: var(--bg); }
+.chat-form .pr { display: grid; place-items: center; width: 30px; color: var(--muted); }
+.chat-form input { flex: 1; min-width: 0; min-height: 46px; padding: 0 8px 0 0; background: transparent; border: 0; font-size: 16px; font-family: var(--mono); }
+.chat-form input::placeholder { color: var(--faint); }
+.icon-btn { min-width: 46px; min-height: 46px; display: grid; place-items: center; color: var(--ink-2); font-size: 15px; }
+.icon-btn:hover { color: var(--ink); background: var(--raised-2); }
+
+/* action bar */
+.iv-bar {
+  position: sticky; bottom: 0; z-index: 5;
+  padding: 8px 12px calc(12px + env(safe-area-inset-bottom));
+  background: var(--raised-2); border-top: 1px solid var(--line-2);
+}
+.quiet { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2px; margin-bottom: 8px; }
+.qbtn {
+  min-height: 48px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  font-size: 11.5px; color: var(--muted); padding: 4px 2px; text-align: center; line-height: 1.2;
+}
+.qbtn .g { font-size: 15px; color: var(--ink-2); }
+.qbtn .kbd { display: none; }
+.qbtn:hover { color: var(--ink); background: var(--raised); }
+.qbtn[aria-pressed="true"] { color: var(--ink); box-shadow: inset 0 -2px 0 var(--ink-2); }
+.qbtn[aria-disabled="true"] { opacity: 0.35; cursor: default; }
+.btn-send {
+  width: 100%; min-height: 52px; display: flex; align-items: center; justify-content: center; gap: 10px;
+  background: var(--accent); color: var(--accent-ink); font-size: 15px; font-weight: 700; letter-spacing: 0.04em;
+}
+.btn-send:hover { background: var(--accent-hi); }
+.btn-send.is-sent { background: transparent; color: var(--ok); box-shadow: inset 0 0 0 1px var(--line-2); cursor: default; font-weight: 500; letter-spacing: 0; }
+.sent-note { text-align: center; font-size: 12px; color: var(--muted); margin-top: 6px; }
+@media (min-width: 960px) {
+  .iv-scroll { padding: 22px 28px 28px; }
+  .iv-title { font-size: 25px; }
+  .iv-bar { padding: 10px 16px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .quiet { display: flex; flex-wrap: wrap; gap: 2px; margin: 0; flex: 1; }
+  .qbtn { flex-direction: row; gap: 8px; padding: 0 10px; font-size: 12.5px; min-height: 44px; white-space: nowrap; flex: none; }
+  .qbtn .g { font-size: 14px; }
+  .qbtn .kbd { display: inline; color: var(--faint); font-size: 11.5px; }
+  .btn-send { width: auto; min-width: 180px; min-height: 46px; padding: 0 26px; margin-left: auto; }
+  .sent-note { width: 100%; text-align: right; margin: 0; }
+}
+
+/* empty panel (laptop) */
+.empty { flex: 1; display: flex; align-items: center; justify-content: center; padding: 40px; color: var(--muted); font-size: 13px; }
+.empty pre { margin: 0; font-family: var(--mono); font-size: 13px; line-height: 1.8; color: var(--muted); white-space: pre-wrap; }
+.empty .lam { color: var(--ink-2); font-size: 32px; line-height: 1; display: block; margin-bottom: 18px; }
+.empty b { color: var(--ink); font-weight: 500; }
+
+/* ---------- Sheet + toast ---------- */
+.scrim { position: fixed; inset: 0; z-index: 40; background: rgba(0, 0, 0, 0.7); }
+.sheet {
+  position: fixed; z-index: 41; left: 0; right: 0; bottom: 0; margin: 0 auto; max-width: 600px;
+  background: var(--raised); border: 1px solid var(--line-2); border-bottom: 0;
+  padding: 0 0 calc(14px + env(safe-area-inset-bottom));
+  box-shadow: 0 -20px 60px rgba(0, 0, 0, 0.6);
+}
+.sheet > .tbar { color: var(--ink-2); background: var(--raised-2); border-bottom-color: var(--line-2); padding-right: 4px; }
+.sheet > .tbar .tb-dot { background: var(--accent); box-shadow: none; }
+.sheet > .tbar .tb-t { color: var(--ink); }
+@media (min-width: 960px) { .sheet { bottom: 32px; border-bottom: 1px solid var(--line-2); } }
+.sheet-body { padding: 14px 14px 0; }
+.ask-in { display: flex; border: 1px solid var(--line-2); background: var(--bg); }
+.ask-in .pr { padding: 11px 0 0 12px; color: var(--ink); font-weight: 600; }
+.sheet textarea { flex: 1; min-width: 0; min-height: 96px; padding: 11px 12px 11px 8px; background: transparent; border: 0; font-size: 16px; font-family: var(--mono); resize: vertical; }
+.sheet textarea::placeholder { color: var(--faint); }
+.sheet textarea:focus-visible { outline: none; }
+.ask-in:focus-within { border-color: var(--muted); }
+.sheet .chat-chips { margin: 10px 0; }
+.sheet-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 4px; }
+.sheet-foot small { color: var(--muted); font-size: 12px; }
+.btn-ask { min-height: 46px; padding: 0 22px; background: var(--accent); color: var(--accent-ink); font-weight: 700; }
+.ask-reply { margin-top: 12px; font-size: 13.5px; }
+.toast {
+  position: fixed; z-index: 30; left: 50%; bottom: 150px; transform: translateX(-50%);
+  width: max-content; max-width: calc(100% - 32px);
+  display: flex; align-items: center; gap: 14px; padding: 4px 4px 4px 14px; min-height: 48px;
+  background: var(--raised-2); border: 1px solid var(--divider); color: var(--ink); font-size: 13px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+}
+.toast button { min-height: 44px; padding: 0 12px; color: var(--ink); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+@media (min-width: 960px) { .toast { bottom: 40px; } }
+
+/* ---------- Motion (only when allowed) ---------- */
+@media (prefers-reduced-motion: no-preference) {
+  .iv-scroll.enter { animation: rise 0.22s ease-out; }
+  .btn-act, .btn-send, .qbtn, .rr, .askbar, .fi { transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease; }
+  .cursor { animation: blink 1.1s steps(1) infinite; }
+}
+@keyframes rise { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: no-preference) { .toast { animation: toastIn 0.18s ease-out; } }
+@keyframes toastIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes blink { 50% { opacity: 0; } }
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600;700&display=swap">
+
+<header class="statusline" aria-label="Status">
+  <span class="sl-brand">λ <b>droplet</b></span>
+  <span>fri 02 oct · 08:47</span>
+  <span class="sl-ok"><i></i>m365 <i></i>rovo</span>
+  <span class="sl-sync">sync 08:47</span>
+  <span class="sl-promise">nothing sends without your click</span>
+</header>
+
+<main class="app" id="app" data-view="list">
+  <section class="pane list-col is-active" id="listCol" aria-label="Focus list">
+    <div class="tbar" aria-hidden="true"><span class="tb-dot"></span><span class="tb-rule short"></span><span class="tb-t">focus</span><span class="tb-rule"></span><span class="tb-r" id="listMeta"></span><span class="tb-rule short"></span></div>
+    <div class="list-scroll" id="listScroll">
+      <header class="lh">
+        <h1 class="h1"><span class="pr" aria-hidden="true">~</span>Do now</h1>
+        <p class="sub" id="sub"></p>
+      </header>
+      <ol class="focus" id="focus"></ol>
+      <section class="rest" aria-label="Everything else">
+        <button class="rest-toggle" id="restToggle" aria-expanded="false" aria-controls="restPanel">
+          <span class="chev" aria-hidden="true">▸</span>
+          <span>Everything else <span class="count" id="restCount"></span></span>
+          <span class="kbd" aria-hidden="true">/ search</span>
+        </button>
+        <div id="restPanel" hidden>
+          <div class="search">
+            <label class="sr" for="q">Search everything else</label>
+            <span class="pr" aria-hidden="true">/</span>
+            <input id="q" type="search" placeholder="search people, projects, words" autocomplete="off">
+          </div>
+          <ul class="rest-list" id="restList"></ul>
+        </div>
+      </section>
+    </div>
+    <div class="askbar-wrap">
+      <button class="askbar" data-ask aria-haspopup="dialog">
+        <span class="pr" aria-hidden="true">›</span>
+        <span class="lbl">Ask Claude…</span>
+        <span class="cursor" aria-hidden="true"></span>
+        <span class="hint">pages · mail outside Planon</span>
+      </button>
+    </div>
+  </section>
+
+  <section class="pane item-col" id="itemCol" aria-label="Item"></section>
+</main>
+
+<div id="toastHost" role="status" aria-live="polite"></div>
+<div id="sheetHost"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  var SRC = { mail: 'mail', teams: 'teams', jira: 'jira', meeting: 'transcript', confluence: 'confluence' };
+  function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+
+  /* ---------------- Sample data (in ranking order) ---------------- */
+  var ITEMS = [
+    { id: 'oidc', tag: 'OIDC-412', top: true, src: 'jira', project: 'OIDC', flag: 'standstill', time: '08:12',
+      title: 'OIDC-412 is at a standstill',
+      why: 'Jira flagged a standstill on OIDC; standstills always go first. Rakesh is blocked until you pick a refresh-token lifetime.',
+      action: 'Comment on OIDC-412',
+      source: { type: 'mail', from: 'Jira', fromNote: 'notification · 08:12', subject: '[Standstill] OIDC-412 · Refresh-token rotation for SSO tenants',
+        body: ['No progress for 8 working days. Status changed: In progress → Standstill.',
+               'Latest comment, Rakesh (Mon): “Blocked until we pick a refresh-token lifetime, 8h or 24h. Security prefers 8h, Support worries about re-logins on kiosk devices. Need a decision to continue.”'] },
+      draft: { kind: 'Jira comment', to: ['OIDC-412'],
+        text: '@Rakesh Let’s go with 8h for standard tenants, and allow 24h only for kiosk devices behind a tenant setting.\n\nPlease split the kiosk part into its own sub-task so the main flow can move again today. I’ll confirm with Security at Thursday’s sync.' } },
+
+    { id: 'melissa', tag: 'melissa', top: true, src: 'teams', project: 'Platform Stability › C4A', flag: 'meeting 14:00', time: '09:33',
+      title: 'Melissa asks if C4A makes the 26.4 train',
+      why: 'You meet Melissa at 14:00; answer before then. She’s PM on C4A and has to give Sales a date today.',
+      action: 'Reply to Melissa in Teams',
+      source: { type: 'thread', title: 'Chat with Melissa',
+        msgs: [{ who: 'Melissa', time: '09:31', text: 'Quick one: can we still put the C4A tenant export in the 26.4 release train? Sales is asking for a date.' },
+               { who: 'Melissa', time: '09:33', text: 'If not, I need to tell them today.' }] },
+      draft: { kind: 'Teams message', to: ['Melissa'],
+        text: 'Yes, if the export API passes review by Wednesday. If it doesn’t, it moves to 26.5.\n\nLet’s confirm at 14:00. I’ll bring the review status.' } },
+
+    { id: 'joris', tag: 'joris', top: true, src: 'teams', project: 'Platform Stability', flag: 'architect', time: '08:54',
+      title: 'Joris needs your call on the session-store fix',
+      why: 'Architect on your top project; blocks Tuesday’s design review. He needs a yes or no on the read replica.',
+      action: 'Reply to Joris in Teams',
+      source: { type: 'thread', title: 'Chat with Joris',
+        msgs: [{ who: 'Joris', time: '08:51', text: 'For the 08:00 login spikes: I want to go with a read replica for session checks rather than a cache layer. Simpler, and ops already knows it.' },
+               { who: 'Joris', time: '08:54', text: 'Can you OK that today? Otherwise Tuesday’s design review has nothing to decide on.' }] },
+      draft: { kind: 'Teams message', to: ['Joris'],
+        text: 'OK from me: go with the read replica, and spread the 08:00 session checks over 10 minutes as well.\n\nPlease put the cost estimate in the design doc so we can close it on Tuesday.' } },
+
+    { id: 'followup', tag: 'dod-follow-up', top: true, src: 'meeting', project: 'Release management', flag: 'your promise', time: 'Tue',
+      title: 'Plan the DoD follow-up with Melissa & Rakesh',
+      why: 'You promised this in Tuesday’s DoD sync. Nothing is booked yet; all three of you are free Thursday morning.',
+      action: 'Find a time with Melissa & Rakesh',
+      source: { type: 'transcript', title: 'DoD alignment · Tue 29 Sep · transcript',
+        msgs: [{ who: 'Rakesh', time: '10:41', text: 'So who turns this into the final DoD?' },
+               { who: 'You', me: true, hl: true, time: '10:42', text: 'I’ll plan a follow-up with Melissa and Rakesh next week to sign it off.' },
+               { who: 'Melissa', time: '10:42', text: 'Works for me. Mornings are best.' }] },
+      draft: { kind: 'Invite', to: ['Melissa', 'Rakesh'], subject: 'DoD sign-off', when: 'Thu 8 Oct · 10:30–11:00 · all free',
+        text: 'Follow-up from Tuesday. Let’s walk through the DoD draft, agree on the final version, and decide what goes to PST as Jira tasks.' } },
+
+    { id: 'pst', tag: 'pst', top: true, src: 'teams', project: 'Release management', flag: 'waiting 3 days', time: 'Mon',
+      title: 'PST hasn’t replied about the DoD Jira tasks',
+      why: 'You asked PST 3 working days ago. No reply, and the DoD page hasn’t changed since.',
+      action: 'Chase PST in Teams',
+      source: { type: 'thread', title: 'Your message to PST',
+        msgs: [{ who: 'You', me: true, time: 'Mon 15:20', text: 'Could you turn the agreed DoD items into Jira tasks under REL, so the teams can pick them up next sprint? Page: Release management › DoD v3.' }],
+        note: 'No reply since Monday · DoD page last edited 24 Sep' },
+      draft: { kind: 'Teams message', to: ['PST'],
+        text: 'Hi PST, a gentle nudge on Monday’s question: the DoD items as Jira tasks under REL.\n\nCan you let me know by Tuesday which items are in, or what’s blocking? Happy to pair for 15 minutes on it.' } },
+
+    /* Everything else, already in priority order */
+    { id: 'incident', tag: 'incident-29sep', src: 'confluence', project: 'Platform Stability', time: 'Thu',
+      title: 'Sign off the 29 Sep incident review', why: 'Lars wants to close the Platform Stability review today; only your sign-off is missing.',
+      action: 'Comment on the page',
+      source: { type: 'mail', from: 'Confluence', fromNote: 'page · edited by Lars yesterday 17:05', subject: 'Incident review · 29 Sep · Session store saturation',
+        body: ['Root cause: session checks at 08:00 hit one database node. Mitigation: spread checks over 10 minutes, add a read replica.', 'Status: waiting for sign-off.'] },
+      draft: { kind: 'Confluence comment', to: ['Incident review · 29 Sep'], text: 'Reviewed and agreed. One addition: let’s add an alert on session-check latency above 5 seconds, owned by the platform team. Signed off.' } },
+    { id: 'daan', tag: 'daan', src: 'mail', project: 'Platform Stability › C4A', time: 'Thu',
+      title: 'Daan proposes moving the C4A demo to Thursday', why: 'A C4A team lead asking for a yes or no; it shifts the sprint review.',
+      action: 'Draft reply to Daan',
+      source: { type: 'mail', from: 'Daan', fromNote: 'Thu 16:40', subject: 'C4A demo: Thursday instead of Tuesday?', body: ['Hi, the export flow will be much more convincing on Thursday. OK to move the demo?', 'Daan'] },
+      draft: { kind: 'Reply · mail', to: ['Daan'], text: 'Hi Daan,\n\nFine by me. Please move it and update the invite.\n\nThanks' } },
+    { id: 'arjun', tag: 'arjun', src: 'teams', project: 'SIEM', time: 'Thu',
+      title: 'Arjun asks which log sources go first', why: 'The SIEM architect needs this to size the first ingest.',
+      action: 'Reply to Arjun in Teams',
+      source: { type: 'thread', title: 'Chat with Arjun', msgs: [{ who: 'Arjun', time: 'Thu 11:05', text: 'For the SIEM pilot: auth logs and admin audit first, or also API gateway?' }] },
+      draft: { kind: 'Teams message', to: ['Arjun'], text: 'Auth logs and admin audit first. API gateway in the second wave, once we know the volume.' } },
+    { id: 'freeze', tag: 'release-26.4', src: 'confluence', project: 'Release management', time: 'Wed',
+      title: '26.4 code freeze moved to 9 Oct', why: 'The release page changed; C4A’s export depends on this date.',
+      action: 'Acknowledge on the page',
+      source: { type: 'mail', from: 'Confluence', fromNote: 'Release management · edited Wed', subject: 'Release 26.4 · Plan', body: ['Code freeze moved from 7 Oct to 9 Oct. Release date unchanged.'] },
+      draft: { kind: 'Confluence comment', to: ['Release 26.4 · Plan'], text: 'Noted. C4A will plan the tenant export review before 9 Oct.' } },
+    { id: 'sanne', tag: 'sanne', src: 'mail', project: 'Contracts', time: 'Wed',
+      title: 'Sanne sent the revised SLA annex', why: 'Contracts: she asks for comments by next Friday, no rush today.',
+      action: 'Draft reply to Sanne',
+      source: { type: 'mail', from: 'Sanne', fromNote: 'Wed 14:12', subject: 'SLA annex v4', body: ['Attached the revised annex with the new response times. Comments by next Friday please.', 'Sanne'] },
+      draft: { kind: 'Reply · mail', to: ['Sanne'], text: 'Thanks Sanne, I’ll review and send comments by Thursday.' } },
+    { id: 'ci88', tag: 'CI-88', src: 'jira', project: 'CI Acceleration', time: 'Tue',
+      title: 'CI-88 needs a reviewer for the build cache', why: 'A CI Acceleration mention; the PR is ready but unassigned.',
+      action: 'Comment on CI-88',
+      source: { type: 'mail', from: 'Jira', fromNote: 'mention · Tue', subject: 'CI-88 · Remote build cache for integration tests', body: ['Bas mentioned you: “Who can review this? Cuts the integration stage from 22 to 9 minutes.”'] },
+      draft: { kind: 'Jira comment', to: ['CI-88'], text: '@Bas Great result. Rakesh, can you review this before Wednesday?' } },
+    { id: 'yuki', tag: 'yuki', src: 'teams', project: 'UI/UX', time: 'Mon',
+      title: 'Yuki shared new focus-state tokens', why: 'UI/UX, for information. A thumbs-up is enough.',
+      action: 'Reply to Yuki in Teams',
+      source: { type: 'thread', title: 'Chat with Yuki', msgs: [{ who: 'Yuki', time: 'Mon 10:20', text: 'New focus-state tokens are in the library. Feedback welcome before we roll them out.' }] },
+      draft: { kind: 'Teams message', to: ['Yuki'], text: 'Looks good, thanks Yuki. Go ahead.' } },
+    { id: 'supplier', tag: 'licence-quote', src: 'mail', project: 'Contracts', flag: 'supplier', time: 'Wed',
+      title: 'Licence renewal quote from the monitoring supplier', why: 'Supplier on Contracts; can wait until next week.',
+      action: 'Draft reply to Peter', external: true,
+      source: { type: 'mail', from: 'Peter', fromNote: 'supplier · Wed 11:20', subject: 'Renewal quote 2027 · monitoring licences',
+        body: ['Hi,', 'Please find attached our renewal quote for 2027. The price holds until 30 October.', 'Kind regards,\nPeter'] },
+      draft: { kind: 'Reply · mail', to: ['Peter'], text: 'Hi Peter,\n\nThanks for the quote. We’ll review it with Contracts and come back to you before 30 October.\n\nKind regards' } }
+  ];
+  var BY = {}; ITEMS.forEach(function (it, i) { it.prio = i; BY[it.id] = it; });
+
+  /* ---------------- State ---------------- */
+  var S = { view: 'list', cur: null, pane: 'list', restOpen: false, q: '', st: {}, drafts: {}, editing: false, chatOpen: false, chat: {}, scrollY: 0, toastTimer: null };
+  ITEMS.forEach(function (it) { S.drafts[it.id] = it.draft.text; });
+  var $ = function (id) { return document.getElementById(id); };
+  var root = document.documentElement;
+  var desk = function () { return window.innerWidth >= 960; };
+
+  /* ---------------- Helpers ---------------- */
+  function status(id) { return S.st[id] || {}; }
+  function isClosed(id) { var s = status(id); return !!(s.sent || s.done); }
+  function topItems() { return ITEMS.filter(function (it) { return it.top && !status(it.id).ni; }); }
+  function restItems() {
+    var a = ITEMS.filter(function (it) { return !it.top; });
+    var ni = ITEMS.filter(function (it) { return it.top && status(it.id).ni; });
+    return a.concat(ni);
+  }
+  function pad(n) { return ('0' + n).slice(-2); }
+  function stateChip(id) {
+    var s = status(id);
+    if (s.sent) return '<span class="state-chip">✓ sent ' + s.sent + ' · done</span>';
+    if (s.done) return '<span class="state-chip">✓ done</span>';
+    return '';
+  }
+  function section(it) { return it.top && !status(it.id).ni ? 'focus' : 'rest'; }
+
+  /* ---------------- Render: list ---------------- */
+  function renderHeader() {
+    var open = topItems().filter(function (it) { return !isClosed(it.id); }).length;
+    $('listMeta').textContent = open + ' queued · ' + restItems().length + ' deferred';
+    $('sub').textContent = open ? open + ' things, in your order. The rest can wait.' : 'All clear. Nothing needs you right now.';
+  }
+  function renderFocus() {
+    var items = topItems(), h = '';
+    /* The one primary action goes to the first item that is still open. */
+    var firstOpen = items.filter(function (it) { return !isClosed(it.id); })[0];
+    items.forEach(function (it, i) {
+      var cur = S.cur === it.id && S.view === 'item';
+      var cls = 'fi' + (it === firstOpen ? ' is-first' : '') + (isClosed(it.id) ? ' is-closed' : '') + (cur ? ' is-current' : '');
+      h += '<li class="' + cls + '" data-id="' + it.id + '">' +
+        '<button class="fi-open" data-open="' + it.id + '"' + (cur ? ' aria-current="true"' : '') + ' aria-label="Open ' + (i + 1) + ': ' + esc(it.title) + '">' +
+          '<span class="fi-mark" aria-hidden="true">▸</span>' +
+          '<span class="fi-rank" aria-hidden="true">' + pad(i + 1) + '</span>' +
+          '<span class="fi-body">' +
+            '<span class="fi-meta"><span>' + SRC[it.src] + '</span><span class="sep" aria-hidden="true">·</span><span>' + esc(it.project.toLowerCase()) + '</span>' +
+              (it.flag ? '<span class="flag">' + esc(it.flag) + '</span>' : '') + '<span class="t">' + esc(it.time) + '</span></span>' +
+            '<span class="fi-title">' + esc(it.title) + '</span>' +
+            '<span class="fi-why"><span class="k">why</span>' + esc(it.why) + '</span>' +
+          '</span>' +
+        '</button>' +
+        '<div class="fi-act">' + (isClosed(it.id) ? stateChip(it.id) : '<button class="btn-act" data-act="' + it.id + '"><span class="g" aria-hidden="true">›</span>' + esc(it.action) + '</button>') + '</div>' +
+      '</li>';
+    });
+    if (!items.length) h = '<li class="allclear">All clear. Nothing needs you right now.</li>';
+    $('focus').innerHTML = h;
+  }
+  function renderRest() {
+    var all = restItems(), q = S.q.trim().toLowerCase();
+    $('restCount').textContent = '(' + all.length + ')';
+    var list = all.filter(function (it) {
+      if (!q) return true;
+      return (it.title + ' ' + it.project + ' ' + SRC[it.src] + ' ' + it.why).toLowerCase().indexOf(q) !== -1;
+    });
+    var h = '', base = topItems().length;
+    list.forEach(function (it) {
+      var n = all.indexOf(it) + base + 1, cur = S.cur === it.id && S.view === 'item';
+      h += '<li><button class="rr' + (isClosed(it.id) ? ' is-closed' : '') + (cur ? ' is-current' : '') + '" data-open="' + it.id + '"' + (cur ? ' aria-current="true"' : '') + '>' +
+        '<span class="rr-m" aria-hidden="true">▸</span><span class="rr-n">' + pad(n) + '</span>' +
+        '<span class="rr-t"><span class="rr-title">' + esc(it.title) + '</span><span class="rr-sub">' + SRC[it.src] + ' · ' + esc(it.project.toLowerCase()) +
+        (status(it.id).ni ? ' · marked not important' : '') + '</span></span></button></li>';
+    });
+    if (!list.length) h = '<li class="rest-empty">No match for “' + esc(S.q) + '”.</li>';
+    $('restList').innerHTML = h;
+    $('restToggle').setAttribute('aria-expanded', String(S.restOpen));
+    $('restToggle').querySelector('.chev').textContent = S.restOpen ? '▾' : '▸';
+    $('restPanel').hidden = !S.restOpen;
+  }
+
+  /* ---------------- Render: item view ---------------- */
+  function sourceHTML(it) {
+    var s = it.source, h = '';
+    if (s.type === 'mail') {
+      h += '<div class="mail-from"><b>' + esc(s.from) + '</b> · ' + esc(s.fromNote) + '</div>' +
+        '<div class="mail-subj">' + esc(s.subject) + '</div><div class="mail-body">' +
+        s.body.map(function (p) { return '<p>' + esc(p).replace(/\n/g, '<br>') + '</p>'; }).join('') + '</div>';
+    } else {
+      h += '<div class="mail-from" style="margin-bottom:12px"><b>' + esc(s.title) + '</b></div><div class="thread">';
+      s.msgs.forEach(function (m) {
+        h += '<div class="msg' + (m.me ? ' me' : '') + (m.hl ? ' hl' : '') + '"><div class="msg-h"><b>' + esc(m.who) + '</b>' + esc(m.time) + '</div><div class="msg-t">' + esc(m.text) + '</div></div>';
+      });
+      h += '</div>';
+      if (s.note) h += '<div class="src-note">◷ ' + esc(s.note) + '</div>';
+    }
+    return h;
+  }
+  function sourceLabel(it) {
+    if (it.source.type === 'transcript') return 'meeting transcript';
+    return { teams: 'teams', jira: 'jira mail', confluence: 'confluence', mail: 'inbox' }[it.src] || 'inbox';
+  }
+  function chatHTML(it) {
+    var log = S.chat[it.id] || [];
+    var h = '<div class="chat" id="chat"><div class="sec-label"><b>chat</b> · about this draft</div><div class="chat-log">' +
+      '<div class="cm c">What should change? I can make it shorter, firmer, or add a date.</div>';
+    log.forEach(function (m) { h += '<div class="cm ' + (m.u ? 'u' : 'c') + '">' + esc(m.t) + '</div>'; });
+    h += '</div><div class="chat-chips">' +
+      ['Shorter', 'More direct', 'Add a deadline'].map(function (c) { return '<button class="chat-chip" data-chip="' + c + '">' + c + '</button>'; }).join('') +
+      '</div><form class="chat-form" data-chatform><span class="pr" aria-hidden="true">›</span><label class="sr" for="chatIn">Message Claude about this item</label>' +
+      '<input id="chatIn" placeholder="tell Claude what to change" autocomplete="off"><button class="icon-btn" type="submit" aria-label="Send to Claude">↵</button></form></div>';
+    return h;
+  }
+  function emptyHTML() {
+    return '<div class="tbar" aria-hidden="true"><span class="tb-dot"></span><span class="tb-rule short"></span><span class="tb-t">item</span><span class="tb-rule"></span><span class="tb-r">idle</span><span class="tb-rule short"></span></div>' +
+      '<div class="empty"><pre><span class="lam" aria-hidden="true">λ</span><b>Standing by.</b>\nSelect an item to load its next step.\n↑ ↓ to move · enter to open · esc to close\n\nNothing is sent without your click.</pre></div>';
+  }
+  function renderItem() {
+    var col = $('itemCol');
+    if (S.view !== 'item' || !S.cur) { col.innerHTML = emptyHTML(); return; }
+    var it = BY[S.cur], st = status(it.id), d = it.draft, locked = !!st.sent;
+    var rankIdx = topItems().indexOf(it), sec = section(it);
+    var n = rankIdx > -1 ? rankIdx + 1 : restItems().indexOf(it) + topItems().length + 1;
+    var draftRows = '<div class="draft-row"><span class="k">to</span><span class="chips">' + d.to.map(function (t) { return '<span class="chip">' + esc(t) + '</span>'; }).join('') + '</span></div>';
+    if (d.subject) draftRows += '<div class="draft-row"><span class="k">subject</span><span>' + esc(d.subject) + '</span></div>';
+    if (d.when) draftRows += '<div class="draft-row"><span class="k">when</span><span>' + esc(d.when) + '</span></div>';
+
+    col.innerHTML =
+      '<div class="iv-top"><button class="btn-back" data-back><span class="g" aria-hidden="true">‹</span>Back</button>' +
+        '<span class="crumb" aria-label="Location">' + sec + '<span class="sep" aria-hidden="true">›</span><b>' + esc(it.tag) + '</b></span></div>' +
+      '<div class="tbar"><span class="tb-dot" aria-hidden="true"></span><span class="tb-rule short" aria-hidden="true"></span><span class="tb-t">' + esc(it.tag) + '</span><span class="tb-rule" aria-hidden="true"></span>' +
+        '<span class="tb-r">' + sec + ' · #' + n + '</span><button class="btn-close" data-back aria-label="Close item">esc ✕</button></div>' +
+      '<div class="iv-scroll' + (S.anim ? ' enter' : '') + '">' +
+        '<div class="iv-meta"><span>' + SRC[it.src] + '</span><span class="sep" aria-hidden="true">·</span><span>' + esc(it.project.toLowerCase()) + '</span>' +
+          (it.flag ? '<span class="flag">' + esc(it.flag) + '</span>' : '') + '<span class="sep" aria-hidden="true">·</span><span>' + esc(it.time) + '</span></div>' +
+        '<h2 class="iv-title" id="ivTitle" tabindex="-1">' + esc(it.title) + '</h2>' +
+        '<div class="iv-why"><span class="k">why</span><p><span class="sr">Claude: </span>' + esc(it.why) + '</p></div>' +
+        '<div class="sec-label"><b>source</b> · ' + sourceLabel(it) + '</div>' +
+        '<div class="card src-card">' + sourceHTML(it) + '</div>' +
+        '<div class="sec-label"><b>draft</b> · ' + esc(d.kind.toLowerCase()) + '</div>' +
+        '<div class="card draft' + (S.editing && !locked ? ' is-editing' : '') + (locked ? ' is-locked' : '') + '">' + draftRows +
+          '<label class="sr" for="draftText">Draft text</label>' +
+          '<textarea id="draftText" ' + (locked ? 'readonly' : '') + '>' + esc(S.drafts[it.id]) + '</textarea>' +
+          (it.external ? '<div class="warn">Goes outside Planon. Check before sending.</div>' : '') +
+          '<div class="draft-foot">' + (locked ? 'Sent once. This draft is locked.' : 'Edit freely. Nothing is sent until you press Send.') + '</div>' +
+        '</div>' +
+        (S.chatOpen && !locked ? chatHTML(it) : '') +
+      '</div>' +
+      '<div class="iv-bar">' + barHTML(it) + '</div>';
+    S.anim = false;
+  }
+  function barHTML(it) {
+    var st = status(it.id), locked = !!st.sent;
+    var q = function (key, glyph, label, k, pressed) {
+      return '<button class="qbtn" data-' + key + (locked ? ' aria-disabled="true"' : '') + (pressed !== undefined ? ' aria-pressed="' + pressed + '"' : '') +
+        ' aria-keyshortcuts="' + k + '"><span class="g" aria-hidden="true">' + glyph + '</span><span>' + label + '</span><span class="kbd" aria-hidden="true">' + k + '</span></button>';
+    };
+    return '<div class="quiet">' + q('edit', '✎', 'Edit', 'e', S.editing) + q('chat', '›_', 'Chat about this', 'c', S.chatOpen) + q('notimp', '↓', 'Not important', 'n') + q('done', '✓', 'Done', 'd') + '</div>' +
+      (locked
+        ? '<button class="btn-send is-sent" id="sendBtn" aria-disabled="true">✓ Sent ' + st.sent + ' · locked</button>'
+        : '<button class="btn-send" id="sendBtn" data-send>Send <span aria-hidden="true">↵</span></button>') +
+      (locked ? '<div class="sent-note">Marked done · sent once</div>' : '');
+  }
+  function renderPane() {
+    var p = S.view === 'item' ? S.pane : 'list';
+    $('listCol').classList.toggle('is-active', p === 'list');
+    $('itemCol').classList.toggle('is-active', p === 'item');
+  }
+
+  function renderAll() {
+    $('app').setAttribute('data-view', S.view);
+    root.setAttribute('data-view', S.view);
+    renderHeader(); renderFocus(); renderRest(); renderItem(); renderPane();
+  }
+
+  /* ---------------- Toast ---------------- */
+  function toast(msg, undo) {
+    clearTimeout(S.toastTimer);
+    $('toastHost').innerHTML = '<div class="toast"><span>' + esc(msg) + '</span>' + (undo ? '<button data-undo>Undo</button>' : '') + '</div>';
+    S.undo = undo || null;
+    S.toastTimer = setTimeout(function () { $('toastHost').innerHTML = ''; S.undo = null; }, 6000);
+  }
+
+  /* ---------------- Ask Claude sheet ---------------- */
+  var askReturn = null;
+  function openAsk() {
+    askReturn = document.activeElement;
+    $('sheetHost').innerHTML = '<div class="scrim" data-ask-close></div>' +
+      '<div class="sheet" role="dialog" aria-modal="true" aria-labelledby="askTitle">' +
+        '<div class="tbar"><span class="tb-dot" aria-hidden="true"></span><span class="tb-rule short" aria-hidden="true"></span><h2 class="tb-t" id="askTitle" style="margin:0;font-size:inherit">ask claude</h2><span class="tb-rule" aria-hidden="true"></span><button class="btn-close" data-ask-close aria-label="Close">esc ✕</button></div>' +
+        '<div class="sheet-body"><form data-askform><div class="ask-in"><span class="pr" aria-hidden="true">›</span><label class="sr" for="askIn">Your question</label><textarea id="askIn" placeholder="update the DoD page with Tuesday’s decisions…"></textarea></div>' +
+        '<div class="chat-chips"><button type="button" class="chat-chip" data-askchip="Update a Confluence page: ">Update a Confluence page</button><button type="button" class="chat-chip" data-askchip="Mail outside Planon: ">Mail outside Planon</button></div>' +
+        '<div class="sheet-foot"><small>Nothing is sent or changed without your click.</small><button class="btn-ask" type="submit">Ask ↵</button></div></form>' +
+        '<div class="ask-reply" id="askReply"></div></div>' +
+      '</div>';
+    $('askIn').focus();
+  }
+  function closeAsk() { $('sheetHost').innerHTML = ''; if (askReturn && askReturn.focus) askReturn.focus(); }
+
+  /* ---------------- Navigation ---------------- */
+  function openItem(id, focusDraft) {
+    if (S.view === 'list') S.scrollY = window.scrollY;
+    S.cur = id; S.view = 'item'; S.pane = 'item'; S.anim = true; S.editing = !!focusDraft; S.chatOpen = false;
+    renderAll();
+    if (!desk()) window.scrollTo(0, 0);
+    var t = focusDraft ? $('draftText') : $('ivTitle');
+    if (t) t.focus({ preventScroll: desk() });
+  }
+  function back() {
+    var prev = S.cur;
+    S.view = 'list'; S.pane = 'list'; S.cur = null; S.editing = false; S.chatOpen = false;
+    renderAll();
+    if (!desk()) window.scrollTo(0, S.scrollY || 0);
+    var el = document.querySelector('[data-open="' + prev + '"]');
+    if (el) el.focus({ preventScroll: true });
+  }
+
+  /* ---------------- Events ---------------- */
+  document.addEventListener('click', function (e) {
+    var t = e.target.closest('button, [data-ask-close]');
+    if (!t) return;
+    var id;
+    if ((id = t.getAttribute('data-open'))) return openItem(id, false);
+    if ((id = t.getAttribute('data-act'))) return openItem(id, true);
+    if (t.id === 'restToggle') { S.restOpen = !S.restOpen; renderRest(); if (S.restOpen) $('q').focus(); return; }
+    if (t.hasAttribute('data-back')) return back();
+    if (t.hasAttribute('data-ask')) return openAsk();
+    if (t.hasAttribute('data-ask-close')) return closeAsk();
+    if (t.hasAttribute('data-askchip')) { var a = $('askIn'); a.value = t.getAttribute('data-askchip'); a.focus(); return; }
+    if (t.hasAttribute('data-undo')) { if (S.undo) S.undo(); $('toastHost').innerHTML = ''; return; }
+    if (t.getAttribute('aria-disabled') === 'true') return;
+    var cur = S.cur;
+    if (t.hasAttribute('data-send') && cur && !status(cur).sent) {
+      S.st[cur] = { sent: '10:42' }; S.editing = false; S.chatOpen = false;
+      renderHeader(); renderFocus(); renderRest(); renderItem(); renderPane();
+      var b = $('sendBtn'); if (b) b.focus();
+      return;
+    }
+    if (t.hasAttribute('data-edit') && cur) return toggleEdit();
+    if (t.hasAttribute('data-chat') && cur) return toggleChat();
+    if (t.hasAttribute('data-chip') && cur) return chatSay(cur, t.getAttribute('data-chip'));
+    if (t.hasAttribute('data-notimp') && cur) return notImportant();
+    if (t.hasAttribute('data-done') && cur) return markDone();
+  });
+
+  function toggleEdit() {
+    S.editing = !S.editing; renderItem();
+    var ta = $('draftText');
+    if (S.editing && ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
+    else { var eb = document.querySelector('[data-edit]'); if (eb) eb.focus(); }
+  }
+  function toggleChat() {
+    S.chatOpen = !S.chatOpen; renderItem();
+    if (S.chatOpen) { var ci = $('chatIn'); if (ci) { ci.focus({ preventScroll: true }); ci.scrollIntoView({ block: 'center' }); } }
+  }
+  function notImportant() {
+    var cur = S.cur; S.st[cur] = { ni: true }; back();
+    toast('Moved to Everything else. I’ll rank it lower next time.', function () { delete S.st[cur]; renderHeader(); renderFocus(); renderRest(); });
+  }
+  function markDone() {
+    var cur = S.cur; S.st[cur] = { done: true }; back();
+    toast('✓ Marked done.', function () { delete S.st[cur]; renderHeader(); renderFocus(); renderRest(); });
+  }
+
+  function chatSay(id, text) {
+    var log = S.chat[id] = S.chat[id] || [];
+    log.push({ u: true, t: text });
+    var d = S.drafts[id], reply = 'Updated the draft. Check it before you send.';
+    var lc = text.toLowerCase();
+    if (lc.indexOf('short') > -1) { var parts = d.split('\n\n'); S.drafts[id] = parts[0].length < 25 ? parts.slice(0, 2).join('\n\n') : parts[0]; reply = 'Shortened it to the essentials.'; }
+    else if (lc.indexOf('direct') > -1) { S.drafts[id] = d.replace(/a gentle nudge on/i, 'following up on').replace(/Happy to pair for 15 minutes on it\./, 'I need an answer by Tuesday.'); reply = 'Made it more direct and kept it polite.'; }
+    else if (lc.indexOf('deadline') > -1) { S.drafts[id] = d + '\n\nPlease reply by Tuesday 6 Oct.'; reply = 'Added a deadline: Tuesday 6 Oct.'; }
+    log.push({ u: false, t: reply });
+    renderItem();
+    var ci = $('chatIn'); if (ci) ci.focus({ preventScroll: true });
+  }
+
+  document.addEventListener('submit', function (e) {
+    e.preventDefault();
+    if (e.target.hasAttribute('data-chatform')) {
+      var v = $('chatIn').value.trim(); if (v && S.cur) { chatSay(S.cur, v); }
+    }
+    if (e.target.hasAttribute('data-askform')) {
+      var q = $('askIn').value.trim();
+      $('askReply').innerHTML = q ? '<div class="cm c">In Droplet I’d prepare this as a draft card and show it to you first. Nothing changes until you press Send.</div>' : '';
+    }
+  });
+  document.addEventListener('input', function (e) {
+    if (e.target.id === 'q') { S.q = e.target.value; renderRest(); }
+    if (e.target.id === 'draftText' && S.cur) S.drafts[S.cur] = e.target.value;
+  });
+  /* Pane focus follows the keyboard / pointer. */
+  document.addEventListener('focusin', function (e) {
+    if (S.view !== 'item') return;
+    var p = $('listCol').contains(e.target) ? 'list' : $('itemCol').contains(e.target) ? 'item' : null;
+    if (p && p !== S.pane) { S.pane = p; renderPane(); }
+  });
+  document.addEventListener('keydown', function (e) {
+    var tag = (e.target.tagName || '').toLowerCase(), typing = tag === 'input' || tag === 'textarea';
+    if (e.key === 'Escape') {
+      if ($('sheetHost').innerHTML) return closeAsk();
+      if (S.view === 'item') return back();
+      return;
+    }
+    if (typing || e.metaKey || e.ctrlKey || e.altKey || $('sheetHost').innerHTML) return;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      var rows = [].slice.call($('listCol').querySelectorAll('[data-open]'));
+      var i = rows.indexOf(document.activeElement);
+      if (i === -1 && !$('listCol').contains(document.activeElement) && document.activeElement !== document.body) return;
+      e.preventDefault();
+      var nx = rows[Math.max(0, Math.min(rows.length - 1, i === -1 ? 0 : i + (e.key === 'ArrowDown' ? 1 : -1)))];
+      if (nx) nx.focus();
+      return;
+    }
+    if (e.key === '/') { e.preventDefault(); if (!S.restOpen) { S.restOpen = true; renderRest(); } $('q').focus(); return; }
+    if (S.view !== 'item' || S.pane !== 'item' || !S.cur || status(S.cur).sent) return;
+    if (e.key === 'e') { e.preventDefault(); toggleEdit(); }
+    else if (e.key === 'c') { e.preventDefault(); toggleChat(); }
+    else if (e.key === 'n') { e.preventDefault(); notImportant(); }
+    else if (e.key === 'd') { e.preventDefault(); markDone(); }
+  });
+
+  /* ---------------- Boot ---------------- */
+  renderAll();
+})();
+</script>
