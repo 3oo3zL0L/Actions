@@ -30,6 +30,13 @@
       return Promise.resolve(rt.mcp.callTool(rt.SERVER, tool, input || {}, options)).then(function (res) {
         if (res && res.isError) throw { code: "tool_error", message: U().clip(U().resultText(res), 200) || "The tool reported a failure.", result: res };
         return res;
+      }, function (e) {
+        /* A tool failure rejects with code tool_error and the tool's own
+           envelope on .result: prefer its words over a generic message. */
+        var code = e && typeof e === "object" && e.code ? String(e.code) : "upstream_error";
+        var msg = e && typeof e === "object" ? String(e.message || "") : String(e || "");
+        var own = e && e.result ? U().clip(U().resultText(e.result), 200) : "";
+        throw { code: code, message: own || U().clip(msg, 200), retryable: !!(e && e.retryable), result: e && e.result };
       });
     } catch (e) { return Promise.reject({ code: "upstream_error", message: String(e && e.message || e) }); }
   };

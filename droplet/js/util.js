@@ -37,29 +37,76 @@
     return out;
   };
 
-  /* All JSON objects in an MCP CallToolResult: per text content block (each may
-     hold several concatenated objects), arrays flattened; payload as fallback. */
+  /* The MCP result envelope (artifact mcp.d.ts, CallToolResult):
+     {content: ContentBlock[], structuredContent?, payload?} where payload is
+     structuredContent when present, else the first text block parsed as JSON,
+     else that text verbatim. Connectors answer in JSON or in plain text
+     ("Draft created with 1 recipient(s).\nid: …\nwebLink: …"). These helpers
+     accept every form: text blocks (one or several), an empty content list
+     with a string payload, structuredContent/payload objects, an object that
+     only holds the text ({text}, {content}, {result}, {message}), and a bare
+     string. */
+  var HOLDER_KEYS = ["text", "content", "result", "message", "output"];
+  function blockTexts(blocks) {
+    var out = [];
+    (Array.isArray(blocks) ? blocks : []).forEach(function (b) {
+      if (typeof b === "string") out.push(b);
+      else if (b && typeof b === "object") {
+        if (typeof b.text === "string" && (!b.type || b.type === "text")) out.push(b.text);
+        else if (b.type === "resource" && b.resource && typeof b.resource.text === "string") out.push(b.resource.text);
+      }
+    });
+    return out;
+  }
+  /* Text held by an object such as {text: "..."} or {content: [{type:"text", text}]}. */
+  function holderTexts(o) {
+    if (!o || typeof o !== "object" || Array.isArray(o)) return [];
+    for (var i = 0; i < HOLDER_KEYS.length; i++) {
+      var v = o[HOLDER_KEYS[i]];
+      if (typeof v === "string" && v) return [v];
+      if (Array.isArray(v)) { var t = blockTexts(v); if (t.length) return t; }
+    }
+    return [];
+  }
+  function isEnvelope(res) {
+    return !!res && typeof res === "object" && ("content" in res || "payload" in res || "structuredContent" in res);
+  }
   U.resultObjects = function (res) {
     var out = [];
     function add(v) {
       if (Array.isArray(v)) v.forEach(add);
       else if (v && typeof v === "object") out.push(v);
     }
-    if (res && Array.isArray(res.content)) {
-      res.content.forEach(function (b) {
-        if (b && b.type === "text" && typeof b.text === "string") U.parseJsonValues(b.text).forEach(add);
-      });
-    }
-    if (!out.length && res) {
-      if (res.structuredContent && typeof res.structuredContent === "object") add(res.structuredContent);
-      else if (res.payload && typeof res.payload === "object") add(res.payload);
-      else if (typeof res.payload === "string") U.parseJsonValues(res.payload).forEach(add);
+    function parse(t) { U.parseJsonValues(t).forEach(add); }
+    if (res == null) return out;
+    if (typeof res === "string") { parse(res); return out; }
+    blockTexts(res.content).forEach(parse);
+    [res.structuredContent, res.payload].forEach(function (v) {
+      if (out.length || v == null) return;
+      if (typeof v === "string") return parse(v);
+      var held = holderTexts(v);
+      if (held.length) { held.forEach(parse); if (!out.length) add(v); return; }
+      add(v);
+    });
+    if (!out.length && !isEnvelope(res) && typeof res === "object") {
+      var held2 = holderTexts(res);
+      if (held2.length) held2.forEach(parse); else add(res);
     }
     return out;
   };
   U.resultText = function (res) {
-    if (!res || !Array.isArray(res.content)) return typeof (res && res.payload) === "string" ? res.payload : "";
-    return res.content.filter(function (b) { return b && b.type === "text"; }).map(function (b) { return b.text; }).join("\n");
+    if (res == null) return "";
+    if (typeof res === "string") return res;
+    var t = blockTexts(res.content);
+    if (t.length) return t.join("\n");
+    var vals = [res.structuredContent, res.payload];
+    for (var i = 0; i < vals.length; i++) {
+      if (typeof vals[i] === "string" && vals[i]) return vals[i];
+      var held = holderTexts(vals[i]);
+      if (held.length) return held.join("\n");
+    }
+    if (!isEnvelope(res)) { var h = holderTexts(res); if (h.length) return h.join("\n"); }
+    return "";
   };
 
   /* HTML mail body to plain text. DOMParser builds an inert document: no
