@@ -1,7 +1,7 @@
 const { test, expect } = require('./helpers/harness');
 
 function writeCalls(calls) {
-  return calls.filter((c) => c.kind === 'mcp' && (c.tool !== 'read_resource' || /DRAFT/.test(c.input.uri)) && c.tool !== 'outlook_email_search' && c.tool !== 'get_me');
+  return calls.filter((c) => c.kind === 'mcp' && (c.tool !== 'read_resource' || /AAkALg/.test(c.input.uri)) && c.tool !== 'outlook_email_search' && c.tool !== 'get_me');
 }
 
 test.describe('Send', () => {
@@ -16,7 +16,7 @@ test.describe('Send', () => {
 
     const w = writeCalls(await app.calls('mcp'));
     expect(w.map((c) => c.tool)).toEqual(['outlook_create_reply_draft', 'read_resource', 'outlook_send_draft']);
-    expect(w[0].input).toEqual({ messageId: 'a3-bram', bodyType: 'html', body: '<p>Hi Bram,</p><p>OK from me: go with the read replica.</p><p>Sam</p>' });
+    expect(w[0].input).toEqual({ messageId: 'a3-bram', bodyType: 'html', body: '<p>Hi Bram,</p><p>OK from me: go with the read replica.</p><p>KR<br>Sam</p>' });
     const draftId = await page.evaluate(() => Object.keys(window.__stub.drafts)[0]);
     expect(w[1].input.uri).toBe('mail:///messages/' + encodeURIComponent(draftId));
     expect(w[2].input).toEqual({ messageId: draftId });
@@ -137,15 +137,15 @@ test.describe('Send', () => {
     expect((await app.calls('mcp')).filter((c) => c.tool === 'outlook_send_draft')).toHaveLength(0);
   });
 
-  test('an item without a prepared reply cannot be sent empty', async ({ app, page }) => {
-    await app.boot();
+  test('without Claude there is no prepared reply, and an empty draft cannot be sent', async ({ app, page }) => {
+    await app.boot({ noSample: true });
     await page.click('[data-act="a4-lena"]');
     await expect(page.locator('#draftText')).toHaveValue('');
     await expect(page.locator('#sendBtn')).toHaveAttribute('aria-disabled', 'true');
     await page.click('#sendBtn', { force: true });
     expect(await app.writeTools()).toEqual([]);
-    await page.click('[data-edit]');
-    await page.keyboard.type('Hi Lena,\n\nSigned off.\n\nSam');
+    await page.click('#draftText');
+    await page.keyboard.type('Hi Lena,\n\nSigned off.\n\nKR\nSam');
     await expect(page.locator('#sendBtn')).not.toHaveAttribute('aria-disabled', 'true');
   });
 

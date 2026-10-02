@@ -470,5 +470,12 @@ svg { display: block; flex: none; }
 .diag dd { margin: 0; color: var(--ink); overflow-wrap: anywhere; }
 .diag button { margin-top: 4px; margin-left: -10px; }
 .warn.is-problem > span { flex: 1; min-width: 0; }
+/* On a laptop ★ is icon-only (its label stays for screen readers), so the
+   four quiet buttons and Send fit on one row in the panel. */
+@media (min-width: 960px) {
+  .qbtn .q-l { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .qbtn[data-star] { min-width: 46px; justify-content: center; }
+  .qbtn[data-star] .ico { width: 18px; height: 18px; }
+}
 .btn-send[aria-disabled="true"]:not(.is-sent) { opacity: 0.5; cursor: default; }
 .btn-send.is-confirm { background: transparent; color: var(--accent-hi); box-shadow: inset 0 0 0 2px var(--accent); clip-path: none; }

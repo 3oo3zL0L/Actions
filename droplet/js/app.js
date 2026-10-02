@@ -286,7 +286,7 @@
   function barHTML(it) {
     var st = sendState(it.id), locked = st.phase === 'sent', busy = st.phase === 'sending';
     var q = function (key, icon, label, k, pressed) {
-      return '<button class="qbtn" data-' + key + (locked || busy ? ' aria-disabled="true"' : '') + (pressed !== undefined ? ' aria-pressed="' + pressed + '"' : '') +
+      return '<button class="qbtn" data-' + key + (key === 'star' ? ' title="Important"' : '') + (locked || busy ? ' aria-disabled="true"' : '') + (pressed !== undefined ? ' aria-pressed="' + pressed + '"' : '') +
         (k ? ' aria-keyshortcuts="' + k + '"' : '') + '>' + ico(icon) + '<span>' + label + '</span>' + (k ? '<span class="kbd" aria-hidden="true">' + k + '</span>' : '') + '</button>';
     };
     var empty = !String(S.drafts[it.id] || '').trim(), btn;
@@ -295,7 +295,7 @@
     else if (st.phase === 'unclear') btn = '<button class="btn-send is-confirm" id="sendBtn" data-send>' + (st.confirm ? 'Yes, send again' : 'Send again anyway') + '</button>';
     else btn = '<button class="btn-send" id="sendBtn" data-send' + (empty ? ' aria-disabled="true"' : '') + '>' + ico('send') + 'Send</button>';
     return '<div class="quiet">' + q('chat', 'chat', 'Chat<span class="q-x"> about this</span>', 'c', S.chatOpen) +
-        q('notimp', 'down', 'Not important', 'n') + q('star', 'star', 'Important', '', S.verdict[it.id] === 'up') + q('done', 'check', 'Done', 'd') + '</div>' + btn +
+        q('notimp', 'down', 'Not important', 'n') + q('star', 'star', '<span class="q-l">Important</span>', '', S.verdict[it.id] === 'up') + q('done', 'check', 'Done', 'd') + '</div>' + btn +
       (locked ? '<div class="sent-note">' + (S.doneNow[it.id] ? 'Marked done · sent once' : 'Sent once') + '</div>' : '');
   }
   function renderPane() {
@@ -355,8 +355,10 @@
         S.items.forEach(function (m) {
           keep[m.id] = 1;
           var saved = S.rankings[m.key];
-          if (saved && saved.v === 1) m.r = saved;
-          else if (saved && saved.draftOnly && typeof saved.draft === 'string') m.lazyDraft = saved.draft;
+          /* Drafts cached by an earlier version go through the same format safety net (idempotent). */
+          var fix = function (t) { return rank.normalizeDraft(t, { senderFirst: m.senderName, sign: rank.signName(S.me) }); };
+          if (saved && saved.v === 1) { m.r = saved; if (saved.draft) saved.draft = fix(saved.draft); }
+          else if (saved && saved.draftOnly && typeof saved.draft === 'string') m.lazyDraft = fix(saved.draft);
           var sent = S.sentDb && S.sentDb[m.key];
           if (sent && (!S.send[m.id] || S.send[m.id].phase === 'idle')) S.send[m.id] = { phase: 'sent', sentAt: new Date(sent.sentAt) };
         });
@@ -649,7 +651,9 @@
   document.addEventListener('input', function (e) {
     if (e.target.id === 'q') { S.q = e.target.value; renderRest(); }
     if (e.target.id === 'draftText' && S.cur) {
+      var first = !S.touched[S.cur];
       S.drafts[S.cur] = e.target.value; S.touched[S.cur] = true;
+      if (first) { var ft = document.querySelector('.draft-foot'), cit = S.byId[S.cur]; if (ft && cit) ft.innerHTML = draftFoot(cit, false, false); }
       var b = $('sendBtn'), st = sendState(S.cur);
       if (b && b.hasAttribute('data-send') && st.phase !== 'unclear') {
         if (e.target.value.trim()) b.removeAttribute('aria-disabled'); else b.setAttribute('aria-disabled', 'true');

@@ -56,6 +56,7 @@ function installDropletStub(cfg) {
     setFault: function (tool, f) { if (f == null) delete faults[tool]; else faults[tool] = f; },
     setRank: function (r) { cfg.rank = r; },
     setRankPlan: function (p) { cfg.rankPlan = p; },
+    setDraftAnswer: function (d) { cfg.draftAnswer = d; },
     drafts: drafts, sent: sent
   };
   function findMail(id) { return mailList.filter(function (m) { return m.id === id; })[0]; }
@@ -171,7 +172,8 @@ function installDropletStub(cfg) {
   function answer(input, options, asJson) {
     calls.push({ kind: "sample", json: asJson, input: JSON.parse(JSON.stringify(input)), options: options ? JSON.parse(JSON.stringify(options)) : null });
     var prompt = typeof input === "string" ? input : input.map(function (t) { return t.content; }).join("\n");
-    return later(null).then(function () {
+    var extra = /You draft one email reply/.test(prompt) ? cfg.draftDelay || 0 : 0;
+    return later(null).then(function () { return new Promise(function (r) { setTimeout(r, extra); }); }).then(function () {
       if (cfg.sampleFault) throw { code: cfg.sampleFault, message: cfg.sampleFault };
       var a = /You rank unread email/.test(prompt) ? rankAnswer(prompt) : /You draft one email reply/.test(prompt) ? draftAnswer(prompt) :
         (chatQueue.length > 1 ? chatQueue.shift() : chatQueue[0] || { reply: "OK.", draft: null });
