@@ -1,8 +1,0 @@
-<% @items.group_by(&:program).sort_by { |program, _| [ program.position, program.name ] }.each do |program, items| -%>
-## <%= program.name %>
-
-<% items.each do |item| -%>
-<%= item.to_markdown %>
-<% end -%>
-
-<% end -%>
