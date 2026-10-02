@@ -1,4 +1,4 @@
-# Droplet: product brief v1 (concept, ter goedkeuring)
+# Droplet: product brief v1 (goedgekeurd 2 okt 2026)
 
 **Wat het is.** Je persoonlijke cockpit. Het is een claude.ai Artifact die via jouw eigen connectors (Microsoft 365 en Atlassian Rovo) leest en handelt. Er is geen hosting, geen API-key en geen app-registratie.
 
@@ -17,7 +17,7 @@ Daaronder staat de rest, ingeklapt en doorzoekbaar. Daarnaast is er één global
 | # | Regel |
 |---|---|
 | R1 | Een **standstill**-mail uit Jira over **OIDC** staat altijd op 1. |
-| R2 | De **projectvolgorde** is: 1 Platform Stability, 2 C4A, 3 OIDC, 4 SIEM Integration, 5 Release management, 6 Contracts, 7 CI Acceleration, 8 UI/UX. Vragen van **productmanagers, architecten en teamleden** van die projecten tellen het zwaarst. Alles buiten deze lijst komt lager. |
+| R2 | De **projectvolgorde** is: 1 Platform Stability, 2 C4A, 3 OIDC, 4 SIEM Integration, 5 Release management, 6 Contracts, 7 CI Acceleration, 8 UI/UX. Vragen van **productmanagers, architecten en teamleden** van die projecten tellen het zwaarst. Jakarta, Object Store en Platform Core zijn afgerond of herbelegd: **helemaal uit beeld**. Release management herkent Claude aan zijn Confluence-pagina. |
 | R3 | **Wachtpunten.** Claude haalt jouw vragen aan anderen uit je verstuurde mail en Teams. Komt er na **3 werkdagen** geen antwoord en is de Confluence-pagina niet bijgewerkt, dan komt het item terug met een **conceptbericht in Teams** om na te jagen. |
 | R4 | **Klaar** betekent: een mail is beantwoord, in een Teams-chat heb je gereageerd, op een Jira-item heb je een comment gezet. |
 | R5 | Heb je **vandaag een meeting** met iemand, dan stijgen diens open items. Dat gebeurt alleen als er open items zijn. |
@@ -63,4 +63,5 @@ Daaronder staat de rest, ingeklapt en doorzoekbaar. Daarnaast is er één global
 ## Technische risico's (DEV-spike vóór slice 1)
 - **Transcripten.** De M365-connector kent `meeting-transcript:///`. DEV controleert of dat voor jouw meetings echt iets teruggeeft.
 - **Teams versturen.** Volgens Action Desk was daarvoor een IT-permissie nodig. Krijgen we die niet, dan biedt de najaagkaart **Open in Teams** en **Copy**.
+- **Release management.** De Cowork-projecten zijn niet via een connector bereikbaar. Daarom geldt alleen de Confluence-pagina als signaal.
 - **Confluence schrijven.** De Rovo-scope `write:page:confluence` is aanwezig.
