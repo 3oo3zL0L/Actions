@@ -5,6 +5,7 @@
 
   U.ORG_DOMAIN = "planonsoftware.com";
   U.OUTLOOK_HOSTS = ["outlook.office365.com", "outlook.office.com"];
+  U.TEAMS_HOSTS = ["teams.microsoft.com"];
 
   U.esc = function (s) {
     return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
@@ -183,6 +184,15 @@
       var u = new URL(String(url || ""));
       if (u.protocol !== "https:" || u.username || u.password) return null;
       return U.OUTLOOK_HOSTS.indexOf(u.hostname.toLowerCase()) >= 0 ? u.href : null;
+    } catch (e) { return null; }
+  };
+
+  /* Only https links to Teams on the web are ever opened. */
+  U.safeTeamsLink = function (url) {
+    try {
+      var u = new URL(String(url || ""));
+      if (u.protocol !== "https:" || u.username || u.password) return null;
+      return U.TEAMS_HOSTS.indexOf(u.hostname.toLowerCase()) >= 0 ? u.href : null;
     } catch (e) { return null; }
   };
 

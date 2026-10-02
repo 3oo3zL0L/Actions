@@ -45,7 +45,7 @@
     var uri = typeof o.uri === "string" && o.uri.indexOf(PREFIX) === 0 ? o.uri : mail.uriFor(id);
     if (uri === o.uri) learnUriStyle(id, uri);
     var m = {
-      id: id, key: U.keyOf(id), uri: uri,
+      src: "mail", id: id, key: U.keyOf(id), uri: uri,
       subject: String(o.subject || ""), sender: String(sender).trim(), senderName: String(senderName),
       received: String(o.receivedDateTime || ""), summary: String(o.summary || o.bodyPreview || "").replace(/\r\n/g, "\n"),
       importance: String(o.importance || "normal").toLowerCase(), hasAttachments: !!o.hasAttachments,
