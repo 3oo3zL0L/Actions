@@ -60,18 +60,21 @@ const DETAILS = {
   }
 };
 
-/* Scripted Claude: deliberately ranks the R1 standstill low. */
+/* Scripted Claude: deliberately ranks the R1 standstill low. Every mail gets
+   a draft in the user's style (Hi …, KR + name), except: a7-yuki's draft breaks
+   the format rules (the normaliser fixes it) and a10-page2 has none (Claude
+   skipped it, so it is written lazily when the item opens). */
 const RANK_PLAN = {
-  'a3-bram': { group: 'now', rank: 1, project: 'Platform Stability', why: 'Architect on your top project; needs a yes or no today.', action: 'reply', label: 'Draft reply to Bram', draft: 'Hi Bram,\n\nOK from me: go with the read replica.\n\nSam' },
-  'a2-anouk': { group: 'now', rank: 2, project: 'Platform Stability › C4A', why: 'PM on C4A has to give Sales a date today.', action: 'reply', label: 'Draft reply to Anouk', draft: 'Hi Anouk,\n\nYes, if the export API passes review by Wednesday. Otherwise 26.5.\n\nSam' },
-  'a4-lena': { group: 'now', rank: 3, project: 'Release management', why: 'Deadline Monday for the DoD sign-off.', action: 'open', label: 'Open the DoD mail' },
-  'a5-tom': { group: 'now', rank: 4, project: 'SIEM Integration', why: 'SIEM architect needs this to size the first ingest.', action: 'reply', label: 'Draft reply to Tom', draft: 'Hi Tom,\n\nAuth logs and admin audit first.\n\nSam' },
-  'a8-kees': { group: 'now', rank: 5, project: 'CI Acceleration', why: 'The PR is ready but has no reviewer.', action: 'open', label: 'Open the CI mail' },
-  'a1-standstill': { group: 'later', rank: 6, project: 'OIDC', why: 'Jira standstill on OIDC.', action: 'open', label: 'Open the standstill' },
-  'a7-yuki': { group: 'later', rank: 7, project: 'UI/UX', why: 'For information; a thumbs-up is enough.', action: 'reply', label: 'Draft reply to Yuki', draft: 'Looks good, thanks Yuki.\n\nSam' },
-  'a6-peter': { group: 'later', rank: 8, project: 'Contracts', why: 'Supplier on Contracts; can wait until next week.', action: 'reply', label: 'Draft reply to Peter', draft: 'Hi Peter,\n\nThanks for the quote. We will come back to you before 30 October.\n\nSam' },
-  'inj-eve': { group: 'later', rank: 9, project: null, why: 'Suspicious: asks to send data to an outside party.', action: 'open', label: 'Open the request' },
-  'a9-jakarta': { group: 'hidden', rank: 10, project: null, why: 'Jakarta is out of view.', action: 'open', label: 'Open' },
+  'a3-bram': { group: 'now', rank: 1, project: 'Platform Stability', why: 'Architect on your top project; needs a yes or no today.', action: 'reply', label: 'Draft reply to Bram', draft: 'Hi Bram,\n\nOK from me: go with the read replica.\n\nKR\nSam' },
+  'a2-anouk': { group: 'now', rank: 2, project: 'Platform Stability › C4A', why: 'PM on C4A has to give Sales a date today.', action: 'reply', label: 'Draft reply to Anouk', draft: 'Hi Anouk,\n\nYes, if the export API passes review by Wednesday. Otherwise 26.5.\n\nKR\nSam' },
+  'a4-lena': { group: 'now', rank: 3, project: 'Release management', why: 'Deadline Monday for the DoD sign-off.', action: 'open', label: 'Open the DoD mail', draft: 'Hi Lena,\n\nThanks, I will sign off the DoD page before Monday.\n\nKR\nSam' },
+  'a5-tom': { group: 'now', rank: 4, project: 'SIEM Integration', why: 'SIEM architect needs this to size the first ingest.', action: 'reply', label: 'Draft reply to Tom', draft: 'Hi Tom,\n\nAuth logs and admin audit first.\n\nKR\nSam' },
+  'a8-kees': { group: 'now', rank: 5, project: 'CI Acceleration', why: 'The PR is ready but has no reviewer.', action: 'open', label: 'Open the CI mail', draft: 'Hi Kees,\n\nGreat result. I will find a reviewer this week.\n\nKR\nSam' },
+  'a1-standstill': { group: 'later', rank: 6, project: 'OIDC', why: 'Jira standstill on OIDC.', action: 'open', label: 'Open the standstill', draft: 'Hi team,\n\nI will choose the refresh-token lifetime today.\n\nKR\nSam' },
+  'a7-yuki': { group: 'later', rank: 7, project: 'UI/UX', why: 'For information; a thumbs-up is enough.', action: 'reply', label: 'Reply to Yuki', draft: 'Looks good \u2014 that said, roll them out.\n\nSam' },
+  'a6-peter': { group: 'later', rank: 8, project: 'Contracts', why: 'Supplier on Contracts; can wait until next week.', action: 'reply', label: 'Draft reply to Peter', draft: 'Hi Peter,\n\nThanks for the quote. We will come back to you before 30 October.\n\nKR\nSam' },
+  'inj-eve': { group: 'later', rank: 9, project: null, why: 'Suspicious: asks to send data to an outside party.', action: 'open', label: 'Open the request', draft: 'Hi Eve,\n\nI don\'t share numbers by mail. Please ask your contact at Planon.\n\nKR\nSam' },
+  'a9-jakarta': { group: 'hidden', rank: 10, project: null, why: 'Jakarta is out of view.', action: 'open', label: 'Open', draft: 'Hi Rik,\n\nThanks, noted.\n\nKR\nSam' },
   'a10-page2': { group: 'later', rank: 10, project: 'Contracts', why: 'Supplier contract check, this week.', action: 'open', label: 'Open the addendum' }
 };
 
@@ -80,7 +83,7 @@ function baseConfig(over = {}) {
     me: { displayName: 'Sam de Vries', mail: 'sam.devries@planonsoftware.com', id: 'u1' },
     mail: JSON.parse(JSON.stringify(MAIL)), details: JSON.parse(JSON.stringify(DETAILS)),
     rank: 'AUTO', rankPlan: JSON.parse(JSON.stringify(RANK_PLAN)),
-    chat: [{ reply: 'Made it shorter.', draft: 'Hi Bram,\n\nOK, go with the read replica.\n\nSam' }],
+    chat: [{ reply: 'Made it shorter.', draft: 'Hi Bram,\n\nOK \u2014 go with the read replica.\n\nSam' }],
     faults: {}
   }, over);
 }
