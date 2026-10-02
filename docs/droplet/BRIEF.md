@@ -19,6 +19,7 @@ Daaronder staat de rest, ingeklapt en doorzoekbaar. Daarnaast is er één global
 | R1 | Een **standstill**-mail uit Jira over **OIDC** staat altijd op 1. |
 | R2 | De **projectvolgorde** is: 1 Platform Stability (inclusief subproject C4A), 2 C4A, 3 OIDC, 4 SIEM Integration, 5 Release management, 6 Contracts, 7 CI Acceleration, 8 UI/UX. Vragen van **productmanagers, architecten en teamleden** van die projecten tellen het zwaarst. **Een vraag van een directe collega gaat altijd boven een externe partij.** Klanten zitten niet op projecten; leveranciers (Contracts) kunnen wachten. Jakarta, Object Store en Platform Core zijn afgerond of herbelegd: **helemaal uit beeld**. Release management herkent Claude aan zijn Confluence-pagina. |
 | R3 | **Wachtpunten.** Claude haalt jouw vragen aan anderen uit je verstuurde mail en Teams. Komt er na **3 werkdagen** geen antwoord en is de Confluence-pagina niet bijgewerkt, dan komt het item terug met een **conceptbericht in Teams** om na te jagen. |
+| R3+ | Najagen geldt voor iedereen, ook externen (per mail). |
 | R4 | **Klaar** betekent: een mail is beantwoord, in een Teams-chat heb je gereageerd, op een Jira-item heb je een comment gezet. |
 | R5 | Heb je **vandaag een meeting** met iemand, dan stijgen diens open items. Dat gebeurt alleen als er open items zijn. |
 | R6 | **Eigen toezeggingen uit meetingtranscripten**, zoals "ik plan een vervolg", worden een item met de actie *Find a time*. Claude stelt een uitnodiging op. |
