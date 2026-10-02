@@ -314,7 +314,6 @@ svg { display: block; flex: none; }
   font-size: 15.5px; line-height: 1.55; font-family: var(--f-body);
 }
 .draft textarea:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
-.draft.is-editing textarea { border-color: var(--accent-line); }
 .draft.is-locked textarea { opacity: 0.6; resize: none; }
 .warn { margin-top: 10px; display: flex; gap: 8px; align-items: center; font-size: 13.5px; color: var(--accent-hi); }
 .draft-foot { margin-top: 10px; font-size: 12.5px; color: var(--muted); font-family: var(--f-meta); }
@@ -451,7 +450,25 @@ svg { display: block; flex: none; }
 .warn.is-problem { color: var(--ink); border-left: 2px solid var(--accent); padding-left: 10px; align-items: flex-start; }
 .warn.is-problem .ico { color: var(--accent); margin-top: 3px; }
 .cm.c.is-wait span { color: var(--muted); }
-/* Five quiet buttons (★ Important joins the v3 four). */
-.quiet { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+/* Four quiet buttons: Chat about this, Not important, ★ Important, Done.
+   (Edit is gone: the draft itself is the editor.) */
+.quiet { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+/* The draft is directly editable: text cursor, a quiet hover edge, and the
+   design's orange focus ring while typing. Locked after a send. */
+.draft textarea:not([readonly]) { cursor: text; }
+.draft textarea:not([readonly]):hover { border-color: var(--line-3); }
+.draft textarea:not([readonly]):focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent-line); }
+.draft textarea::placeholder { color: var(--faint); }
+.draft textarea[aria-busy="true"]::placeholder { color: var(--muted); }
+.draft-foot button { min-height: 32px; padding: 0 6px; color: var(--accent-hi); font: inherit; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+.draft-foot button:hover { background: var(--accent-soft); }
+/* Send diagnostics: which step, which code, Outlook's own words. */
+.diag { width: 100%; margin-top: 8px; font-family: var(--f-meta); font-size: 12px; color: var(--muted); }
+.diag dl { margin: 0; display: grid; gap: 2px; }
+.diag dl > div { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 8px; }
+.diag dt { text-transform: uppercase; letter-spacing: 0.08em; }
+.diag dd { margin: 0; color: var(--ink); overflow-wrap: anywhere; }
+.diag button { margin-top: 4px; margin-left: -10px; }
+.warn.is-problem > span { flex: 1; min-width: 0; }
 .btn-send[aria-disabled="true"]:not(.is-sent) { opacity: 0.5; cursor: default; }
 .btn-send.is-confirm { background: transparent; color: var(--accent-hi); box-shadow: inset 0 0 0 2px var(--accent); clip-path: none; }

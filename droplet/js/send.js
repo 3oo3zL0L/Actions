@@ -16,6 +16,9 @@
     if (!m) return "";
     var v;
     try { v = decodeURIComponent(m[1]); } catch (e) { return ""; }
+    /* OWA links carry standard base64 ("/", "+"); the Graph id is the URL-safe
+       form ("-", "_"): seen live, id …AC-EWg0… ↔ ItemID=…AC%2FEWg0… */
+    v = v.replace(/\//g, "-").replace(/\+/g, "_");
     return ID_RE.test(v) ? v : "";
   };
 
