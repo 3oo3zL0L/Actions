@@ -1,7 +1,7 @@
 const { test, expect } = require('./helpers/harness');
 
 function writeCalls(calls) {
-  return calls.filter((c) => c.kind === 'mcp' && (c.tool !== 'read_resource' || /AAkALg/.test(c.input.uri)) && !['outlook_email_search', 'get_me', 'chat_message_search', 'outlook_calendar_search'].includes(c.tool));
+  return calls.filter((c) => c.kind === 'mcp' && (c.tool !== 'read_resource' || /AAkALg/.test(c.input.uri)) && !['outlook_email_search', 'get_me', 'chat_message_search', 'outlook_calendar_search', 'atlassianUserInfo', 'searchJiraIssuesUsingJql', 'searchConfluenceUsingCql'].includes(c.tool));
 }
 
 test.describe('Send', () => {
@@ -168,6 +168,7 @@ test.describe('Send', () => {
     await page.fill('#chatIn', 'What does this mail want?');
     await page.press('#chatIn', 'Enter');
     await expect(page.locator('.chat-log')).toContainText('Sent it as asked.');
+    await page.keyboard.press('Escape');
     await page.click('[data-back]');
     await page.click('[data-sync]');
     await app.ready();

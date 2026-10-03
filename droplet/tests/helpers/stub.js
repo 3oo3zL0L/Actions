@@ -238,9 +238,83 @@ function installDropletStub(cfg) {
       return result("Draft sent to 1 recipient(s) and saved to Sent Items.");
     }
   };
+  /* ---------- Atlassian Rovo (invented site data; shapes as captured by the PO) ---------- */
+  var ATL = "Atlassian Rovo", CLOUD = "f5ee9bed-0e04-48ea-aa28-5c3ecd088de8";
+  var atl = cfg.atlassian || {};
+  var atlUser = atl.user || { account_id: "acc-sam-0001", name: "Sam de Vries", email: "sam.devries@planonsoftware.com" };
+  var issues = atl.issues || {}, pages = atl.pages || {}, jqlKeys = (atl.jql || []).slice();
+  var atlLog = { comments: [], updates: [] };
+  window.__stub.atl = atlLog;
+  window.__stub.setPage = function (id, body) { pages[id].body = body; pages[id].version = (pages[id].version || 1) + 1; };
+  window.__stub.addIssueComment = function (key, c) { issues[key].comments = (issues[key].comments || []).concat([c]); };
+  function needCloud(input) { if (input.cloudId !== CLOUD) throw err("tool_error", "Unknown cloudId"); }
+  function issueShape(key, fieldsWanted) {
+    var x = issues[key];
+    var f = { summary: x.summary, status: { name: x.status || "In Progress", statusCategory: { key: x.statusCat || "indeterminate", name: "In Progress" } },
+      project: { key: key.split("-")[0], name: x.project || key.split("-")[0] }, updated: x.updated || "2026-10-02T07:00:00.000+0200" };
+    if (!fieldsWanted || fieldsWanted.indexOf("description") >= 0) {
+      f.description = x.description || ""; f.assignee = { displayName: x.assignee || "Bram Kok", accountId: "acc-bram" }; f.reporter = { displayName: "Lena Smit", accountId: "acc-lena" };
+      f.comment = { comments: (x.comments || []).map(function (c, i) { return { id: String(1000 + i), author: { accountId: c.accountId, displayName: c.author }, body: c.body, created: c.created }; }), total: (x.comments || []).length };
+    }
+    return { id: "100" + key.replace(/\D/g, ""), key: key, self: "https://api.atlassian.com/ex/jira/" + CLOUD + "/rest/api/3/issue/" + key, fields: f, webUrl: x.webUrl || "https://planon.atlassian.net/browse/" + key };
+  }
+  function pageShape(id, withBody) {
+    var p = pages[id];
+    var o = { id: id, type: p.type || "page", status: "current", title: p.title, lastModified: p.lastModified || "2026-10-02T06:00:00.000Z",
+      summary: p.excerpt || "", space: { key: p.spaceKey || "OIDC", name: p.spaceName || "OIDC" }, _links: { webui: p.webui || "/spaces/" + (p.spaceKey || "OIDC") + "/pages/" + id },
+      author: { displayName: p.author || "Lena Smit" } };
+    if (p.webUrl !== undefined) o.webUrl = p.webUrl;
+    if (withBody) { o.body = p.body; o.version = { number: p.version || 1 }; }
+    return o;
+  }
+  var atlTools = {
+    atlassianUserInfo: function () { return result(JSON.stringify(atlUser)); },
+    getAccessibleAtlassianResources: function () { return result(JSON.stringify([{ id: CLOUD, url: "https://planon.atlassian.net", name: "planon" }])); },
+    searchJiraIssuesUsingJql: function (input) {
+      needCloud(input);
+      var keys = /comment ~/.test(input.jql) ? jqlKeys : Object.keys(issues).filter(function (k) { var q = (/text ~ "([^"]*)"/.exec(input.jql) || [])[1]; return q && (issues[k].summary || "").toLowerCase().indexOf(q.toLowerCase()) >= 0; });
+      return result(JSON.stringify({ issues: { nodes: keys.map(function (k) { return issueShape(k, input.fields); }), pageInfo: { hasNextPage: false, endCursor: null } }, context: { cloudId: CLOUD } }));
+    },
+    getJiraIssue: function (input) {
+      needCloud(input);
+      if (!issues[input.issueIdOrKey]) throw err("tool_error", "Issue does not exist");
+      return result(JSON.stringify(issueShape(input.issueIdOrKey)));
+    },
+    addCommentToJiraIssue: function (input) {
+      needCloud(input);
+      if (!issues[input.issueIdOrKey]) throw err("tool_error", "Issue does not exist");
+      atlLog.comments.push(JSON.parse(JSON.stringify(input)));
+      issues[input.issueIdOrKey].comments = (issues[input.issueIdOrKey].comments || []).concat([{ accountId: atlUser.account_id, author: atlUser.name, body: input.commentBody, created: new Date().toISOString() }]);
+      return result(JSON.stringify({ id: "2000", created: new Date().toISOString() }));
+    },
+    searchConfluenceUsingCql: function (input) {
+      needCloud(input);
+      var ids = /mention = currentUser\(\)/.test(input.cql) ? atl.mentions || [] : /watcher = currentUser\(\)/.test(input.cql) ? atl.watched || [] :
+        Object.keys(pages).filter(function (id) { var q = (/title ~ "([^"]*)"/.exec(input.cql) || [])[1] || ""; return q && pages[id].title.toLowerCase().indexOf(q.toLowerCase()) >= 0; });
+      return result(JSON.stringify({ content: { totalCount: ids.length, nodes: ids.map(function (id) { return pageShape(id, false); }) } }));
+    },
+    getConfluencePage: function (input) {
+      needCloud(input);
+      if (!pages[input.pageId]) throw err("tool_error", "Page not found");
+      return result(JSON.stringify(pageShape(input.pageId, true)));
+    },
+    updateConfluencePage: function (input) {
+      needCloud(input);
+      if (!pages[input.pageId]) throw err("tool_error", "Page not found");
+      atlLog.updates.push(JSON.parse(JSON.stringify(input)));
+      pages[input.pageId].body = input.body; pages[input.pageId].version = (pages[input.pageId].version || 1) + 1;
+      return result(JSON.stringify({ id: input.pageId, title: pages[input.pageId].title, version: { number: pages[input.pageId].version } }));
+    }
+  };
   var mcp = {
     callTool: function (server, tool, input, options) {
       calls.push({ kind: "mcp", server: server, tool: tool, input: JSON.parse(JSON.stringify(input || {})), t: performance.now() });
+      if (server === ATL) {
+        if (cfg.noAtlassian || !atlTools[tool]) return Promise.reject(err(cfg.noAtlassian || "not_in_manifest"));
+        var fa = fault(tool);
+        if (fa) return later(null).then(function () { throw fa; });
+        try { var ra = atlTools[tool](input || {}); return later(ra); } catch (e) { return later(null).then(function () { throw e; }); }
+      }
       if (server !== SERVER || !tools[tool]) return Promise.reject(err("not_in_manifest"));
       var f = fault(tool);
       if (f) return later(null).then(function () { throw f; });
@@ -255,7 +329,7 @@ function installDropletStub(cfg) {
 
   /* ---------- sample ---------- */
   function idsIn(prompt) {
-    var re = /<<<(?:EMAIL|TEAMS|ACTION|WAIT) \d+ id="([^"]+)">>>/g, m, out = [];
+    var re = /<<<(?:EMAIL|TEAMS|ACTION|WAIT|JIRA|PAGE) \d+ id="([^"]+)">>>/g, m, out = [];
     while ((m = re.exec(prompt))) out.push(m[1]);
     return out;
   }
@@ -287,8 +361,12 @@ function installDropletStub(cfg) {
   function answer(input, options, asJson) {
     calls.push({ kind: "sample", json: asJson, input: JSON.parse(JSON.stringify(input)), options: options ? JSON.parse(JSON.stringify(options)) : null });
     var prompt = typeof input === "string" ? input : input.map(function (t) { return t.content; }).join("\n");
-    var isDraft = /You draft one (email|Teams chat) reply|You draft one Teams chat chase for/.test(prompt) && !/<<<ACTION>>>/.test(prompt);
+    var isDraft = /You draft one (email|Teams chat) reply|You draft one Teams chat chase for|You draft one Jira comment/.test(prompt) && !/<<<ACTION>>>/.test(prompt);
     var extra = isDraft ? cfg.draftDelay || 0 : /You rank unread email/.test(prompt) ? cfg.rankDelay || 0 : 0;
+    if (options && options.tools) return later(null).then(function () {
+      if (cfg.sampleFault) throw { code: cfg.sampleFault, message: cfg.sampleFault };
+      return toolLoop(prompt, options);
+    });
     return later(null).then(function () { return new Promise(function (r) { setTimeout(r, extra); }); }).then(function () {
       if (cfg.sampleFault) throw { code: cfg.sampleFault, message: cfg.sampleFault };
       var a = /You rank unread email/.test(prompt) ? rankAnswer(prompt) : isDraft ? draftAnswer(prompt) : extraAnswer(prompt) ||
@@ -315,9 +393,43 @@ function installDropletStub(cfg) {
     if (/^You draft one Teams chat chase for/.test(prompt)) return cfg.chaseAnswer || { draft: "Any news on this? I need it to plan the next step." };
     return null;
   }
+  /* Page tools (sample options.tools): a scripted Claude runs rounds of tool
+     calls (all calls of one round start together), then answers. cfg.ask is
+     a queue of {rounds: [[{name, input}]], text}; without it, a cfg.chat
+     answer {reply, draft} becomes update_draft(draft) + reply. */
+  var askQueue = (cfg.ask || []).slice();
+  window.__tools = [];
+  window.__stub.setAsk = function (q) { askQueue = q.slice(); };
+  function toolLoop(prompt, options) {
+    var a = askQueue.length > 1 ? askQueue.shift() : askQueue[0];
+    if (!a) {
+      var c = chatQueue.length > 1 ? chatQueue.shift() : chatQueue[0] || { reply: "OK.", draft: null };
+      a = { rounds: c.draft && options.tools.some(function (t) { return t.name === "update_draft"; }) ? [[{ name: "update_draft", input: { newText: c.draft } }]] : [], text: c.reply };
+    }
+    if (typeof a === "function") a = a(prompt);
+    var byName = {}, sig = options.signal, i = 0, rounds = a.rounds || [];
+    options.tools.forEach(function (t) { byName[t.name] = t; });
+    function next() {
+      if (sig && sig.aborted) throw { code: "cancelled", message: "cancelled" };
+      if (i >= rounds.length) return { text: a.text || "OK.", truncated: false, modelTierApplied: "default" };
+      var round = rounds[i++];
+      var ps = round.map(function (call) {
+        var rec = { name: call.name, input: JSON.parse(JSON.stringify(call.input || {})), round: i };
+        window.__tools.push(rec);
+        var t = byName[call.name];
+        if (!t) { rec.error = "unknown tool"; return Promise.resolve(); }
+        var p;
+        try { p = Promise.resolve(t.execute(JSON.parse(JSON.stringify(call.input || {})), { signal: sig || new AbortController().signal })); }
+        catch (e) { p = Promise.reject(e); }
+        return p.then(function (v) { rec.result = JSON.parse(JSON.stringify(v === undefined ? null : v)); }, function (e) { rec.error = "Error: " + (e && e.message || e); });
+      });
+      return Promise.all(ps).then(function () { return later(null); }).then(next);
+    }
+    return Promise.resolve().then(next);
+  }
   var sample = function (input, options) { return answer(input, options, false); };
   sample.json = function (input, options) { return answer(input, options, true); };
-  sample.limits = function () { return Promise.resolve({ maxPromptBytes: 262144 }); };
+  sample.limits = function () { return Promise.resolve(cfg.noTools ? { maxPromptBytes: 262144 } : { maxPromptBytes: 262144, tools: { maxCount: 32 } }); };
 
   /* ---------- db ---------- */
   var KEY = "__droplet_stub_db";

@@ -4,7 +4,7 @@ const { m, T } = require('./helpers/fixtures');
 test.describe('Load and rank', () => {
   test('the focus list shows the ranked top 5, each with a why and an action', async ({ app, page }) => {
     await app.boot();
-    expect(await app.focusIds()).toEqual(['a1-standstill', 'a3-bram', 'a2-anouk', 'a4-lena', 'a5-tom']);
+    expect(await app.focusIds()).toEqual(['jira:OIDC-77', 'a3-bram', 'a2-anouk', 'a4-lena', 'a5-tom']);
     for (const fi of await page.$$('#focus .fi')) {
       expect((await (await fi.$('.fi-why')).innerText()).trim().length).toBeGreaterThan(5);
       expect((await (await fi.$('.btn-act')).innerText()).trim().length).toBeGreaterThan(3);
@@ -38,9 +38,9 @@ test.describe('Load and rank', () => {
   test('R1: a Jira standstill about OIDC is first even when Claude ranks it low or hides it', async ({ app }) => {
     const { RANK_PLAN } = require('./helpers/fixtures');
     const plan = JSON.parse(JSON.stringify(RANK_PLAN));
-    plan['a1-standstill'] = { group: 'hidden', rank: 40, project: 'OIDC', why: 'Old news.', action: 'open', label: 'Open' };
+    plan['jira:OIDC-77'] = { group: 'hidden', rank: 40, project: 'OIDC', why: 'Old news.', action: 'open', label: 'Open' };
     await app.boot({ rankPlan: plan });
-    expect((await app.focusIds())[0]).toBe('a1-standstill');
+    expect((await app.focusIds())[0]).toBe('jira:OIDC-77');
   });
 
   test('R8: an item Claude marks as a duplicate merges into the one that stays', async ({ app, page }) => {
@@ -110,7 +110,7 @@ test.describe('Load and rank', () => {
     expect(samples[1].input).toContain('id="a11-new"');
     expect(samples[1].input).not.toContain('id="a3-bram"');
     expect(samples[1].input).toContain('Already ranked');
-    expect(await app.focusIds()).toEqual(['a1-standstill', 'a3-bram', 'a11-new', 'a2-anouk', 'a4-lena']);
+    expect(await app.focusIds()).toEqual(['jira:OIDC-77', 'a3-bram', 'a11-new', 'a2-anouk', 'a4-lena']);
 
     await page.reload();
     await app.ready();
@@ -141,7 +141,7 @@ test.describe('Load and rank', () => {
     await app.boot();
     await page.locator('body').click({ position: { x: 5, y: 5 } });
     await page.keyboard.press('ArrowDown');
-    await expect(page.locator('[data-open="a1-standstill"]')).toBeFocused();
+    await expect(page.locator('[data-open="jira:OIDC-77"]')).toBeFocused();
     await page.keyboard.press('ArrowDown');
     await expect(page.locator('[data-open="a3-bram"]')).toBeFocused();
     await page.keyboard.press('Enter');

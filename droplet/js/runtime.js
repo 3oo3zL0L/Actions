@@ -14,20 +14,32 @@
   rt.init = function () {
     return Promise.all([use("mcp"), use("sample"), use("db")]).then(function (r) {
       rt.mcp = r[0]; rt.sample = r[1]; rt.db = r[2]; rt.inited = true;
-      return rt;
-    });
+      return rt.checkTools();
+    }).then(function () { return rt; });
+  };
+  /* Page tools for Claude (sample options.tools) exist only where
+     sample.limits() reports them. Ask Claude needs them. */
+  rt.tools = false;
+  rt.checkTools = function () {
+    rt.tools = false;
+    if (!rt.sample || typeof rt.sample.limits !== "function") return Promise.resolve(false);
+    return Promise.resolve().then(function () { return rt.sample.limits(); }).then(function (l) {
+      rt.tools = !!(l && l.tools); return rt.tools;
+    }, function () { return false; });
   };
   rt.retryUse = function (name) {
     return use(name).then(function (v) { if (v) rt[name] = v; return v; });
   };
 
   /* One connector call. Rejects with an McpError-shaped object. */
-  rt.call = function (tool, input, options) {
+  rt.call = function (tool, input, options) { return rt.callOn(rt.SERVER, tool, input, options); };
+  /* The same, on another connector (Atlassian Rovo). */
+  rt.callOn = function (server, tool, input, options) {
     if (!rt.mcp || typeof rt.mcp.callTool !== "function") {
       return Promise.reject({ code: "not_granted", message: "Connectors are not available in this view." });
     }
     try {
-      return Promise.resolve(rt.mcp.callTool(rt.SERVER, tool, input || {}, options)).then(function (res) {
+      return Promise.resolve(rt.mcp.callTool(server, tool, input || {}, options)).then(function (res) {
         if (res && res.isError) throw { code: "tool_error", message: U().clip(U().resultText(res), 200) || "The tool reported a failure.", result: res };
         return res;
       }, function (e) {

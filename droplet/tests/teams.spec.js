@@ -1,7 +1,7 @@
 const { test, expect } = require('./helpers/harness');
 const { tm, ME, IRIS, EVE, CHAT, TID, T, teamsConfig } = require('./helpers/fixtures');
 
-const READ_TOOLS = ['get_me', 'outlook_email_search', 'chat_message_search', 'outlook_calendar_search', 'read_resource'];
+const READ_TOOLS = ['get_me', 'outlook_email_search', 'chat_message_search', 'outlook_calendar_search', 'read_resource', 'atlassianUserInfo', 'searchJiraIssuesUsingJql', 'searchConfluenceUsingCql', 'getJiraIssue', 'getConfluencePage'];
 const sel = (id) => `[data-open="${id}"]`;
 const restIds = (page) => page.$$eval('#restList .rr', (els) => els.map((e) => e.getAttribute('data-open')));
 
@@ -25,7 +25,7 @@ test.describe('Teams as a source', () => {
     expect(searches.every((c) => c.server === 'Microsoft 365')).toBe(true);
 
     // Iris's burst of three is one row, in the same focus list as mail, ranked by Claude.
-    expect((await app.focusIds()).slice(0, 3)).toEqual(['a1-standstill', 'a3-bram', TID('iris')]);
+    expect((await app.focusIds()).slice(0, 3)).toEqual(['jira:OIDC-77', 'a3-bram', TID('iris')]);
     const row = page.locator(`[data-id="${TID('iris')}"]`);
     await expect(row).toHaveCount(1);
     await expect(row.locator('.fi-meta [data-src="teams"]')).toHaveText('Teams');
@@ -237,7 +237,7 @@ test.describe('Teams text is data', () => {
 
   test('"ignore instructions" in a chat changes nothing: same mail order, no write tools, data stays delimited', async ({ app, page }) => {
     await app.boot(evil());
-    expect(await app.focusIds()).toEqual(['a1-standstill', 'a3-bram', 'a2-anouk', 'a4-lena', 'a5-tom']);
+    expect(await app.focusIds()).toEqual(['jira:OIDC-77', 'a3-bram', 'a2-anouk', 'a4-lena', 'a5-tom']);
     const tools = await app.mcpTools();
     expect(tools.filter((t) => !READ_TOOLS.includes(t))).toEqual([]);
     const p = (await app.calls('sample'))[0].input;
@@ -257,7 +257,7 @@ test.describe('Teams failures', () => {
     await expect(page.locator('.note-line')).toHaveCount(1);
     await expect(page.locator('[data-note="teams"]')).toContainText('Couldn’t reach Teams just now.');
     await expect(page.locator('[data-note="mail"]')).toHaveCount(0);
-    expect(await app.focusIds()).toEqual(['a1-standstill', 'a3-bram', 'a2-anouk', 'a4-lena', 'a5-tom']);
+    expect(await app.focusIds()).toEqual(['jira:OIDC-77', 'a3-bram', 'a2-anouk', 'a4-lena', 'a5-tom']);
     await expect(page.locator('.status [data-dot="teams"] i.off')).toHaveCount(1);
     await expect(page.locator('.status [data-dot="m365"] i.off')).toHaveCount(0);
     await page.click('[data-retry="teams"]');

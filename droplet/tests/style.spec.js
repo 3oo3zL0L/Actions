@@ -78,6 +78,14 @@ test.describe('A Claude draft for every mail', () => {
     expect(ids).toHaveLength(10);
     for (const id of ids) {
       await page.click(`[data-open="${id}"]`);
+      if (id.startsWith('jira:')) {
+        // A Jira item gets a comment in the comment style: no greeting, no KR sign-off, no em dash.
+        await expect(page.locator('#draftText'), id).toHaveValue('I will choose the refresh-token lifetime today.');
+        await expect(page.locator('.sec-label').nth(1), id).toContainText('Prepared comment · OIDC-77');
+        await page.click('[data-back]');
+        await app.openRest();
+        continue;
+      }
       await expect(page.locator('#draftText'), id).toHaveValue(/^(Hi|Hoi) [^\n]+,\n\n[\s\S]+\n\nKR\nSam$/);
       const v = await page.inputValue('#draftText');
       expect(v, id).not.toContain('—');

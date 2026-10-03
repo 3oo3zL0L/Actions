@@ -592,3 +592,61 @@ svg { display: block; flex: none; }
 .ns-card .btn-send.ns-go { width: 100%; margin: 14px 0 0; min-width: 0; }
 .ns-done { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-top: 12px; }
 .ns-done .state-chip { padding-left: 0; }
+
+/* ============================================================
+   Increment 4: Ask Claude (the sheet, global or about one item),
+   Jira and Confluence. Same tokens.
+   ============================================================ */
+.src[data-src="jira"] .ico, .src[data-src="confluence"] .ico { color: var(--accent); }
+html.has-sheet, html.has-sheet body { overflow: hidden; }
+.sheet { display: flex; flex-direction: column; max-height: calc(100dvh - 48px); overflow: hidden; }
+.sheet-h { flex: none; }
+.sheet-btns { display: flex; gap: 6px; align-items: center; }
+.sheet-new { min-height: 46px; min-width: 64px; padding: 0 12px; border: 1px solid var(--line-2); color: var(--muted); font-family: var(--f-meta); font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.06em; }
+.sheet-new:hover { color: var(--ink); border-color: var(--accent-line); }
+.sheet-new[aria-disabled="true"] { opacity: 0.4; cursor: default; }
+.ask-about { flex: none; margin: 0 0 10px; font-size: 13.5px; color: var(--muted); overflow-wrap: anywhere; }
+.ask-about b { color: var(--ink); font-weight: 500; }
+.sheet .chat { flex: 1; min-height: 0; display: flex; flex-direction: column; margin-top: 0; }
+.sheet .chat-log { flex: 1; min-height: 80px; overflow-y: auto; overscroll-behavior: contain; padding-right: 2px; }
+.sheet .chat-chips, .sheet .chat-form { flex: none; }
+.sheet .chat-chips:empty { display: none; }
+.sheet-foot { flex: none; margin: 8px 0 0; }
+.cm span { white-space: pre-wrap; overflow-wrap: anywhere; min-width: 0; }
+.cm.c.is-err span { color: var(--muted); }
+.cm .ask-stop { display: block; margin-top: 4px; font-style: normal; color: var(--muted); font-size: 13px; }
+.ask-note button { min-height: 32px; padding: 0 6px; color: var(--accent-hi); font-family: var(--f-meta); text-transform: uppercase; letter-spacing: 0.06em; font-size: 12px; font-weight: 600; }
+.ask-card { max-width: 100%; padding: 12px; background: var(--surface); border: 1px solid var(--line-3); }
+.ask-card-h { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-family: var(--f-meta); font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent-hi); }
+.ask-card-h .ico { width: 16px; height: 16px; }
+.ask-card textarea { min-height: 120px; }
+.ask-card .ns-in { min-height: 40px; }
+.ask-card .btn-send.ask-go { width: 100%; margin: 12px 0 0; min-width: 0; }
+.ask-card p { margin: 6px 0; font-size: 14px; overflow-wrap: anywhere; }
+.ask-card .muted, .ask-summary { color: var(--muted); }
+.ask-agenda, .ask-action { white-space: pre-wrap; }
+.ask-diff {
+  margin: 8px 0 0; max-height: 280px; overflow: auto; padding: 8px 10px; background: var(--bg-2); border: 1px solid var(--line);
+  font-family: var(--f-meta); font-size: 12.5px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--muted);
+}
+.ask-diff .dl { display: inline; }
+.ask-diff .add { color: var(--ok); }
+.ask-diff .del { color: var(--accent-hi); text-decoration: line-through; text-decoration-color: rgba(255, 157, 63, 0.5); }
+.ask-diff .gap { color: var(--faint); }
+.ask-btns { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.ask-btns .btn-send.ask-go { flex: 1 1 180px; width: auto; }
+.ask-btns .ns-btn { margin-top: 12px; }
+.ai-note { margin-top: 10px; display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; font-family: var(--f-meta); font-size: 12.5px; color: var(--muted); }
+.ai-note .ico { color: var(--accent); }
+.ai-note button { min-height: 44px; padding: 0 10px; color: var(--accent-hi); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; font-size: 12.5px; }
+.ai-note button:hover { background: var(--accent-soft); }
+.askbar:not([aria-disabled="true"]) { cursor: pointer; }
+/* Phone: the sheet is its own full screen. */
+@media (max-width: 959.98px) {
+  .sheet { top: 0; bottom: 0; max-width: none; max-height: none; height: 100dvh; border: 0; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); }
+  .sheet .chat-form .icon-btn { min-width: 48px; }
+}
+.ask-card .warn > span { flex: 1; min-width: 0; }
+.ask-card .warn .ico { flex: none; }
+/* Jira and Confluence: a wider primary button, so the key hints give way on a laptop. */
+@media (min-width: 960px) { .quiet.is-tight .qbtn .kbd { display: none; } }

@@ -4,7 +4,7 @@
 (function (D) {
   "use strict";
   var U = D.util, rt = D.rt, store = D.store, mail = D.mail, rank = D.rank, flow = D.sendflow, chat = D.chat, teams = D.teams, meet = D.meet, mine = D.mine,
-    waits = D.waits, tx = D.tx, ns = D.ns;
+    waits = D.waits, tx = D.tx, ns = D.ns, atl = D.atl, ask = D.ask;
   var esc = U.esc, pad = U.pad;
   var FOCUS_MAX = 5;
 
@@ -28,7 +28,11 @@
     arrowUp: '<path d="M12 20V5M6 11l6-6 6 6"/>',
     star: '<path d="m12 3.5 2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.8z"/>',
     out: '<path d="M14 4h6v6M20 4l-9 9M18 14v5H5V6h5"/>',
-    wait: '<path d="M7 3h10M7 21h10"/><path d="M8 3c0 5 8 5.5 8 9s-8 4-8 9M16 3c0 5-8 5.5-8 9s8 4 8 9"/>'
+    wait: '<path d="M7 3h10M7 21h10"/><path d="M8 3c0 5 8 5.5 8 9s-8 4-8 9M16 3c0 5-8 5.5-8 9s8 4 8 9"/>',
+    jira: '<path d="M12 3 21 12l-9 9-9-9z"/><path d="m12 8.5 3.5 3.5-3.5 3.5L8.5 12z"/>',
+    confluence: '<path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4M9 12h7M9 16h7"/>',
+    close: '<path d="M6 6l12 12M18 6 6 18"/>',
+    stop: '<rect x="7" y="7" width="10" height="10"/>'
   };
   function ico(name, cls) { return '<svg class="ico ' + (cls || '') + '" viewBox="0 0 24 24" aria-hidden="true">' + P[name] + '</svg>'; }
 
@@ -38,7 +42,8 @@
     me: null, items: [], byId: {}, loading: true, loaded: false, ranking: 0, syncAt: null, mcpOk: null, teamsOk: null,
     notes: { mail: null, teams: null, cal: null, rank: null, store: null }, rankings: {}, feedback: [], verdict: {}, doneNow: {},
     drafts: {}, touched: {}, drafting: {}, send: {}, detail: {}, chat: {}, undo: null, handoff: {}, meetings: [], actions: {}, confirmDel: null, rankAgain: false, fresh: {}, actEdit: {},
-    waits: {}, asksDb: {}, meetingsDb: {}, waitPre: [], scanning: false, teams10: [], sentMsgs: [], chaseMail: {}, ns: {}
+    waits: {}, asksDb: {}, meetingsDb: {}, waitPre: [], scanning: false, teams10: [], sentMsgs: [], chaseMail: {}, ns: {},
+    atlOk: null, atlItems: [], jiraMail: [], aiUndo: {}
   };
   D.state = S;
   var $ = function (id) { return document.getElementById(id); };
@@ -104,7 +109,9 @@
   function alsoIn(it) {
     return S.items.filter(function (o) { return o !== it && rk(o).dupOf === it.id && o.src !== it.src; });
   }
-  var SRC = { mail: 'Mail', teams: 'Teams', mine: 'My action', wait: 'Waiting', meeting: 'Meeting' };
+  var SRC = { mail: 'Mail', teams: 'Teams', mine: 'My action', wait: 'Waiting', meeting: 'Meeting', jira: 'Jira', confluence: 'Confluence' };
+  function isJira(it) { return it && it.src === 'jira'; }
+  function isPage(it) { return it && it.src === 'confluence'; }
   function isMine(it) { return it && it.src === 'mine'; }
   function isWait(it) { return it && it.src === 'wait'; }
   /* An own action made from a meeting commitment (R6). */
@@ -123,7 +130,10 @@
   function isSent(id) { return sendState(id).phase === 'sent'; }
   function isClosed(id) { return !!S.doneNow[id]; }
   function isCur(id) { return S.view === 'item' && S.cur === id; }
-  function project(it) { return rk(it).project || (isWait(it) ? it.project0 || 'Follow-up' : isMine(it) ? 'Own' : it.internal ? (isTeams(it) ? 'Chat' : 'Inbox') : 'Outside Planon'); }
+  function project(it) {
+    return rk(it).project || (isWait(it) ? it.project0 || 'Follow-up' : isMine(it) ? 'Own' : isJira(it) ? it.project0 || it.projectName || 'Jira' :
+      isPage(it) ? it.project0 || it.spaceName || 'Confluence' : it.internal ? (isTeams(it) ? 'Chat' : 'Inbox') : 'Outside Planon');
+  }
   function flag(it) {
     if (it.standstill) return 'Standstill';
     if (S.verdict[it.id] === 'up') return '★ Important';
@@ -153,6 +163,7 @@
     $('status').innerHTML =
       '<span data-dot="m365"><i' + (m === false ? ' class="off"' : '') + '></i>M365 link</span>' +
       '<span data-dot="teams"><i' + (S.teamsOk === false || m === false && S.teamsOk !== true ? ' class="off"' : '') + '></i>Teams</span>' +
+      '<span data-dot="atlassian"><i' + (S.atlOk === false ? ' class="off"' : '') + '></i>Atlassian</span>' +
       '<span><i' + (cl ? '' : ' class="off"') + '></i>Claude</span>' +
       '<button class="sync" id="syncBtn" data-sync aria-label="Sync mail now">Sync ' + (S.syncAt ? U.hhmm(S.syncAt) : '··:··') + '</button>' +
       '<span>Nothing sends without you</span>';
@@ -166,6 +177,7 @@
     }
     if (S.notes.mail) line('mail', S.notes.mail, true);
     if (S.notes.teams) line('teams', S.notes.teams, true);
+    if (S.notes.atl) line('atl', S.notes.atl, true);
     if (S.notes.cal) line('cal', S.notes.cal, false);
     var noun = S.rankingTeams ? ' new item' : ' new mail';
     if (S.ranking) line('ranking', 'Claude is ranking ' + S.ranking + noun + (S.ranking === 1 ? '' : 's') + '…', false);
@@ -181,7 +193,7 @@
       (S.waitPre.length ? ' · ' + S.waitPre.length + ' waiting on others' : '');
     renderStatus(); renderNotes();
   }
-  function srcKind(it) { return isTeams(it) ? 'teams' : isWait(it) ? 'wait' : fromMeeting(it) ? 'meeting' : isMine(it) ? 'mine' : 'mail'; }
+  function srcKind(it) { return isTeams(it) ? 'teams' : isWait(it) ? 'wait' : fromMeeting(it) ? 'meeting' : isMine(it) ? 'mine' : isJira(it) ? 'jira' : isPage(it) ? 'confluence' : 'mail'; }
   function srcHTML(it) { var k = srcKind(it); return '<span class="src" data-src="' + k + '">' + ico(k) + esc(srcLabel(it)) + '</span>'; }
   function dueHTML(it) { return isMine(it) && it.due ? '<span class="flag" data-due>' + esc(mine.dueLabel(it.due)) + '</span>' : ''; }
   function meetingHTML(it) { return it.meeting ? '<span class="flag" data-meeting>Meeting ' + esc(it.meeting.hhmm) + '</span>' : ''; }
@@ -193,7 +205,7 @@
   }
   function stateChip(id) {
     var s = sendState(id);
-    if (s.phase === 'sent') return '<span class="state-chip">' + ico('check') + 'Sent ' + U.hhmm(s.sentAt) + ' · done</span>';
+    if (s.phase === 'sent') return '<span class="state-chip">' + ico('check') + (isJira(S.byId[id]) ? 'Commented ' : 'Sent ') + U.hhmm(s.sentAt) + ' · done</span>';
     if (S.doneNow[id] && S.doneNow[id].how === 'chased') return '<span class="state-chip">' + ico('check') + 'Chased in Teams ' + esc(U.hhmm(new Date(S.doneNow[id].at))) + '</span>';
     if (S.doneNow[id]) return '<span class="state-chip">' + ico('check') + 'Done</span>';
     return '';
@@ -235,7 +247,9 @@
       if (!q) return true;
       var extra = isTeams(it) ? ' ' + it.subject + ' ' + (it.people || []).join(' ') + ' ' + (it.participants || []).join(' ') :
         isMine(it) ? ' ' + (it.notes || '') + ' mine ' + (it.due ? mine.dueLabel(it.due) : '') + (it.origin ? ' meeting ' + it.origin.subject : '') :
-        isWait(it) ? ' waiting on others ' + it.what + ' ' + it.summary : '';
+        isWait(it) ? ' waiting on others ' + it.what + ' ' + it.summary :
+        isJira(it) ? ' jira ' + it.issueKey + ' ' + (it.status || '') + ' ' + it.summary :
+        isPage(it) ? ' confluence page ' + (it.spaceName || '') + ' ' + (it.spaceKey || '') + ' ' + it.summary : '';
       return (titleOf(it) + ' ' + project(it) + ' ' + it.senderName + ' ' + it.sender + ' ' + rk(it).why + ' ' + srcLabel(it) + extra +
         (it.meeting ? ' meeting ' + it.meeting.hhmm : '')).toLowerCase().indexOf(q) !== -1;
     });
@@ -285,6 +299,8 @@
   }
   function sourceHTML(it) {
     if (isTeams(it)) return teamsSourceHTML(it);
+    if (isJira(it)) return jiraSourceHTML(it);
+    if (isPage(it)) return pageSourceHTML(it);
     var d = S.detail[it.id] || {}, text, note = '';
     if (d.state === 'ok') text = d.text;
     else { text = it.summary; note = d.state === 'error' ? 'Showing the preview; the full mail couldn’t be loaded.' : 'Loading the full mail…'; }
@@ -295,21 +311,6 @@
       '<div class="mail-body" id="mailBody">' + (paras.length ? paras.map(function (p) { return '<p>' + esc(p) + '</p>'; }).join('') : '<p class="muted">(no text)</p>') +
         (note ? '<p class="muted">' + esc(note) + (d.state === 'error' ? ' <button data-reread>Try again</button>' : '') + '</p>' : '') + '</div>' +
       (link ? '<div class="src-note">' + ico('out', 'ico-sm') + '<a href="' + esc(link) + '" target="_blank" rel="noopener noreferrer" data-outlook>Open in Outlook</a></div>' : '');
-  }
-  function chatHTML(it) {
-    var c = S.chat[it.id] || { log: [] };
-    var h = '<div class="chat" id="chat"><div class="chat-log">' +
-      '<div class="cm c">' + ico('spark') + '<span>' + (rt.sample ? 'What should change? I can make it shorter, firmer, or add a date.' : 'Claude isn’t available here. You can still edit the draft yourself.') + '</span></div>';
-    c.log.forEach(function (m) {
-      h += m.u ? '<div class="cm u">' + esc(m.t) + '</div>' : '<div class="cm c' + (m.wait ? ' is-wait' : '') + '">' + ico('spark') + '<span>' + esc(m.t) + '</span></div>';
-    });
-    h += '</div>';
-    if (rt.sample) {
-      h += '<div class="chat-chips">' + ['Shorter', 'More direct', 'Add a deadline'].map(function (x) { return '<button class="chat-chip" data-chip="' + x + '"' + (c.busy ? ' aria-disabled="true"' : '') + '>' + x + '</button>'; }).join('') +
-        '</div><form class="chat-form" data-chatform><label class="sr" for="chatIn">Message Claude about this item</label>' +
-        '<input id="chatIn" placeholder="Tell Claude what to change" autocomplete="off"><button class="icon-btn" type="submit" aria-label="Send to Claude">' + ico('arrowUp') + '</button></form>';
-    }
-    return h + '</div>';
   }
   function emptyHTML() {
     return '<div class="iv-head"><span class="iv-crumb"><span class="tag"><i style="background:var(--faint)"></i>Item</span><span class="sep" aria-hidden="true">//</span><span class="c-sec">Standby</span></span></div>' +
@@ -336,6 +337,13 @@
   }
   function draftFoot(it, locked, busy) {
     var ds = S.drafting[it.id];
+    if (isJira(it)) {
+      if (locked) return 'Posted once. This comment is locked.';
+      if (busy) return 'Posting… Don’t close this page.';
+      if (ds === 'loading' && !S.touched[it.id]) return 'Claude is writing a comment…';
+      if (ds && ds.error && !S.touched[it.id] && !String(S.drafts[it.id] || '').trim()) return esc(ds.error) + '. Write your own, or <button data-redraft>Try again</button>';
+      return 'Click the text to edit it. Nothing is posted until you press Comment.';
+    }
     if (isTeams(it) || isWait(it)) {
       if (ds === 'loading' && !S.touched[it.id]) return 'Claude is writing a reply in your chat style…';
       if (ds && ds.error && !S.touched[it.id] && !String(S.drafts[it.id] || '').trim()) return esc(ds.error) + '. Write your own, or <button data-redraft>Try again</button>';
@@ -449,7 +457,7 @@
         '<label class="sr" for="draftText">Draft text</label>' +
         '<textarea id="draftText"' + (locked || busy ? ' readonly' : '') + '>' + esc(mailChaseText(it)) + '</textarea>' +
         (isExternal(w.who.email) ? '<div class="warn" data-outside>' + ico('warn', 'ico-sm') + 'Goes outside Planon. Check before sending.</div>' : '') +
-        problemHTML(st) +
+        aiNoteHTML(it) + problemHTML(st) +
         '<div class="draft-foot">' + (locked ? 'Sent once. This draft is locked.' : busy ? 'Sending… Don’t close this page.' : 'A reply to your own mail. Nothing is sent until you press Send.') + '</div></div>';
     } else {
       var link = waitLink(it), writing = S.drafting[it.id] === 'loading' && !S.touched[it.id];
@@ -460,9 +468,10 @@
         '<textarea id="draftText"' + (writing ? ' aria-busy="true"' : '') + ' placeholder="' + (writing ? 'Claude is writing a chase…' : 'Write your chase…') + '">' + esc(draftOf(it)) + '</textarea>' +
         (!link ? '<div class="warn is-wait" data-nolink>' + ico('warn', 'ico-sm') + '<span>' + (w.src === 'teams' ? 'Droplet has no link to this chat. It copies the text; open the chat in Teams yourself.' : 'Droplet doesn’t know ' + esc(first) + '’s address, so it can’t open a chat. It copies the text.') + '</span></div>' : '') +
         '<div class="src-note" data-teams-note>' + ico('warn', 'ico-sm') + '<span>Droplet can’t post in Teams (no permission), so it copies your chase and opens the chat.</span></div>' +
+        aiNoteHTML(it) +
         '<div class="draft-foot">' + draftFoot(it, false, false) + '</div></div>';
     }
-    h += (S.chatOpen && !byMail && !locked ? chatHTML(it) : '') + '</div>' +
+    h += '</div>' +
       '<div class="iv-bar">' + barHTML(it) + '</div>';
     return h;
   }
@@ -474,7 +483,7 @@
         ico(icon) + '<span>' + label + '</span>' + (k ? '<span class="kbd" aria-hidden="true">' + k + '</span>' : '') + '</button>';
     };
     var btns = [];
-    if (!byMail) btns.push(q('chat', 'chat', 'Chat<span class="q-x"> about this</span>', 'c', S.chatOpen));
+    btns.push(askBtn());
     btns.push(q('notwaiting', 'check', 'Not waiting<span class="q-x"> anymore</span>', 'd'));
     btns.push(q('snooze', 'clock', 'Snooze 2 days'));
     if (canMailChase(it)) btns.push(byMail ? q('chaseteams', 'teams', 'Chase by Teams') : q('chasemail', 'mail', 'Chase by mail'));
@@ -591,7 +600,7 @@
         '<label class="k ns-k" for="nsTitle">Title</label><input class="ns-in" id="nsTitle" maxlength="255"' + (locked ? ' readonly' : '') + ' value="' + esc(st.title) + '">' +
         '<label class="ns-toggle"><input type="checkbox" id="nsOnline"' + (st.online ? ' checked' : '') + (locked ? ' disabled' : '') + '><span>Teams meeting</span></label>' +
         '<label class="k ns-k" for="nsAgenda">Agenda</label><textarea id="nsAgenda"' + (locked ? ' readonly' : '') + ' placeholder="' + (st.drafting === 'loading' ? 'Claude is drafting an agenda…' : 'A short agenda') + '">' + esc(st.agenda) + '</textarea>' +
-        nsDraftNote(st) + nsProblem(inv);
+        nsDraftNote(st) + aiNoteHTML(it) + nsProblem(inv);
       if (inv.phase === 'sent') h += '<div class="ns-done" data-ns-sent><span class="state-chip">' + ico('check') + 'Invite sent · ' + esc(inv.label) + '</span>' + doneOffer(it) + '</div>';
       else {
         var label = inv.phase === 'sending' ? 'Sending…' : inv.phase === 'unclear' ? (inv.confirm ? 'Yes, send again' : 'Send invite again anyway') : 'Send invite';
@@ -603,7 +612,7 @@
       h += '<label class="k ns-k" for="nsSubject">Subject</label><input class="ns-in" id="nsSubject" maxlength="255"' + (mlocked ? ' readonly' : '') + ' value="' + esc(st.subject) + '">' +
         '<label class="sr" for="nsBody">Mail text</label><textarea id="nsBody"' + (mlocked ? ' readonly' : '') + ' placeholder="' + (st.drafting === 'loading' ? 'Claude is writing in your style…' : 'Write your mail…') + '">' + esc(st.body) + '</textarea>' +
         (ok.some(function (p) { return isExternal(p.email); }) ? '<div class="warn" data-outside>' + ico('warn', 'ico-sm') + 'Goes outside Planon. Check before sending.</div>' : '') +
-        nsDraftNote(st) + problemHTML(sd);
+        nsDraftNote(st) + aiNoteHTML(it) + problemHTML(sd);
       if (sd.phase === 'sent') h += '<div class="ns-done" data-ns-sent><span class="state-chip">' + ico('check') + 'Sent ' + esc(U.hhmm(sd.sentAt)) + ' · once</span>' + doneOffer(it) + '</div>';
       else {
         var ml = sd.phase === 'sending' ? 'Sending…' : sd.phase === 'unclear' ? (sd.confirm ? 'Yes, send again' : 'Send again anyway') : 'Send';
@@ -612,7 +621,7 @@
     } else {
       h += peopleHTML(st, false) +
         '<label class="sr" for="nsChase">Chase text</label><textarea id="nsChase" placeholder="' + (st.drafting === 'loading' ? 'Claude is writing a chase…' : 'Write your chase…') + '">' + esc(st.chase) + '</textarea>' +
-        nsDraftNote(st) +
+        nsDraftNote(st) + aiNoteHTML(it) +
         '<div class="src-note">' + ico('warn', 'ico-sm') + '<span>Droplet can’t post in Teams, so it copies your text and opens a chat.</span></div>';
       if (st.chased) h += '<div class="ns-done" data-ns-sent><span class="state-chip">' + ico('check') + 'Copied ' + esc(U.hhmm(st.chased)) + '</span>' + doneOffer(it) + '</div>';
       h += '<button class="btn-send ns-go" data-ns-chase' + (nsReady(st) ? '' : ' aria-disabled="true"') + '>' + ico('copy') + (st.chased ? 'Copy & open again' : 'Copy & open in Teams') + '</button>';
@@ -636,12 +645,115 @@
     var busy = (st.inv && st.inv.phase === 'sending') || (st.send && st.send.phase === 'sending');
     if (b) { if (nsReady(st) && !busy) b.removeAttribute('aria-disabled'); else b.setAttribute('aria-disabled', 'true'); }
   }
+  /* ---------------- Render: Jira and Confluence (backlog 11, 12) ---------------- */
+  function paras(text) {
+    var ps = String(text || '').split(/\n{2,}/).filter(function (p) { return p.trim(); });
+    return ps.length ? ps.map(function (p) { return '<p>' + esc(p) + '</p>'; }).join('') : '<p class="muted">(no text)</p>';
+  }
+  function jiraSourceHTML(it) {
+    var d = S.detail[it.id] || {}, iss = d.state === 'ok' ? d.issue : null, h = '', mine0 = atl.me && atl.me.accountId;
+    var status = iss ? iss.status : it.status;
+    h += '<div class="mail-from"><span><b>' + esc(it.issueKey) + '</b>' + (status ? ' · ' + esc(status) : '') + (iss && iss.project ? ' · ' + esc(iss.project) : '') + '</span><span>' + esc(U.when(it.received, new Date())) + '</span></div>' +
+      '<div class="mail-subj">' + esc(iss && iss.summary || it.title) + '</div>';
+    if (iss) {
+      h += '<div class="mail-body" id="mailBody" data-jira-desc>' + paras(U.clip(iss.description, 3000) ? iss.description.slice(0, 3000) : '') + '</div>';
+      var cs = iss.comments.slice(-3);
+      if (iss.comments.length > 3) h += '<p class="muted thread-more">' + (iss.comments.length - 3) + ' earlier comment' + (iss.comments.length - 3 === 1 ? '' : 's') + ' not shown</p>';
+      if (cs.length) {
+        h += '<div class="thread" data-jira-comments>' + cs.map(function (c) {
+          var me = !!mine0 && c.accountId === mine0;
+          return '<div class="msg' + (me ? ' me' : '') + '"><span class="av" aria-hidden="true">' + esc((me ? 'You' : c.author || '?').charAt(0).toUpperCase()) + '</span><div><div class="msg-h"><b>' + esc(me ? 'You' : c.author || 'Someone') + '</b>' +
+            esc(U.when(c.created, new Date())) + '</div><div class="msg-t">' + esc(U.clip(c.text, 1200) ? c.text.slice(0, 1200) : '') + '</div></div></div>';
+        }).join('') + '</div>';
+      }
+    } else {
+      h += '<div class="mail-body" id="mailBody"><p>' + esc(it.summary) + '</p><p class="muted">' + (d.state === 'error' ? 'Showing the notification; the issue couldn’t be read from Jira. <button data-reread>Try again</button>' : 'Loading the issue from Jira…') + '</p></div>';
+    }
+    if (iss && it.via === 'mail' && it.summary) h += '<p class="muted" data-jira-notice>Notification: ' + esc(U.clip(it.summary, 220)) + '</p>';
+    var link = atl.safeLink(iss && iss.webUrl || it.webLink);
+    if (link) h += '<div class="src-note">' + ico('out', 'ico-sm') + '<a href="' + esc(link) + '" target="_blank" rel="noopener noreferrer" data-jira-link>Open in Jira</a></div>';
+    return h;
+  }
+  function pageSourceHTML(it) {
+    var why = it.why0 === 'mention' ? 'You are mentioned' : 'A page you watch changed';
+    return '<div class="mail-from"><span><b>' + esc(it.spaceName || it.spaceKey || 'Confluence') + '</b> · ' + esc(why) + '</span><span>' + esc(U.when(it.received, new Date())) + '</span></div>' +
+      '<div class="mail-subj">' + esc(it.title || it.subject) + '</div>' +
+      '<div class="mail-body" id="mailBody">' + paras(it.summary || '') + '</div>' +
+      (it.senderName && it.senderName !== 'Confluence' ? '<p class="muted">By ' + esc(it.senderName) + '</p>' : '') +
+      (atl.safeLink(it.webUrl) ? '' : '<p class="muted" data-nolink>Droplet has no safe link to this page.</p>');
+  }
+  function aiNoteHTML(it) {
+    if (!S.aiUndo[it.id]) return '';
+    return '<div class="ai-note" data-ai-note>' + ico('spark', 'ico-sm') + '<span>Updated by Claude</span><button data-ai-undo>Undo</button></div>';
+  }
+  function itemTop(it) {
+    var top = topItems(), i = top.indexOf(it), inFocus = i > -1;
+    return { inFocus: inFocus, n: inFocus ? i + 1 : restItems().indexOf(it) + top.length + 1 };
+  }
+  function metaHTML(it) {
+    var fl = flag(it);
+    return '<div class="iv-meta">' + srcHTML(it) + '<span class="sep" aria-hidden="true">·</span><span>' + esc(project(it)) + '</span>' +
+      (fl ? '<span class="flag">' + esc(fl) + '</span>' : '') + meetingHTML(it) + '<span class="sep" aria-hidden="true">·</span><span>' + esc(U.when(it.received, new Date())) + '</span></div>';
+  }
+  function jiraItemHTML(it) {
+    var r = rk(it), st = sendState(it.id), locked = st.phase === 'sent', busy = st.phase === 'sending', p = itemTop(it);
+    var writing = S.drafting[it.id] === 'loading' && !S.touched[it.id];
+    return headHTML(it, p.inFocus, p.n) +
+      '<div class="iv-scroll' + (S.anim ? ' enter' : '') + '">' + metaHTML(it) +
+        '<h2 class="iv-title" id="ivTitle" tabindex="-1">' + esc(titleOf(it)) + '</h2>' +
+        '<div class="iv-why"><span class="who" aria-hidden="true">' + ico('spark') + '</span><p><span class="sr">Claude: </span>' + esc(r.why) + '</p></div>' +
+        '<div class="sec-label">' + ico('jira') + 'From Jira</div>' +
+        '<div class="card src-card">' + sourceHTML(it) + '</div>' +
+        alsoHTML(it) +
+        '<div class="sec-label">' + ico('spark') + 'Prepared comment · ' + esc(it.issueKey) + '</div>' +
+        '<div class="card draft' + (locked ? ' is-locked' : '') + '" data-jira-draft>' +
+          '<div class="draft-row"><span class="k">On</span><span class="chips"><span class="chip" data-to>' + esc(it.issueKey) + '</span></span></div>' +
+          '<div class="draft-row"><span class="k">Via</span><span>Jira comment · posted with your click</span></div>' +
+          '<label class="sr" for="draftText">Comment text</label>' +
+          '<textarea id="draftText"' + (locked || busy ? ' readonly' : '') + (writing ? ' aria-busy="true"' : '') + ' placeholder="' + (writing ? 'Claude is writing a comment…' : 'Write your comment…') + '">' + esc(draftOf(it)) + '</textarea>' +
+          aiNoteHTML(it) + problemHTML(st) +
+          '<div class="draft-foot">' + draftFoot(it, locked, busy) + '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="iv-bar">' + barHTML(it) + '</div>';
+  }
+  function pageItemHTML(it) {
+    var r = rk(it), p = itemTop(it);
+    return headHTML(it, p.inFocus, p.n) +
+      '<div class="iv-scroll' + (S.anim ? ' enter' : '') + '">' + metaHTML(it) +
+        '<h2 class="iv-title" id="ivTitle" tabindex="-1">' + esc(titleOf(it)) + '</h2>' +
+        '<div class="iv-why"><span class="who" aria-hidden="true">' + ico('spark') + '</span><p><span class="sr">Claude: </span>' + esc(r.why) + '</p></div>' +
+        '<div class="sec-label">' + ico('confluence') + 'From Confluence</div>' +
+        '<div class="card src-card">' + sourceHTML(it) + '</div>' +
+        '<div class="ns-start"><button class="ns-btn" data-conf-ask' + (rt.sample ? '' : ' aria-disabled="true"') + '>' + ico('chat') + 'Ask Claude to update</button></div>' +
+      '</div>' +
+      '<div class="iv-bar">' + barHTML(it) + '</div>';
+  }
+  function askBtn() {
+    return '<button class="qbtn" data-chat aria-haspopup="dialog" aria-keyshortcuts="c">' + ico('chat') + '<span>Ask Claude</span></button>';
+  }
+  function atlBarHTML(it, q) {
+    var quiet = '<div class="quiet is-tight">' + askBtn() + q('notimp', 'down', 'Not important', 'n') + q('star', 'star', '<span class="q-l">Important</span>', '', S.verdict[it.id] === 'up') + q('done', 'check', 'Done', 'd') + '</div>';
+    if (isPage(it)) {
+      return quiet + '<button class="btn-send" id="sendBtn" data-open-page' + (atl.safeLink(it.webUrl) ? '' : ' aria-disabled="true"') + '>' + ico('out') + 'Open page</button>' +
+        (S.doneNow[it.id] ? '<div class="sent-note">Marked done</div>' : '');
+    }
+    var st = sendState(it.id), empty = !String(S.drafts[it.id] || '').trim(), btn;
+    if (st.phase === 'sent') btn = '<button class="btn-send is-sent" id="sendBtn" aria-disabled="true">Commented ✓ ' + U.hhmm(st.sentAt) + ' · locked</button>';
+    else if (st.phase === 'sending') btn = '<button class="btn-send" id="sendBtn" aria-disabled="true" aria-busy="true">' + ico('send') + 'Posting…</button>';
+    else if (st.phase === 'unclear') btn = '<button class="btn-send is-confirm" id="sendBtn" data-jira-post>' + (st.confirm ? 'Yes, post again' : 'Post again anyway') + '</button>';
+    else btn = '<button class="btn-send" id="sendBtn" data-jira-post' + (empty ? ' aria-disabled="true"' : '') + '>' + ico('send') + 'Comment</button>';
+    return quiet + btn + (st.phase === 'sent' ? '<div class="sent-note">Commented once · done</div>' : '');
+  }
+
   function renderItem() {
     var col = $('itemCol');
     var it = S.cur && S.byId[S.cur];
     col.classList.toggle('is-idle', S.view !== 'item' || !it);
     if (S.view !== 'item' || !it) { col.innerHTML = emptyHTML(); return; }
     if (isWait(it)) { col.innerHTML = waitItemHTML(it); S.anim = false; return; }
+    if (isJira(it)) { col.innerHTML = jiraItemHTML(it); S.anim = false; return; }
+    if (isPage(it)) { col.innerHTML = pageItemHTML(it); S.anim = false; return; }
     if (isMine(it)) {
       var top0 = topItems(), i0 = top0.indexOf(it);
       col.innerHTML = actionItemHTML(it, i0 > -1, i0 > -1 ? i0 + 1 : restItems().indexOf(it) + top0.length + 1);
@@ -684,10 +796,9 @@
           (outside ? '<div class="warn" data-outside>' + ico('warn', 'ico-sm') + 'Goes outside Planon. Check before sending.</div>' : '') +
           (wait ? '<div class="warn is-wait" data-waiting>' + ico('clock', 'ico-sm') + '<span>Waiting for you to send in Teams · copied ' + esc(U.hhmm(new Date(wait.at))) + '. It clears on the next sync once your message is in the chat.</span></div>' : '') +
           (tm ? '<div class="src-note" data-teams-note>' + ico('warn', 'ico-sm') + '<span>Droplet can’t post in Teams (no permission), so it copies your reply and opens the chat.</span></div>' : '') +
-          problemHTML(st) +
+          aiNoteHTML(it) + problemHTML(st) +
           '<div class="draft-foot">' + hint + '</div>' +
         '</div>' +
-        (S.chatOpen && !locked ? chatHTML(it) : '') +
       '</div>' +
       '<div class="iv-bar">' + barHTML(it) + '</div>';
     S.anim = false;
@@ -700,7 +811,7 @@
     };
     if (isWait(it)) return waitBarHTML(it);
     if (isMine(it)) {
-      return '<div class="quiet is-3">' + q('delete', 'trash', 'Delete') + q('notimp', 'down', 'Not important', 'n') +
+      return '<div class="quiet">' + askBtn() + q('delete', 'trash', 'Delete') + q('notimp', 'down', 'Not important', 'n') +
         q('star', 'star', '<span class="q-l">Important</span>', '', S.verdict[it.id] === 'up') + '</div>' +
         '<button class="btn-send" id="sendBtn" data-done-primary>' + ico('check') + 'Done</button>';
     }
@@ -712,7 +823,8 @@
     else if (busy) btn = '<button class="btn-send" id="sendBtn" aria-disabled="true" aria-busy="true">' + ico('send') + 'Sending…</button>';
     else if (st.phase === 'unclear') btn = '<button class="btn-send is-confirm" id="sendBtn" data-send>' + (st.confirm ? 'Yes, send again' : 'Send again anyway') + '</button>';
     else btn = '<button class="btn-send" id="sendBtn" data-send' + (empty ? ' aria-disabled="true"' : '') + '>' + ico('send') + 'Send</button>';
-    return '<div class="quiet">' + q('chat', 'chat', 'Chat<span class="q-x"> about this</span>', 'c', S.chatOpen) +
+    if (isJira(it) || isPage(it)) return atlBarHTML(it, q);
+    return '<div class="quiet">' + askBtn() +
         q('notimp', 'down', 'Not important', 'n') + q('star', 'star', '<span class="q-l">Important</span>', '', S.verdict[it.id] === 'up') + q('done', 'check', 'Done', 'd') + '</div>' + btn +
       (locked ? '<div class="sent-note">' + (S.doneNow[it.id] ? 'Marked done · sent once' : 'Sent once') + '</div>' : '');
   }
@@ -767,7 +879,8 @@
       return teams.load(who, now, mail.meDomain ? [mail.meDomain] : []).then(function (r) { return { ok: true, r: r }; }, function (e) { return { ok: false, e: e }; });
     });
     var cal = { ok: true, r: S.meetings };
-    return Promise.all([me, saved, inbox, chats]).then(function (res) {
+    var atlas = atl.load().then(function (r) { return { ok: true, r: r }; }, function (e) { return { ok: false, e: e }; });
+    return Promise.all([me, saved, inbox, chats, atlas]).then(function (res) {
       if (seq !== loadSeq) return null;
       S.me = res[0] || S.me;
       if (res[1]) {
@@ -783,8 +896,8 @@
         if (!res[1].ok) S.notes.store = 'Couldn’t read what Droplet remembers; ranking and done marks start fresh.';
         else if (!rt.db) S.notes.store = 'Droplet can’t save here, so done marks and ranking reset when you reload.';
       }
-      var inb = res[2], ch = res[3];
-      var mailItems = S.items.filter(function (m) { return m.src !== 'teams'; });
+      var inb = res[2], ch = res[3], ar = res[4];
+      var mailItems = S.items.filter(function (m) { return m.src === 'mail'; });
       var teamItems = S.items.filter(function (m) { return m.src === 'teams'; });
       if (inb.ok) {
         S.mcpOk = true; S.notes.mail = null; S.syncAt = new Date();
@@ -803,9 +916,30 @@
         var same = !inb.ok && inb.e && ch.e && (inb.e.code === ch.e.code || ch.e.code === 'no_me');
         S.notes.teams = same ? null : ch.e && ch.e.code === 'no_me' ? 'Couldn’t tell which Teams messages are yours, so Teams is left out for now.' : teamsCopy(ch.e);
       }
-      var all = mailItems.concat(teamItems), doneIds = {};
+      /* Jira: notification mails about a mention or a standstill (from Outlook), and
+         Jira and Confluence searches (from Atlassian). One item per issue key. */
+      if (inb.ok) {
+        var first = U.firstName((S.me || {}).displayName);
+        S.jiraMail = atl.fromMails((inb.r.jira || []).filter(function (m) { return !!atl.jiraKind(m, first); }), first);
+      }
+      if (ar.ok) { S.atlOk = true; S.notes.atl = null; S.atlItems = ar.r.jql.concat(ar.r.pages); }
+      else {
+        S.atlOk = false;
+        var sameA = !inb.ok && inb.e && ar.e && inb.e.code === ar.e.code;
+        S.notes.atl = sameA ? null : atlCopy(ar.e);
+      }
+      var byIssue = {}, atlList = [];
+      S.jiraMail.forEach(function (j) { byIssue[j.issueKey] = j; });
+      S.atlItems.forEach(function (x) {
+        var j = x.src === 'jira' && byIssue[x.issueKey];
+        if (j) { j.status = j.status || x.status; j.projectName = j.projectName || x.projectName; if (!j.project0) j.project0 = x.project0; return; }
+        atlList.push(x);
+      });
+      var all = mailItems.concat(teamItems, S.jiraMail, atlList), doneIds = {};
       var items = all.filter(function (m) {
         var done = S.doneDb && S.doneDb[m.key] && !S.doneNow[m.id];
+        /* A Jira item comes back when a newer notification arrives after your comment. */
+        if (done && m.src === 'jira' && Date.parse(m.received) > (Date.parse(S.doneDb[m.key].at || '') || 0)) done = false;
         if (done) doneIds[m.id] = 1;
         return !done;
       });
@@ -850,7 +984,7 @@
     m.meeting = meet.forItem(m, S.meetings);
     var saved = S.rankings[m.key], meetKey = m.meeting ? m.meeting.key : '';
     var fix = function (t) {
-      return m.src === 'teams' || m.src === 'wait' ? rank.normalizeChat(t, { sign: rank.signName(S.me) }) : rank.normalizeDraft(t, { senderFirst: m.senderName, sign: rank.signName(S.me) });
+      return m.src === 'teams' || m.src === 'wait' || m.src === 'jira' ? rank.normalizeChat(t, { sign: rank.signName(S.me) }) : rank.normalizeDraft(t, { senderFirst: m.senderName, sign: rank.signName(S.me) });
     };
     /* Drafts cached by an earlier version go through the same format safety net (idempotent).
        A ranking made without today's meeting (R5) is asked again. */
@@ -988,6 +1122,12 @@
       });
     }, function () { /* the event couldn't be read: tried again on the next sync */ });
   }
+  function atlCopy(e) {
+    var code = e && e.code;
+    if (code === 'needs_reauth') return 'Reconnect Atlassian Rovo in claude.ai Settings → Connectors.';
+    if (code === 'server_not_connected' || code === 'server_not_found') return 'Add Atlassian Rovo in claude.ai Settings → Connectors.';
+    return 'Couldn’t reach Atlassian.';
+  }
   function teamsCopy(e) {
     var c = rt.mcpCopy(e, 'Teams');
     return /Outlook/.test(c) ? c.replace(/this Outlook action/, 'Teams').replace(/Outlook/, 'Teams') : c;
@@ -1067,7 +1207,7 @@
     return store.putRanking(it.key, doc);
   }
   function ensureDraft(it, again) {
-    if (!it || isMine(it) || claudeDraft(it) || S.touched[it.id] || sendState(it.id).phase !== 'idle') return;
+    if (!it || isMine(it) || isPage(it) || claudeDraft(it) || S.touched[it.id] || sendState(it.id).phase !== 'idle') return;
     var ds = S.drafting[it.id];
     if (ds === 'loading' || (ds && !again)) return;
     if (S.ranking && !it.r) return; /* the running ranking writes one; checked again when it ends */
@@ -1091,8 +1231,10 @@
     var d = S.detail[it.id];
     if (d && (d.state === 'ok' || d.state === 'loading')) return d.promise || Promise.resolve(d);
     d = S.detail[it.id] = { state: 'loading' };
-    d.promise = (isTeams(it) ? teams.read(it) : mail.read(it)).then(function (x) {
+    var read = isTeams(it) ? teams.read(it) : isJira(it) ? atl.readIssue(it.issueKey).then(function (iss) { return { issue: iss }; }) : mail.read(it);
+    d.promise = read.then(function (x) {
       S.detail[it.id] = Object.assign({ state: 'ok' }, x);
+      if (isJira(it)) jiraCheckDone(it, x.issue);
     }, function (e) {
       S.detail[it.id] = { state: 'error', code: String(e && e.code || 'unknown'), message: U.clip(e && e.message || '', 140) };
     }).then(function () {
@@ -1107,6 +1249,15 @@
   /* The source as plain text for Claude: the mail, or the chat's newest messages. */
   function sourceText(it, d) {
     d = d || S.detail[it.id];
+    if (isJira(it)) {
+      var iss = d && d.state === 'ok' ? d.issue : null;
+      if (!iss) return (it.status ? 'Status: ' + it.status + '\n' : '') + 'Notification: ' + (it.summary || '');
+      return 'Status: ' + iss.status + (iss.project ? ' · project ' + iss.project : '') + '\nSummary: ' + iss.summary + '\n\nDescription:\n' + U.clip(iss.description, 2500) +
+        '\n\nLatest comments:\n' + iss.comments.slice(-4).map(function (c) { return c.author + ' (' + U.whenLong(c.created) + '): ' + U.clip(c.text, 500); }).join('\n') +
+        (it.summary ? '\n\nNotification: ' + U.clip(it.summary, 400) : '');
+    }
+    if (isPage(it)) return it.summary || '';
+    if (isMine(it)) return '';
     if (!isTeams(it)) return d && d.state === 'ok' ? d.text : '';
     var texts = d && d.state === 'ok' ? d.texts || {} : {};
     return it.msgs.map(function (m) { return (m.me ? 'You' : m.name) + ' (' + U.whenLong(m.at) + '): ' + (texts[m.id] || m.text || ''); }).join('\n');
@@ -1119,7 +1270,7 @@
     S.confirmDel = null;
     renderAll();
     if (isWait(it)) ensureDraft(it);
-    else if (!isMine(it)) { readDetail(it); ensureDraft(it); }
+    else if (!isMine(it) && !isPage(it)) { readDetail(it); ensureDraft(it); }
     if (!desk()) window.scrollTo(0, 0);
     var t = focusDraft && !isSent(id) ? $('draftText') : $('ivTitle');
     if (t) {
@@ -1279,19 +1430,27 @@
   }
 
   /* ---------------- Next steps for your own actions ---------------- */
-  function startNs(kind) {
+  function startNs(kind, preset) {
     var it = curAction(); if (!it) return;
     var a = S.actions[it.docId]; if (!a) return;
     var dir = directory(), pref = a.origin && a.origin.attendees || [], seen = {};
-    var people = whoNames(it).map(function (n) { return ns.resolve(n, dir, pref); }).filter(function (p) {
+    var people = (preset ? preset.who : whoNames(it)).map(function (n) {
+      /* An address Claude passed is used only when Droplet already knows it. */
+      var e = String(n).trim().toLowerCase(), known = dir.filter(function (p) { return p.email === e; })[0];
+      return ns.isEmail(e) ? (known ? { state: 'ok', name: known.name, email: e, options: [] } : { state: 'unknown', name: e, options: [] }) : ns.resolve(n, dir, pref);
+    }).filter(function (p) {
       var k = p.state === 'ok' ? p.email : 'name:' + p.name.toLowerCase();
       if (seen[k]) return false; seen[k] = 1; return true;
     });
     var st = S.ns[it.docId] = { kind: kind, people: people, online: true, title: U.clip(a.text, 80), agenda: '', subject: U.clip(a.text, 80), body: '', chase: '',
       slots: [], slot: 0, slotState: null, inv: { phase: 'idle' }, send: { phase: 'idle' }, chased: null };
+    if (preset) {
+      st.title = U.clip(preset.title || a.text, 80); st.titleTouched = true;
+      if (preset.agenda) { st.agenda = String(preset.agenda); st.agendaTouched = true; }
+    }
     rerenderItemKeepFocus();
     var card = document.querySelector('[data-ns-card]'); if (card) card.scrollIntoView({ block: 'nearest' });
-    nsDraft(it, st);
+    if (!preset || !preset.agenda) nsDraft(it, st);
     nsSlots(it, st);
   }
   function nsRerender(it) { if (S.view === 'item' && S.cur === it.id) rerenderItemKeepFocus(); }
@@ -1433,7 +1592,7 @@
     S.items.push(it); S.byId[it.id] = it;
     renderAll();
     if (S.loaded) rankNew(false); else S.rankAgain = true;
-    return true;
+    return docId;
   }
   function curAction() { var it = S.byId[S.cur]; return isMine(it) ? it : null; }
   /* Save on blur. A new text is ranked again; your own due date always wins. */
@@ -1493,10 +1652,7 @@
   }
 
   /* ---------------- Quiet actions ---------------- */
-  function toggleChat() {
-    S.chatOpen = !S.chatOpen; renderItem();
-    if (S.chatOpen) { var ci = $('chatIn'); if (ci) { ci.focus({ preventScroll: true }); ci.scrollIntoView({ block: 'center' }); } }
-  }
+  function toggleChat() { var it = S.byId[S.cur]; if (it) ask.openSheet(it.id); }
   function feedbackDoc(it, verdict) {
     return { msgId: it.id, sender: it.sender, subject: U.clip(it.subject, 160), project: rk(it).project || null, verdict: verdict, at: new Date().toISOString() };
   }
@@ -1534,35 +1690,189 @@
     toast('Marked done.', function () { undoDone(it.id); });
   }
 
-  /* ---------------- Chat about this ---------------- */
-  function chatSay(id, text) {
-    var it = S.byId[id]; if (!it || !text) return;
-    var c = S.chat[id] = S.chat[id] || { log: [] };
-    if (c.busy) return;
-    var history = c.log.slice();
-    c.log.push({ u: true, t: text });
-    var wait = { u: false, t: 'Thinking…', wait: true };
-    c.log.push(wait); c.busy = true;
-    rerenderItemKeepFocus();
-    var d = S.detail[id];
-    chat.ask({ me: S.me, now: new Date(), item: it, mailText: sourceText(it, d), draft: S.drafts[id] || '' }, history, text).then(function (a) {
-      wait.t = a.reply; wait.wait = false;
-      var st = sendState(id);
-      if (a.draft && st.phase !== 'sent' && st.phase !== 'sending') S.drafts[id] = a.draft;
-    }, function (e) {
-      wait.t = rt.sampleCopy(e) + '. Try again in a moment.'; wait.wait = false; wait.err = true;
-    }).then(function () {
-      c.busy = false;
-      if (S.view === 'item' && S.cur === id) { rerenderItemKeepFocus(); var ci = $('chatIn'); if (ci && document.activeElement === document.body) ci.focus({ preventScroll: true }); }
+  /* ---------------- Jira: Comment on KEY (once, on your click) ---------------- */
+  function jiraDone(it, how) {
+    var at = new Date().toISOString();
+    S.doneNow[it.id] = { how: how || 'commented' };
+    var d = { at: at, how: how || 'commented' };
+    store.setDone(it.key, d);
+    if (S.doneDb) S.doneDb[it.key] = d;
+  }
+  /* R4: you already commented after the item came in. */
+  function jiraCheckDone(it, iss) {
+    if (!iss || isClosed(it.id) || sendState(it.id).phase !== 'idle') return;
+    if (!atl.userCommentedSince(iss, it.received)) return;
+    jiraDone(it, 'commented');
+    renderAllKeepFocus();
+    toast('You already commented on ' + it.issueKey + '. Marked done.', function () { undoDone(it.id); });
+  }
+  function onJiraPost() {
+    var id = S.cur, it = S.byId[id]; if (!isJira(it)) return;
+    var st = sendState(id);
+    if (st.phase === 'sending' || st.phase === 'sent') return;
+    var text = String(S.drafts[id] || '').trim(); if (!text) return;
+    var t = performance.now();
+    if (st.phase === 'unclear') {
+      if (t < (st.armAt || 0)) return;
+      if (!st.confirm) { st.confirm = 1; st.armAt = t + 700; renderItem(); var b0 = $('sendBtn'); if (b0) b0.focus(); return; }
+    }
+    S.send[id] = { phase: 'sending' };
+    renderItem(); renderFocus();
+    atl.postComment(it.issueKey, text).then(function (res) {
+      var n = S.send[id] = { phase: res.phase, message: res.message || '', sentAt: res.sentAt, step: res.step || '', code: res.code || '', detail: res.detail || '' };
+      if (res.phase === 'unclear') { n.confirm = 0; n.armAt = performance.now() + 700; }
+      if (res.phase === 'sent') {
+        jiraDone(it, 'commented');
+        delete S.aiUndo[id];
+        toast(res.verified === false ? 'Posted. Droplet couldn’t read it back; check the issue.' : 'Commented on ' + it.issueKey + '. Marked done.', function () { undoDone(id); });
+      }
+      renderAll();
+      var b = $('sendBtn'); if (b && S.cur === id) b.focus({ preventScroll: true });
     });
+  }
+  function openPage() {
+    var it = S.byId[S.cur]; if (!isPage(it)) return;
+    var link = atl.safeLink(it.webUrl);
+    if (link) { try { window.open(link, '_blank', 'noopener,noreferrer'); } catch (e) { /* ignore */ } }
+  }
+
+  /* ---------------- Ask Claude: what the sheet may read and change ---------------- */
+  function nameFor(email) {
+    var e = String(email || '').toLowerCase(), hit = null;
+    try { (directory() || []).forEach(function (p) { if (!hit && p.email === e && p.name) hit = p.name; }); } catch (x) { /* ignore */ }
+    return hit || U.nameFromAddress(e);
+  }
+  /* The draft Claude may rewrite for an item, or null. */
+  function draftTarget(it) {
+    if (!it || isPage(it)) return null;
+    var st0 = sendState(it.id);
+    if (isMine(it)) {
+      var st = S.ns[it.docId]; if (!st) return null;
+      if (st.kind === 'mail') { var okp = okPeople(st)[0]; return { st: st, field: 'body', style: 'mail', text: st.body, first: okp ? okp.name : '', locked: st.send.phase === 'sent' || st.send.phase === 'sending', kind: 'the next-step mail body' }; }
+      if (st.kind === 'meeting') return { st: st, field: 'agenda', style: 'plain', text: st.agenda, locked: st.inv.phase === 'sent' || st.inv.phase === 'sending', kind: 'the invite agenda' };
+      return { st: st, field: 'chase', style: 'chat', text: st.chase, locked: false, kind: 'the Teams chase' };
+    }
+    var locked = st0.phase === 'sent' || st0.phase === 'sending';
+    if (isWait(it)) {
+      if (chaseByMail(it)) return { key: it.id + '#mail', style: 'mail', text: mailChaseText(it), first: it.senderName, locked: locked, kind: 'the mail chase' };
+      return { key: it.id, style: 'chat', text: draftOf(it), locked: false, kind: 'the Teams chase' };
+    }
+    if (isJira(it)) return { key: it.id, style: 'comment', text: draftOf(it), locked: locked, kind: 'the Jira comment on ' + it.issueKey };
+    if (isTeams(it)) return { key: it.id, style: 'chat', text: draftOf(it), locked: false, kind: 'the Teams reply' };
+    return { key: it.id, style: 'mail', text: draftOf(it), first: it.senderName, locked: locked, kind: 'the mail reply' };
+  }
+  function setDraftFromClaude(it, raw) {
+    var t = draftTarget(it);
+    if (!t) throw { message: 'This item has no draft to change.' };
+    if (t.locked) throw { message: 'This draft was already sent; it can’t change any more.' };
+    var sign = rank.signName(S.me), text;
+    if (t.style === 'mail') text = rank.normalizeDraft(raw, { senderFirst: t.first, sign: sign });
+    else if (t.style === 'chat') text = rank.normalizeChat(raw, { sign: sign });
+    else if (t.style === 'comment') text = rank.normalizeComment(raw, { sign: sign });
+    else text = String(raw).replace(/\r\n?/g, '\n').replace(/[ \t]*—[ \t]*/g, ', ').trim();
+    if (!text) throw { message: 'Empty text' };
+    var prev = S.aiUndo[it.id] ? S.aiUndo[it.id].prev : t.text;
+    if (t.st) { t.st[t.field] = text; t.st[t.field + 'Touched'] = true; }
+    else { S.drafts[t.key] = text; S.touched[it.id] = true; }
+    S.aiUndo[it.id] = { prev: prev == null ? '' : prev, text: text };
+    if (isCur(it.id)) { rerenderItemKeepFocus(); nsGate(); }
+    return text;
+  }
+  /* Undo: back to the text from before Claude's change. Never loses typing. */
+  function undoClaudeDraft(id) {
+    var u = S.aiUndo[id], it = S.byId[id]; if (!u) return;
+    var t = it && draftTarget(it);
+    if (t && !t.locked) { if (t.st) t.st[t.field] = u.prev; else S.drafts[t.key] = u.prev; }
+    delete S.aiUndo[id];
+    if (isCur(id)) { rerenderItemKeepFocus(); nsGate(); }
+    ask.draftUndone(id, 'undo');
+    toast('Restored the text from before Claude’s change.');
+  }
+  function typedOver(id) {
+    if (!S.aiUndo[id]) return;
+    delete S.aiUndo[id];
+    var n = document.querySelector('[data-ai-note]'); if (n) n.remove();
+    ask.draftUndone(id, 'typed');
+  }
+  function chatContext(it) {
+    var t = draftTarget(it);
+    return { me: S.me, now: new Date(), item: it, mailText: sourceText(it), draft: t ? t.text : null, draftKind: t ? t.kind : '', draftStyle: t ? t.style : '' };
+  }
+  function focusList() {
+    var top = topItems();
+    return visible().slice(0, 25).map(function (it) {
+      return { ref: it.src === 'mail' ? it.id : isJira(it) ? it.issueKey : isPage(it) ? 'pageId ' + it.pageId : it.id, source: SRC[it.src], title: U.clip(titleOf(it), 120),
+        from: it.senderName || '', project: project(it), why: rk(it).why, inFocus: top.indexOf(it) > -1, done: isClosed(it.id) };
+    });
+  }
+  function removeActionQuiet(docId) {
+    var id = 'mine:' + docId, it = S.byId[id];
+    delete S.actions[docId]; delete S.actEdit[docId]; delete S.fresh[id];
+    S.items = S.items.filter(function (m) { return m.id !== id; });
+    delete S.byId[id];
+    if (it) { delete S.rankings[it.key]; store.clearRanking(it.key); }
+    store.deleteAction(docId);
+    if (S.view === 'item' && S.cur === id) back(); else renderAll();
+  }
+  function openInviteFromAsk(o) {
+    var docId = addAction(o.title || 'Meeting'); if (!docId) return;
+    var id = 'mine:' + docId;
+    openItem(id, false);
+    startNs('meeting', { who: o.who, title: o.title, agenda: o.agenda });
+  }
+  function replySent(mailId, res) {
+    var it = S.byId[mailId]; if (!it || it.src !== 'mail') return;
+    S.send[mailId] = { phase: 'sent', sentAt: res.sentAt };
+    S.doneNow[mailId] = { how: 'sent' };
+    store.setDone(it.key, { at: new Date().toISOString(), how: 'sent', sentAt: res.sentAt.toISOString() });
+    store.setSent(it.key, { sentAt: res.sentAt.toISOString() });
+    if (S.sentDb) S.sentDb[it.key] = { sentAt: res.sentAt.toISOString() };
+    renderAllKeepFocus();
+  }
+  function jiraCommentedKey(key, res) {
+    var it = S.byId['jira:' + key]; if (!it) return;
+    S.send[it.id] = { phase: 'sent', sentAt: res.sentAt };
+    jiraDone(it, 'commented');
+    renderAllKeepFocus();
+  }
+  ask.init({
+    ico: ico, item: function (id) { return S.byId[id] || null; }, title: titleOf, me: function () { return S.me; }, toast: toast,
+    isExternal: isExternal, nameFor: nameFor, draftTarget: draftTarget, draftKind: function (it) { var t = draftTarget(it); return t ? t.kind : ''; },
+    setDraft: setDraftFromClaude, undoDraft: undoClaudeDraft, chatContext: chatContext, focusList: focusList,
+    addAction: function (t) { return addAction(t); }, removeAction: removeActionQuiet, openInvite: openInviteFromAsk,
+    replySent: replySent, jiraCommented: jiraCommentedKey
+  });
+  function renderAskbar() {
+    var b = $('askBar'); if (!b) return;
+    var on = ask.available(), hint = b.querySelector('.hint');
+    if (on) b.removeAttribute('aria-disabled'); else b.setAttribute('aria-disabled', 'true');
+    if (hint) hint.textContent = on ? 'Update a page · mail a supplier' : !rt.inited ? 'Starting…' : !rt.sample ? 'Claude isn’t available here' : 'Not available in this view';
+    b.title = on ? 'Ask Claude (k)' : hint ? hint.textContent : '';
+  }
+  function askClick(t) {
+    var id;
+    if (t.getAttribute('aria-disabled') === 'true') return;
+    if (t.hasAttribute('data-ask-new')) return ask.newConversation();
+    if (t.hasAttribute('data-ask-stop')) return ask.stop();
+    if ((id = t.getAttribute('data-chip'))) return ask.say(id);
+    if ((id = t.getAttribute('data-askchip'))) { var inp = $('chatIn'); if (inp) { inp.value = id; inp.focus({ preventScroll: true }); try { inp.setSelectionRange(id.length, id.length); } catch (e) { /* ignore */ } } return; }
+    if ((id = t.getAttribute('data-card-go'))) return ask.go(id);
+    if ((id = t.getAttribute('data-card-open'))) return ask.openPage(id);
+    if ((id = t.getAttribute('data-card-undo'))) return ask.undoCard(id);
+    if ((id = t.getAttribute('data-card-invite'))) return ask.invite(id);
+    if ((id = t.getAttribute('data-card-repropose'))) return ask.repropose(id);
+    if ((id = t.getAttribute('data-ask-undo-draft'))) return undoClaudeDraft(id);
   }
 
   /* ---------------- Events ---------------- */
   document.addEventListener('click', function (e) {
+    if (e.target.closest('[data-ask-close]')) { ask.close(); return; }
     var t = e.target.closest('button, a');
     if (!t) return;
-    if (t.tagName === 'A') return; /* only safe Outlook links are rendered as links */
+    if (t.tagName === 'A') return; /* only safe Outlook, Teams and Atlassian links are rendered as links */
+    if (t.closest('#sheetHost')) return askClick(t);
     var id;
+    if (t.hasAttribute('data-ask')) { if (ask.available()) ask.openSheet(null); return; }
     if ((id = t.getAttribute('data-open'))) return openItem(id, false);
     if ((id = t.getAttribute('data-act'))) { var it = S.byId[id]; return openItem(id, !!(it && rk(it).kind === 'reply')); }
     if (t.id === 'restToggle') { S.restOpen = !S.restOpen; renderRest(); if (S.restOpen) $('q').focus(); return; }
@@ -1571,7 +1881,8 @@
     if ((id = t.getAttribute('data-retry'))) {
       if (id === 'mail') { S.notes.mail = null; return (rt.mcp ? Promise.resolve() : rt.retryUse('mcp')).then(function () { load({ full: false }); }); }
       if (id === 'teams') { S.notes.teams = null; renderNotes(); return (rt.mcp ? Promise.resolve() : rt.retryUse('mcp')).then(function () { if (!S.loading) load({ full: false }); }); }
-      if (id === 'rank') { S.notes.rank = null; return (rt.sample ? Promise.resolve() : rt.retryUse('sample')).then(function () { rankNew(true); }); }
+      if (id === 'rank') { S.notes.rank = null; return (rt.sample ? Promise.resolve() : rt.retryUse('sample').then(rt.checkTools)).then(function () { renderAskbar(); rankNew(true); }); }
+      if (id === 'atl') { S.notes.atl = null; renderNotes(); return (rt.mcp ? Promise.resolve() : rt.retryUse('mcp')).then(function () { if (!S.loading) load({ full: false }); }); }
       return;
     }
     if (t.hasAttribute('data-reread') && S.cur) { delete S.detail[S.cur]; var ci0 = S.byId[S.cur]; if (ci0) readDetail(ci0); return; }
@@ -1607,7 +1918,10 @@
     if (t.hasAttribute('data-copydiag') && cur) return copyDetails();
     if (t.hasAttribute('data-redraft') && cur) { var rit = S.byId[cur]; if (rit) ensureDraft(rit, true); return; }
     if (t.hasAttribute('data-chat') && cur) return toggleChat();
-    if (t.hasAttribute('data-chip') && cur) return chatSay(cur, t.getAttribute('data-chip'));
+    if (t.hasAttribute('data-ai-undo') && cur) return undoClaudeDraft(cur);
+    if (t.hasAttribute('data-jira-post') && cur) return onJiraPost();
+    if (t.hasAttribute('data-open-page') && cur) return openPage();
+    if (t.hasAttribute('data-conf-ask') && cur) return ask.openSheet(cur, 'Update this page: ');
     if (t.hasAttribute('data-star') && cur) return toggleStar();
     if (t.hasAttribute('data-notimp') && cur) return notImportant();
     if (t.hasAttribute('data-done') && cur) return markDone();
@@ -1622,10 +1936,11 @@
     if (e.target.hasAttribute('data-ns-addform')) { nsAdd(); return; }
     if (e.target.hasAttribute('data-chatform')) {
       var inp = $('chatIn'), v = inp ? inp.value.trim() : '';
-      if (v && S.cur) { inp.value = ''; chatSay(S.cur, v); }
+      if (v && ask.open && !ask.conv(ask.scope).busy) { inp.value = ''; ask.say(v); }
     }
   });
   document.addEventListener('input', function (e) {
+    if (e.target.hasAttribute('data-card-body') || e.target.hasAttribute('data-card-subject')) { ask.cardInput(e.target); return; }
     if (e.target.id === 'q') { S.q = e.target.value; renderRest(); }
     if ((e.target.id === 'actText' || e.target.id === 'actNotes') && curAction()) {
       var ed = S.actEdit[curAction().docId] = S.actEdit[curAction().docId] || {};
@@ -1635,12 +1950,14 @@
     if (nx && nsTarget()) {
       var nst = nsTarget()[1], f = nx[1].charAt(0).toLowerCase() + nx[1].slice(1);
       nst[f] = e.target.value; nst[f + 'Touched'] = true;
+      if (f === 'body' || f === 'agenda' || f === 'chase') typedOver(nsTarget()[0].id);
       nsGate();
     }
     if (/^nsAddr\d+$/.test(e.target.id || '') && nsTarget()) { var pi = nsTarget()[1].people[+e.target.id.slice(6)]; if (pi) pi.typed = e.target.value; }
     if (e.target.id === 'draftText' && S.cur) {
       var first = !S.touched[S.cur], dk = S.byId[S.cur] ? draftKey(S.byId[S.cur]) : S.cur;
       S.drafts[dk] = e.target.value; S.touched[S.cur] = true;
+      typedOver(S.cur);
       if (first) { var ft = document.querySelector('.draft-foot'), cit = S.byId[S.cur]; if (ft && cit) ft.innerHTML = draftFoot(cit, false, false); }
       var b = $('sendBtn'), st = sendState(S.cur);
       if (b && (b.hasAttribute('data-send') || b.hasAttribute('data-copyopen')) && st.phase !== 'unclear') {
@@ -1661,6 +1978,19 @@
   });
   document.addEventListener('keydown', function (e) {
     var tg = (e.target.tagName || '').toLowerCase(), typing = tg === 'input' || (tg === 'textarea' && !e.target.readOnly);
+    /* The sheet is modal: Esc closes it, Tab stays inside, other shortcuts wait. */
+    if (ask.open) {
+      if (e.key === 'Escape') { e.preventDefault(); ask.close(); return; }
+      if (e.key === 'Tab') {
+        var f = [].slice.call(document.querySelectorAll('#askSheet button:not([aria-disabled="true"]), #askSheet input, #askSheet textarea, #askSheet a[href]'));
+        if (f.length) {
+          var i0 = f.indexOf(document.activeElement);
+          if (e.shiftKey && i0 <= 0) { e.preventDefault(); f[f.length - 1].focus(); }
+          else if (!e.shiftKey && (i0 === f.length - 1 || i0 === -1)) { e.preventDefault(); f[0].focus(); }
+        }
+      }
+      return;
+    }
     /* Esc in the draft only leaves the text field; a second Esc closes. */
     if (e.key === 'Escape') {
       if (e.target.id === 'draftText' || e.target.id === 'actText' || e.target.id === 'actNotes' || e.target.id === 'actDue') { e.target.blur(); return; }
@@ -1683,6 +2013,7 @@
     }
     if (e.key === '/') { e.preventDefault(); if (!S.restOpen) { S.restOpen = true; renderRest(); } $('q').focus(); return; }
     if (e.key === 'a' && (desk() || S.view === 'list')) { e.preventDefault(); $('addIn').focus(); return; }
+    if (e.key === 'k' && ask.available()) { e.preventDefault(); ask.openSheet(null); return; }
     if (S.view !== 'item' || S.pane !== 'item' || !S.cur) return;
     var ph = sendState(S.cur).phase;
     if (ph === 'sent' || ph === 'sending') return;
@@ -1693,6 +2024,6 @@
 
   /* ---------------- Boot ---------------- */
   store.onError = function () { S.notes.store = 'Couldn’t save a change; it may be gone after a reload.'; renderNotes(); };
-  renderAll();
-  rt.init().then(function () { renderStatus(); return load({ full: true }); });
+  renderAll(); renderAskbar();
+  rt.init().then(function () { renderStatus(); renderAskbar(); return load({ full: true }); });
 })(window.Droplet = window.Droplet || {});

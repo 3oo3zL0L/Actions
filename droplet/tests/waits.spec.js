@@ -31,7 +31,7 @@ test.describe('R3: waiting on others', () => {
       askedAt: '2026-09-29T07:00:00.000Z', project: 'SIEM Integration', ref: { id: 's1-ask' } });
 
     // Tue 29 Sep → Fri 2 Oct is 3 working days: due, in the one focus list, ranked with the rest.
-    expect((await app.focusIds()).slice(0, 2)).toEqual(['a1-standstill', WAIT1]);
+    expect((await app.focusIds()).slice(0, 2)).toEqual(['jira:OIDC-77', WAIT1]);
     const row = page.locator(`[data-id="${WAIT1}"]`);
     await expect(row.locator('[data-src="wait"]')).toHaveText('Waiting');
     await expect(row.locator('[data-src="wait"] svg')).toHaveCount(1);

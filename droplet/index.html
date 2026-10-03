@@ -1,8 +1,12 @@
 <title>Droplet</title>
 <!-- Publish: declare the Microsoft 365 tools get_me, outlook_email_search, read_resource,
      outlook_create_reply_draft, outlook_create_draft, outlook_send_draft,
-     outlook_create_event, chat_message_search and outlook_calendar_search.
-     The four create/send tools write, and only on a click. Droplet never posts in Teams.
+     outlook_create_event, chat_message_search and outlook_calendar_search, and the
+     Atlassian Rovo tools atlassianUserInfo, getAccessibleAtlassianResources,
+     searchJiraIssuesUsingJql, getJiraIssue, addCommentToJiraIssue,
+     searchConfluenceUsingCql, getConfluencePage and updateConfluencePage.
+     The create/send tools, addCommentToJiraIssue and updateConfluencePage write,
+     and only on a click. Droplet never posts in Teams.
      The full capabilities JSON is in README.md. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -18,7 +22,7 @@
         <div class="brand">
           <span class="brand-name">Droplet</span>
         </div>
-        <div class="status" id="status"><span><i></i>M365 link</span><span><i></i>Teams</span><span><i></i>Claude</span><span>Sync ··:··</span><span>Nothing sends without you</span></div>
+        <div class="status" id="status"><span><i></i>M365 link</span><span><i></i>Teams</span><span><i></i>Atlassian</span><span><i></i>Claude</span><span>Sync ··:··</span><span>Nothing sends without you</span></div>
         <p class="date" id="dateLine"></p>
         <h1 class="h1">Do now</h1>
         <p class="sub" id="sub"></p>
@@ -49,10 +53,10 @@
       </section>
     </div>
     <div class="askbar-wrap">
-      <button class="askbar" aria-disabled="true" title="Ask Claude comes in a later slice">
+      <button class="askbar" id="askBar" data-ask aria-haspopup="dialog" aria-disabled="true" aria-keyshortcuts="k">
         <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v5M12 16v5M3 12h5M16 12h5M5.6 5.6l3.2 3.2M15.2 15.2l3.2 3.2M5.6 18.4l3.2-3.2M15.2 8.8l3.2-3.2"/></svg>
-        <span class="lbl">Ask Claude</span>
-        <span class="hint">Coming in a later slice</span>
+        <span class="lbl"><span aria-hidden="true">› </span>Ask Claude</span>
+        <span class="hint">Starting…</span>
       </button>
     </div>
   </section>
@@ -63,6 +67,7 @@
 </main>
 
 <div id="toastHost" role="status" aria-live="polite"></div>
+<div id="sheetHost"></div>
 
 <script src="js/util.js"></script>
 <script src="js/runtime.js"></script>
@@ -74,7 +79,9 @@
 <script src="js/waits.js"></script>
 <script src="js/transcript.js"></script>
 <script src="js/rank.js"></script>
+<script src="js/atlassian.js"></script>
 <script src="js/send.js"></script>
 <script src="js/nextstep.js"></script>
 <script src="js/chat.js"></script>
+<script src="js/ask.js"></script>
 <script src="js/app.js"></script>

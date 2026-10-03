@@ -64,6 +64,7 @@
       if (!o) return null;
       var me = { mail: String(o.mail || o.userPrincipalName || ""), displayName: String(o.displayName || "") };
       mail.meDomain = U.domainOf(me.mail);
+      mail.meFirst = U.firstName(me.displayName);
       return me;
     }, function () { return null; });
   };
@@ -87,17 +88,20 @@
         });
     }
     return next(0).then(function () {
-      var skipped = 0, items = [];
+      var skipped = 0, items = [], jira = [];
       all.forEach(function (o) {
         if (o.isRead !== false) return;
         var m = normalize(o);
         var t = Date.parse(m.received);
         if (t && t < cutoff) return;
+        /* Jira notifications go to the caller, which keeps mentions and
+           standstills as Jira items (it knows the user's name) and drops the rest as noise. */
+        if (D.atl && D.atl.isJiraSender(m.sender) && D.atl.issueKeyOf(m.subject)) { jira.push(m); return; }
         if (mail.noiseReason(m)) { skipped++; return; }
         items.push(m);
       });
       items.sort(function (a, b) { return String(b.received).localeCompare(String(a.received)); });
-      return { items: mergeThreads(items), skipped: skipped };
+      return { items: mergeThreads(items), skipped: skipped, jira: jira };
     });
   };
 

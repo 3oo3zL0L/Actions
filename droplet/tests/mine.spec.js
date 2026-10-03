@@ -98,7 +98,7 @@ test.describe('Your own actions', () => {
     await page.click(`[data-open="${id}"]`);
     await page.click('[data-star]');
     await expect(page.locator('[data-star]')).toHaveAttribute('aria-pressed', 'true');
-    expect((await app.focusIds()).slice(0, 2)).toEqual(['a1-standstill', id]);
+    expect((await app.focusIds()).slice(0, 2)).toEqual(['jira:OIDC-77', id]);
   });
 
   test('edited text and due date are saved on blur and survive a reload; a new text is ranked again', async ({ app, page }) => {

@@ -4,7 +4,7 @@ test.describe('Degraded states', () => {
   test('an unreadable Claude answer falls back to newest first with R1 on top, and Try again asks again', async ({ app, page }) => {
     await app.boot({ rank: 'INVALID_JSON' });
     await expect(page.locator('[data-note="rank"]')).toContainText('Claude’s answer couldn’t be read, so new mail is newest first.');
-    expect(await app.focusIds()).toEqual(['a1-standstill', 'a2-anouk', 'inj-eve', 'a3-bram', 'a4-lena']);
+    expect(await app.focusIds()).toEqual(['jira:OIDC-77', 'a2-anouk', 'inj-eve', 'a3-bram', 'a4-lena']);
     await expect(page.locator('[data-id="a2-anouk"] .btn-act')).toHaveText(/Write a reply to Anouk/);
     const db = await app.db();
     expect(Object.keys(db).filter((k) => k.startsWith('rankings/'))).toEqual([]);
@@ -13,7 +13,7 @@ test.describe('Degraded states', () => {
     await page.click('[data-retry="rank"]');
     await app.ready();
     await expect(page.locator('[data-note="rank"]')).toHaveCount(0);
-    expect(await app.focusIds()).toEqual(['a1-standstill', 'a3-bram', 'a2-anouk', 'a4-lena', 'a5-tom']);
+    expect(await app.focusIds()).toEqual(['jira:OIDC-77', 'a3-bram', 'a2-anouk', 'a4-lena', 'a5-tom']);
     const samples = await app.calls('sample');
     expect(samples[1].options.cache).toEqual({ gcTime: 300000, refresh: true });
   });
@@ -32,7 +32,7 @@ test.describe('Degraded states', () => {
     });
     await expect(page.locator('[data-note="rank"]')).toContainText('Claude skipped');
     const focus = await app.focusIds();
-    expect(focus.slice(0, 2)).toEqual(['a1-standstill', 'a2-anouk']);
+    expect(focus.slice(0, 2)).toEqual(['jira:OIDC-77', 'a2-anouk']);
     expect(focus).not.toContain('not-a-real-id');
     const why = await page.locator('[data-id="a2-anouk"] .fi-why').innerText();
     expect(why.length).toBeLessThanOrEqual(141);
@@ -53,10 +53,10 @@ test.describe('Degraded states', () => {
   test('without sample the list is newest first with a quiet line', async ({ app, page }) => {
     await app.boot({ noSample: true });
     await expect(page.locator('[data-note="rank"]')).toHaveText(/Claude isn’t available here, so new mail is newest first\./);
-    expect(await app.focusIds()).toEqual(['a1-standstill', 'a2-anouk', 'inj-eve', 'a3-bram', 'a4-lena']);
+    expect(await app.focusIds()).toEqual(['jira:OIDC-77', 'a2-anouk', 'inj-eve', 'a3-bram', 'a4-lena']);
     await expect(page.locator('.status i.off')).toHaveCount(1);
     expect(await app.calls('sample')).toHaveLength(0);
-    // Chat about this says so instead of failing.
+    // Ask Claude on an item says so instead of failing.
     await app.openItem('a3-bram');
     await page.click('[data-chat]');
     await expect(page.locator('#chat')).toContainText('Claude isn’t available here.');

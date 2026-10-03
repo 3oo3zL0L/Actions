@@ -58,7 +58,7 @@ test.describe('The MCP result envelope: every documented form', () => {
   for (const envelope of ['blocks', 'payloadString', 'holder', 'structured', 'multiBlock', 'bare']) {
     test(`the whole flow works when every answer comes as "${envelope}": load, read, send`, async ({ app, page }) => {
       await app.boot({ envelope });
-      expect(await app.focusIds()).toEqual(['a1-standstill', 'a3-bram', 'a2-anouk', 'a4-lena', 'a5-tom']);
+      expect(await app.focusIds()).toEqual(['jira:OIDC-77', 'a3-bram', 'a2-anouk', 'a4-lena', 'a5-tom']);
       await sendBram(page);
       await expect(page.locator('#sendBtn')).toHaveText('Sent ✓ 10:00 · locked');
       const w = (await app.calls('mcp')).filter((c) => /create|send_draft/.test(c.tool) || (c.tool === 'read_resource' && /AAkALg/.test(c.input.uri)));

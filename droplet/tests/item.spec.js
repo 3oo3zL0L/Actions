@@ -72,7 +72,7 @@ test.describe('Item panel', () => {
     expect(await app.writeTools()).toEqual([]);
   });
 
-  test('the action bar has Chat about this, Not important, ★, Done and Send', async ({ app, page }) => {
+  test('the action bar has Ask Claude, Not important, ★, Done and Send', async ({ app, page }) => {
     await app.boot();
     await app.openItem('a3-bram');
     const labels = await page.$$eval('.iv-bar .qbtn', (els) => els.map((e) => e.getAttribute('data-chat') !== null ? 'chat' : e.getAttribute('data-notimp') !== null ? 'notimp' : e.getAttribute('data-star') !== null ? 'star' : e.getAttribute('data-done') !== null ? 'done' : 'other'));
@@ -83,7 +83,7 @@ test.describe('Item panel', () => {
     expect(Math.max(...mids) - Math.min(...mids)).toBeLessThan(4);
   });
 
-  test('Chat about this: Claude rewrites the draft; the email goes in as data', async ({ app, page }) => {
+  test('Ask Claude on the item: Claude rewrites the draft; the email goes in as data', async ({ app, page }) => {
     await app.boot();
     await app.openItem('a3-bram');
     await page.click('[data-chat]');
@@ -122,7 +122,7 @@ test.describe('Item panel', () => {
     await expect(page.locator('#mailBody')).toContainText('Today please.');
   });
 
-  test('laptop shortcuts: e does nothing any more, c opens chat, Esc closes', async ({ app, page }) => {
+  test('laptop shortcuts: e does nothing any more, c opens Ask Claude, Esc closes', async ({ app, page }) => {
     await app.boot();
     await app.openItem('a3-bram');
     await page.keyboard.press('e');
@@ -131,6 +131,11 @@ test.describe('Item panel', () => {
     await page.locator('#ivTitle').focus();
     await page.keyboard.press('c');
     await expect(page.locator('#chat')).toBeVisible();
+    await expect(page.locator('#chatIn')).toBeFocused();
+    // Esc first closes the Ask Claude sheet, then the item.
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#chat')).toHaveCount(0);
+    await expect(page.locator('#app')).toHaveAttribute('data-view', 'item');
     await page.keyboard.press('Escape');
     await expect(page.locator('#app')).toHaveAttribute('data-view', 'list');
   });

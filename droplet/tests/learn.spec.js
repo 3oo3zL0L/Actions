@@ -8,7 +8,7 @@ test.describe('Learn', () => {
     await page.click('[data-notimp]');
     await expect(page.locator('#app')).toHaveAttribute('data-view', 'list');
     await expect(page.locator('.toast')).toContainText('Moved to Everything else.');
-    expect(await app.focusIds()).toEqual(['a1-standstill', 'a3-bram', 'a2-anouk', 'a5-tom', 'a8-kees']);
+    expect(await app.focusIds()).toEqual(['jira:OIDC-77', 'a3-bram', 'a2-anouk', 'a5-tom', 'a8-kees']);
     await app.openRest();
     const rest = await page.$$eval('#restList .rr', (els) => els.map((e) => e.getAttribute('data-open')));
     expect(rest[rest.length - 1]).toBe('a4-lena');
@@ -45,7 +45,7 @@ test.describe('Learn', () => {
     await page.click('[data-open="a7-yuki"]');
     await page.click('[data-star]');
     await expect(page.locator('[data-star]')).toHaveAttribute('aria-pressed', 'true');
-    expect((await app.focusIds()).slice(0, 2)).toEqual(['a1-standstill', 'a7-yuki']);
+    expect((await app.focusIds()).slice(0, 2)).toEqual(['jira:OIDC-77', 'a7-yuki']);
     await expect(page.locator('[data-id="a7-yuki"] .flag')).toHaveText('★ Important');
     expect((await app.db())['feedback/a7-yuki']).toMatchObject({ verdict: 'up', project: 'UI/UX' });
     await page.click('[data-star]');

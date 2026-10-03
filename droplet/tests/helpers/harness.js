@@ -53,7 +53,7 @@ const test = base.test.extend({
       },
       calls: (kind) => page.evaluate((k) => window.__calls.filter((c) => !k || c.kind === k), kind),
       mcpTools: () => page.evaluate(() => window.__calls.filter((c) => c.kind === 'mcp').map((c) => c.tool)),
-      writeTools: () => page.evaluate(() => window.__calls.filter((c) => c.kind === 'mcp' && /create|send|update|delete|forward/.test(c.tool)).map((c) => c.tool)),
+      writeTools: () => page.evaluate(() => window.__calls.filter((c) => c.kind === 'mcp' && /create|send|update|delete|forward|addComment/i.test(c.tool)).map((c) => c.tool)),
       db: () => page.evaluate(() => window.__db()),
       focusIds: () => page.$$eval('#focus .fi', (els) => els.map((e) => e.getAttribute('data-id'))),
       async openItem(id) { await page.click(`[data-open="${id}"]`); await page.waitForSelector('#ivTitle'); },

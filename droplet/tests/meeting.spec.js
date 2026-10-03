@@ -30,7 +30,7 @@ test.describe('R5: meeting today', () => {
 
     await expect(page.locator(`[data-id="${TID('iris')}"] [data-meeting]`)).toHaveText('Meeting 14:00');
     await expect(page.locator('[data-id="a3-bram"] [data-meeting]')).toHaveText('Meeting 14:30');
-    for (const id of ['a2-anouk', 'a4-lena', 'a5-tom', 'a1-standstill']) await expect(page.locator(`[data-id="${id}"] [data-meeting]`)).toHaveCount(0);
+    for (const id of ['a2-anouk', 'a4-lena', 'a5-tom', 'jira:OIDC-77']) await expect(page.locator(`[data-id="${id}"] [data-meeting]`)).toHaveCount(0);
     await app.openRest();
     await expect(meetingTag(page, 'a6-peter')).toContainText('meeting 16:00');
     await expect(meetingTag(page, 'a8-kees')).not.toContainText('meeting');
@@ -68,7 +68,7 @@ test.describe('R5: meeting today', () => {
   test('a failing calendar read is one quiet line and ranking goes on', async ({ app, page }) => {
     await app.boot({ faults: { outlook_calendar_search: 'server_unavailable' } });
     await expect(page.locator('[data-note="cal"]')).toContainText('Couldn’t read today’s calendar');
-    expect(await app.focusIds()).toEqual(['a1-standstill', 'a3-bram', 'a2-anouk', 'a4-lena', 'a5-tom']);
+    expect(await app.focusIds()).toEqual(['jira:OIDC-77', 'a3-bram', 'a2-anouk', 'a4-lena', 'a5-tom']);
   });
 
   test('Outlook wall-clock times convert correctly (W. Europe = Europe/Amsterdam, summer and winter)', async ({ app, page }) => {
