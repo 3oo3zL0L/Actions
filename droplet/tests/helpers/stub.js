@@ -245,7 +245,7 @@ function installDropletStub(cfg) {
   var issues = atl.issues || {}, pages = atl.pages || {}, jqlKeys = (atl.jql || []).slice();
   var atlLog = { comments: [], updates: [] };
   window.__stub.atl = atlLog;
-  window.__stub.setPage = function (id, body) { pages[id].body = body; pages[id].version = (pages[id].version || 1) + 1; };
+  window.__stub.setPage = function (id, html) { pages[id].html = html; pages[id].version = (pages[id].version || 1) + 1; };
   window.__stub.addIssueComment = function (key, c) { issues[key].comments = (issues[key].comments || []).concat([c]); };
   function needCloud(input) { if (input.cloudId !== CLOUD) throw err("tool_error", "Unknown cloudId"); }
   function issueShape(key, fieldsWanted) {
@@ -258,13 +258,14 @@ function installDropletStub(cfg) {
     }
     return { id: "100" + key.replace(/\D/g, ""), key: key, self: "https://api.atlassian.com/ex/jira/" + CLOUD + "/rest/api/3/issue/" + key, fields: f, webUrl: x.webUrl || "https://planon.atlassian.net/browse/" + key };
   }
+  /* withBody: "html" or "markdown". Markdown has no macros (as live: they are dropped). */
   function pageShape(id, withBody) {
     var p = pages[id];
     var o = { id: id, type: p.type || "page", status: "current", title: p.title, lastModified: p.lastModified || "2026-10-02T06:00:00.000Z",
       summary: p.excerpt || "", space: { key: p.spaceKey || "OIDC", name: p.spaceName || "OIDC" }, _links: { webui: p.webui || "/spaces/" + (p.spaceKey || "OIDC") + "/pages/" + id },
       author: { displayName: p.author || "Lena Smit" } };
     if (p.webUrl !== undefined) o.webUrl = p.webUrl;
-    if (withBody) { o.body = p.body; o.version = { number: p.version || 1 }; }
+    if (withBody) o.body = withBody === "html" ? (p.html != null ? p.html : "<p>" + p.body + "</p>") : p.body;
     return o;
   }
   var atlTools = {
@@ -296,13 +297,15 @@ function installDropletStub(cfg) {
     getConfluencePage: function (input) {
       needCloud(input);
       if (!pages[input.pageId]) throw err("tool_error", "Page not found");
-      return result(JSON.stringify(pageShape(input.pageId, true)));
+      /* Seen live (2026-10): the page comes wrapped like a search result, body a plain string. */
+      return result(JSON.stringify({ content: { totalCount: 1, nodes: [pageShape(input.pageId, input.contentFormat === "html" ? "html" : "markdown")] } }));
     },
     updateConfluencePage: function (input) {
       needCloud(input);
       if (!pages[input.pageId]) throw err("tool_error", "Page not found");
       atlLog.updates.push(JSON.parse(JSON.stringify(input)));
-      pages[input.pageId].body = input.body; pages[input.pageId].version = (pages[input.pageId].version || 1) + 1;
+      if (input.contentFormat === "html") pages[input.pageId].html = input.body; else pages[input.pageId].body = input.body;
+      pages[input.pageId].version = (pages[input.pageId].version || 1) + 1;
       return result(JSON.stringify({ id: input.pageId, title: pages[input.pageId].title, version: { number: pages[input.pageId].version } }));
     }
   };

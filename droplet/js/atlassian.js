@@ -261,32 +261,88 @@
     if (typeof o.markdown === "string") return o.markdown;
     return null;
   }
-  atl.readPage = function (pageId, opts) {
-    return atl.call("getConfluencePage", { cloudId: atl.CLOUD_ID, pageId: String(pageId), contentFormat: "markdown" }, opts).then(function (res) {
-      var objs = U.resultObjects(res), o = objs.filter(function (x) { return x.title !== undefined || x.body !== undefined; })[0];
-      if (o && o.page && !o.title) o = o.page;
+  /* One page. format "html" (the default here) is round-trip safe: macros,
+     panels, status, layouts and mentions stay as data-type nodes. Markdown
+     drops macros, so Droplet only reads, edits and writes pages as HTML.
+     The real answer wraps the page: {content:{totalCount, nodes:[{…, body:"…"}]}}. */
+  function pageObj(objs) {
+    for (var i = 0; i < objs.length; i++) {
+      var o = objs[i], wrapped = null;
+      [o.content, o].forEach(function (c) {
+        if (wrapped || !c || typeof c !== "object") return;
+        var list = Array.isArray(c.nodes) ? c.nodes : Array.isArray(c.results) ? c.results : null;
+        if (list && list.length) wrapped = list[0];
+      });
+      if (wrapped) return wrapped;
+      if (o.page && typeof o.page === "object") return o.page;
+      if (o.title !== undefined || o.body !== undefined) return o;
+    }
+    return null;
+  }
+  atl.readPage = function (pageId, opts, format) {
+    format = format || "html";
+    return atl.call("getConfluencePage", { cloudId: atl.CLOUD_ID, pageId: String(pageId), contentFormat: format }, opts).then(function (res) {
+      var o = pageObj(U.resultObjects(res));
       var body = o ? bodyOf(o) : null;
-      if (body == null && !objs.length) body = U.resultText(res) || null;
       if (!o || body == null) throw { code: "tool_error", message: "No page body in Confluence’s answer" };
       var sp = o.space || {};
-      return { id: String(o.id || pageId), title: String(o.title || ""), body: String(body).replace(/\r\n?/g, "\n"),
+      return { id: String(o.id || pageId), title: String(o.title || ""), body: String(body).replace(/\r\n?/g, "\n"), format: format,
         version: o.version && (o.version.number || o.version) || null, spaceKey: String(sp.key || o.spaceKey || ""), spaceName: String(sp.name || ""),
         webUrl: pageUrl(o) };
     });
   };
   atl.sameBody = function (a, b) {
-    var n = function (s) { return String(s || "").replace(/\r\n?/g, "\n").replace(/[ \t]+$/gm, "").replace(/\n{3,}/g, "\n\n").trim(); };
+    var n = function (s) { return String(s || "").replace(/\r\n?/g, "\n").replace(/>\s+</g, "><").replace(/[ \t]+$/gm, "").replace(/\n{3,}/g, "\n\n").trim(); };
     return n(a) === n(b);
   };
-  /* Update page: re-read first and refuse when the page changed since the
-     proposal; then one updateConfluencePage; then read back the title. */
+  /* The page's HTML as plain text, for the diff only (DOMParser: inert). */
+  atl.pageText = function (html) { return U.htmlToText(html).replace(/•[ \t]*\n+[ \t]*/g, "• ").replace(/\n{2,}/g, "\n"); };
+
+  /* Safety check before Update page: every page element Confluence keeps
+     as data (macros, extensions, panels, status, mentions, layouts, any
+     element with a local id, any custom or ac: tag) must still be there.
+     Macro and extension nodes, custom and ac: tags must be byte-for-byte
+     the same (outerHTML); other data-type elements must keep exactly their
+     attributes (their text may change). Returns {ok, lost:[short names]}. */
+  var STRICT_ATTR = /^(data-macro|data-extension|ac:|ri:)/i, KEEP_ATTR = /^(data-type|data-local-id|local-id|data-macro|data-extension|ac:|ri:)/i;
+  function protectedOf(html) {
+    var doc;
+    try { doc = new DOMParser().parseFromString("<body>" + String(html || "") + "</body>", "text/html"); } catch (e) { return null; }
+    var out = [];
+    Array.prototype.forEach.call(doc.body.querySelectorAll("*"), function (el) {
+      var tag = el.tagName.toLowerCase(), names = Array.prototype.map.call(el.attributes, function (a) { return a.name; });
+      var custom = tag.indexOf(":") >= 0 || tag.indexOf("-") >= 0;
+      if (!custom && !names.some(function (n) { return KEEP_ATTR.test(n); })) return;
+      var dt = String(el.getAttribute("data-type") || "").toLowerCase();
+      var strict = custom || names.some(function (n) { return STRICT_ATTR.test(n); }) || /macro|extension/.test(dt);
+      var sig = strict ? "=" + el.outerHTML.replace(/\s+/g, " ") :
+        "@" + tag + "[" + Array.prototype.map.call(el.attributes, function (a) { return a.name + "=" + a.value; }).sort().join("|") + "]";
+      var label = (el.getAttribute("data-extension-key") || el.getAttribute("data-macro-name") || el.getAttribute("ac:name") || dt || tag);
+      out.push({ sig: sig, label: label });
+    });
+    return out;
+  }
+  atl.checkKeeps = function (oldHtml, newHtml) {
+    var a = protectedOf(oldHtml), b = protectedOf(newHtml);
+    if (!a || !b) return { ok: false, lost: ["page"] };
+    var have = {};
+    b.forEach(function (x) { have[x.sig] = (have[x.sig] || 0) + 1; });
+    var lost = [];
+    a.forEach(function (x) { if (have[x.sig]) have[x.sig]--; else lost.push(x.label); });
+    return { ok: !lost.length, lost: lost.filter(function (l, i, all) { return all.indexOf(l) === i; }).slice(0, 5) };
+  };
+
+  /* Update page: re-read the HTML first and refuse when the page changed
+     since the proposal; check again that nothing is lost; then one
+     updateConfluencePage in HTML; then read back the title. */
   atl.applyUpdate = function (p) {
-    return atl.readPage(p.pageId, { cache: false }).then(function (cur) {
-      if (atl.sameBody(cur.body, p.newMarkdown)) return { phase: "sent", sentAt: new Date(), already: true, title: cur.title };
+    if (!atl.checkKeeps(p.baseBody, p.newHtml).ok) return Promise.resolve({ phase: "blocked", message: atl.LOST_MESSAGE });
+    return atl.readPage(p.pageId, { cache: false }, "html").then(function (cur) {
+      if (atl.sameBody(cur.body, p.newHtml)) return { phase: "sent", sentAt: new Date(), already: true, title: cur.title };
       if (!atl.sameBody(cur.body, p.baseBody)) return { phase: "stale", message: "The page changed since Claude proposed this, so Droplet didn’t update it. Ask Claude to propose it again on the current page." };
-      var input = { cloudId: atl.CLOUD_ID, pageId: String(p.pageId), body: p.newMarkdown, contentFormat: "markdown", title: cur.title || p.title, versionMessage: "Updated via Droplet" };
+      var input = { cloudId: atl.CLOUD_ID, pageId: String(p.pageId), body: p.newHtml, contentFormat: "html", title: cur.title || p.title, versionMessage: "Updated via Droplet" };
       return atl.call("updateConfluencePage", input).then(function () {
-        return atl.readPage(p.pageId, { cache: false }).then(function (after) {
+        return atl.readPage(p.pageId, { cache: false }, "html").then(function (after) {
           if (after.title && cur.title && after.title !== cur.title) return { phase: "sent", sentAt: new Date(), warn: "Updated, but the title now reads “" + U.clip(after.title, 80) + "”. Check the page." };
           return { phase: "sent", sentAt: new Date(), title: after.title };
         }, function () { return { phase: "sent", sentAt: new Date(), warn: "Updated. Droplet couldn’t read the page back; check it in Confluence." }; });
@@ -302,6 +358,7 @@
         message: "Couldn’t re-read the page to check it, so nothing was updated. Try again." };
     });
   };
+  atl.LOST_MESSAGE = "Claude’s version would remove page elements (e.g. a Jira macro), so it can’t be applied.";
 
   /* ---------- A readable line diff ---------- */
   /* Changed lines with a little context: [{t:"+"|"-"|" "|"…", s}]. */

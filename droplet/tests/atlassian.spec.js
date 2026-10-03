@@ -152,6 +152,30 @@ test.describe('Jira (backlog 11)', () => {
   });
 });
 
+test.describe('Digests stay noise', () => {
+  test('a Jira weekly update and Confluence digests create no item', async ({ app, page }) => {
+    await app.boot(atlConfig());
+    const ids = await allIds(app, page);
+    for (const id of ['dg-jira', 'dg-conf1', 'dg-conf2']) expect(ids).not.toContain(id);
+    // The digest names OIDC-412 and OIDC-77, but only the mention and standstill mails make those items.
+    expect(ids.filter((id) => id.startsWith('jira:')).sort()).toEqual(['jira:OIDC-412', 'jira:OIDC-77', 'jira:SIEM-31']);
+    expect(ids.filter((id) => id.startsWith('conf:')).sort()).toEqual(['conf:9001', 'conf:9002', 'conf:9003']);
+    const p = (await app.calls('sample'))[0].input;
+    expect(p).not.toContain('here is your weekly update');
+    expect(p).not.toContain('daily digest');
+    expect(p).not.toContain('Updates: 3 changes');
+  });
+
+  test('with only a weekly digest in the inbox there is no Jira item at all', async ({ app, page }) => {
+    const { DIGESTS } = require('./helpers/fixtures4');
+    const { MAIL } = require('./helpers/fixtures');
+    await app.boot(atlConfig({ mail: JSON.parse(JSON.stringify(MAIL.filter((x) => x.id !== 'a1-standstill').concat(DIGESTS))), atlassian: { jql: [], mentions: [], watched: [] } }));
+    const ids = await allIds(app, page);
+    expect(ids.filter((id) => /^(jira|conf):|^dg-/.test(id))).toEqual([]);
+    expect(ids).toContain('a3-bram');
+  });
+});
+
 test.describe('Confluence (backlog 12)', () => {
   test('a mention page and a watched-page change appear as items, one per page, with their project by title', async ({ app, page }) => {
     await app.boot(atlConfig());

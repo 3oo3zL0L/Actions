@@ -12,9 +12,17 @@
     return /standstill/i.test(text) && /\boidc\b/i.test(text) && jira;
   };
 
+  /* Jira and Confluence digests ("…, here is your weekly update for 1 Oct",
+     "…daily digest: X has made updates on …", "Updates: 3 changes on …") are
+     noise: Jira items come from mentions and standstills, Confluence items from CQL. */
+  mail.isDigest = function (m) {
+    return /\bhere is your (weekly|daily) update\b|\bdaily digest\b|\bweekly digest\b|^\s*updates:\s*\d+\s+changes?\s+on\b/i.test(m.subject || "");
+  };
+
   /* Obvious noise by rule: no-reply senders, notification robots, newsletters. */
   var NOISE_LOCAL = /^(no-?reply|do-?not-?reply|donotreply|noreply|notifications?|notify|notifier|alerts?|newsletters?|news|mailer-daemon|postmaster|marketing|digest|updates?|bounces?)([._+-].*)?$/i;
   mail.noiseReason = function (m) {
+    if (mail.isDigest(m)) return "notification";
     if (mail.isStandstill(m)) return null;
     var addr = String(m.sender || "").toLowerCase(), local = addr.split("@")[0], dom = U.domainOf(addr);
     if (NOISE_LOCAL.test(local)) return /news/.test(local) ? "newsletter" : "notification";
@@ -96,7 +104,7 @@
         if (t && t < cutoff) return;
         /* Jira notifications go to the caller, which keeps mentions and
            standstills as Jira items (it knows the user's name) and drops the rest as noise. */
-        if (D.atl && D.atl.isJiraSender(m.sender) && D.atl.issueKeyOf(m.subject)) { jira.push(m); return; }
+        if (D.atl && !mail.isDigest(m) && D.atl.isJiraSender(m.sender) && D.atl.issueKeyOf(m.subject)) { jira.push(m); return; }
         if (mail.noiseReason(m)) { skipped++; return; }
         items.push(m);
       });

@@ -1,5 +1,5 @@
 const { test, expect } = require('./helpers/harness');
-const { atlConfig, OVERVIEW } = require('./helpers/fixtures4');
+const { atlConfig, OVERVIEW, OVERVIEW_HTML, JIRA_MACRO } = require('./helpers/fixtures4');
 const { teamsConfig, TID, TEAMS_PLAN } = require('./helpers/fixtures');
 const { waitsConfig, WAIT1, PETER } = require('./helpers/fixtures3');
 
@@ -13,7 +13,9 @@ async function askGlobal(page, text) {
   await page.fill('#chatIn', text);
   await page.press('#chatIn', 'Enter');
 }
-const NEW_OVERVIEW = OVERVIEW.replace('Date: TBD', 'Date: Mon 12 Oct').replace('- Token refresh standstill', '- Token refresh standstill\n- Retry limit open');
+const NEW_HTML = OVERVIEW_HTML.replace('Date: TBD', 'Date: Mon 12 Oct').replace('<li><p>Token refresh standstill</p></li>', '<li><p>Token refresh standstill</p></li><li><p>Retry limit open</p></li>');
+const DROPPED_HTML = NEW_HTML.replace(JIRA_MACRO, '');
+const CHANGED_MACRO_HTML = NEW_HTML.replace('type = Epic', 'type = Story');
 
 test.describe('Ask Claude (global)', () => {
   test('the bottom prompt opens the sheet with the two starter goals; New starts fresh; Esc closes', async ({ app, page }) => {
@@ -122,7 +124,7 @@ test.describe('Ask Claude (global)', () => {
 
   test('propose_confluence_update shows the page, the summary, a line diff and the replace warning; nothing changes yet', async ({ app, page }) => {
     await app.boot(atlConfig({ ask: [{ rounds: [[{ name: 'search_confluence', input: { query: 'OIDC' } }], [{ name: 'read_confluence', input: { pageId: '9001' } }],
-      [{ name: 'propose_confluence_update', input: { pageId: '9001', newMarkdown: NEW_OVERVIEW, summary: 'Set the rollout date and add the retry-limit risk.' } }]], text: 'Here is the proposed update.' }] }));
+      [{ name: 'propose_confluence_update', input: { pageId: '9001', newHtml: NEW_HTML, summary: 'Set the rollout date and add the retry-limit risk.' } }]], text: 'Here is the proposed update.' }] }));
     await askGlobal(page, 'Update the OIDC overview: rollout Monday 12 Oct, and add the retry limit as a risk');
     const card = page.locator('[data-card][data-kind="confluence"]');
     await expect(card).toBeVisible();
@@ -132,24 +134,30 @@ test.describe('Ask Claude (global)', () => {
     const diff = await card.locator('[data-diff] .dl').allInnerTexts();
     expect(diff).toContain('- Date: TBD');
     expect(diff).toContain('+ Date: Mon 12 Oct');
-    expect(diff).toContain('+ - Retry limit open');
-    expect(diff).not.toContain('  ## Status');
+    expect(diff).toContain('+ • Retry limit open');
+    expect(diff).not.toContain('  Status');
+    // Text only: no tags in the diff.
+    expect(diff.join('\n')).not.toMatch(/<|data-type/);
     await expect(card.locator('[data-replace-warn]')).toContainText('replaces the whole page body');
-    await expect(card.locator('[data-replace-warn]')).toContainText('Macros and inline formatting may be simplified');
+    await expect(card.locator('[data-replace-warn]')).toContainText('every macro and page element is kept');
+    await expect(card.locator('[data-card-go]')).not.toHaveAttribute('aria-disabled', 'true');
     const runs = await toolRuns(page);
-    expect(runs[1].result).toMatchObject({ pageId: '9001', title: 'OIDC | Project Overview', markdown: OVERVIEW });
-    expect((await tool(app, 'getConfluencePage'))[0].input).toEqual({ cloudId: CLOUD, pageId: '9001', contentFormat: 'markdown' });
+    // read_confluence unwraps the live shape {content:{nodes:[page]}} and gives Claude the HTML.
+    expect(runs[1].result).toMatchObject({ pageId: '9001', title: 'OIDC | Project Overview', html: OVERVIEW_HTML });
+    expect((await tool(app, 'getConfluencePage'))[0].input).toEqual({ cloudId: CLOUD, pageId: '9001', contentFormat: 'html' });
+    const call = (await app.calls('sample')).filter((c) => Array.isArray(c.input)).pop();
+    expect(call.input[0].content).toContain('Copy every element with a data-type attribute, every macro or extension node');
     expect(await app.writeTools()).toEqual([]);
   });
 
   test('Update page re-reads the page first and refuses when it changed since the proposal', async ({ app, page }) => {
-    await app.boot(atlConfig({ ask: [{ rounds: [[{ name: 'propose_confluence_update', input: { pageId: '9001', newMarkdown: NEW_OVERVIEW, summary: 'Set the rollout date.' } }]], text: 'Proposed.' }] }));
+    await app.boot(atlConfig({ ask: [{ rounds: [[{ name: 'propose_confluence_update', input: { pageId: '9001', newHtml: NEW_HTML, summary: 'Set the rollout date.' } }]], text: 'Proposed.' }] }));
     await askGlobal(page, 'Set the rollout date on the OIDC overview');
     const card = page.locator('[data-card][data-kind="confluence"]');
     await expect(card).toBeVisible();
     const reads = async () => (await tool(app, 'getConfluencePage')).length;
     expect(await reads()).toBe(1);
-    await page.evaluate(() => window.__stub.setPage('9001', '# OIDC | Project Overview\n\nSomeone else edited this.'));
+    await page.evaluate(() => window.__stub.setPage('9001', '<h1>OIDC | Project Overview</h1><p>Someone else edited this.</p>'));
     await card.locator('[data-card-go]').click();
     await expect(card.locator('[data-problem="stale"]')).toContainText('The page changed since Claude proposed this, so Droplet didn’t update it.');
     expect(await reads()).toBe(2);
@@ -158,9 +166,9 @@ test.describe('Ask Claude (global)', () => {
     await expect(card.locator('[data-card-repropose]')).toHaveText('Propose again');
   });
 
-  test('otherwise Update page calls updateConfluencePage once with the full markdown and versionMessage, then reads back', async ({ app, page }) => {
+  test('otherwise Update page calls updateConfluencePage once with the full HTML (contentFormat html) and versionMessage, then reads back', async ({ app, page }) => {
     await page.addInitScript(() => { window.__opened = []; window.open = (u) => { window.__opened.push(String(u)); return null; }; });
-    await app.boot(atlConfig({ ask: [{ rounds: [[{ name: 'propose_confluence_update', input: { pageId: '9001', newMarkdown: NEW_OVERVIEW, summary: 'Set the rollout date.' } }]], text: 'Proposed.' }] }));
+    await app.boot(atlConfig({ ask: [{ rounds: [[{ name: 'propose_confluence_update', input: { pageId: '9001', newHtml: NEW_HTML, summary: 'Set the rollout date.' } }]], text: 'Proposed.' }] }));
     await askGlobal(page, 'Set the rollout date on the OIDC overview');
     const card = page.locator('[data-card][data-kind="confluence"]');
     await card.locator('[data-card-go]').dblclick();
@@ -168,7 +176,9 @@ test.describe('Ask Claude (global)', () => {
     const up = await tool(app, 'updateConfluencePage');
     expect(up).toHaveLength(1);
     expect(up[0].server).toBe('Atlassian Rovo');
-    expect(up[0].input).toEqual({ cloudId: CLOUD, pageId: '9001', body: NEW_OVERVIEW, contentFormat: 'markdown', title: 'OIDC | Project Overview', versionMessage: 'Updated via Droplet' });
+    expect(up[0].input).toEqual({ cloudId: CLOUD, pageId: '9001', body: NEW_HTML, contentFormat: 'html', title: 'OIDC | Project Overview', versionMessage: 'Updated via Droplet' });
+    expect(up[0].input.body).toContain(JIRA_MACRO);
+    expect((await tool(app, 'getConfluencePage')).every((c) => c.input.contentFormat === 'html')).toBe(true);
     const all = (await app.calls('mcp')).map((c) => c.tool);
     const iUp = all.indexOf('updateConfluencePage');
     expect(all.slice(0, iUp).filter((t) => t === 'getConfluencePage')).toHaveLength(2); // the proposal, then the re-read
@@ -179,7 +189,7 @@ test.describe('Ask Claude (global)', () => {
 
   test('an unclear page update needs two confirmations; a page that already has the text is not written again', async ({ app, page }) => {
     await app.boot(atlConfig({ faults: { updateConfluencePage: { code: 'server_unavailable', times: 1 } },
-      ask: [{ rounds: [[{ name: 'propose_confluence_update', input: { pageId: '9001', newMarkdown: NEW_OVERVIEW, summary: 'Set the rollout date.' } }]], text: 'Proposed.' }] }));
+      ask: [{ rounds: [[{ name: 'propose_confluence_update', input: { pageId: '9001', newHtml: NEW_HTML, summary: 'Set the rollout date.' } }]], text: 'Proposed.' }] }));
     await askGlobal(page, 'Set the rollout date');
     const card = page.locator('[data-card][data-kind="confluence"]');
     await card.locator('[data-card-go]').click();
@@ -190,11 +200,51 @@ test.describe('Ask Claude (global)', () => {
     await expect(card.locator('[data-card-go]')).toHaveText('Yes, update again');
     expect(await tool(app, 'updateConfluencePage')).toHaveLength(1);
     // Meanwhile the first update did land: the re-read sees the new text and nothing is written twice.
-    await page.evaluate((md) => window.__stub.setPage('9001', md), NEW_OVERVIEW);
+    await page.evaluate((h) => window.__stub.setPage('9001', h), NEW_HTML);
     await page.waitForTimeout(800);
     await card.locator('[data-card-go]').click();
     await expect(card.locator('[data-card-sent]')).toContainText('Already up to date');
     expect(await tool(app, 'updateConfluencePage')).toHaveLength(1);
+  });
+
+  for (const [name, html, lost] of [['drops the Jira macro', DROPPED_HTML, 'jira'], ['changes the macro’s JQL', CHANGED_MACRO_HTML, 'jira'],
+    ['drops the status lozenge', NEW_HTML.replace(/<span data-type="status"[^>]*>ON TRACK<\/span>/, ''), 'status']]) {
+    test(`a proposal that ${name} is blocked: Update page stays off and nothing is written`, async ({ app, page }) => {
+      await app.boot(atlConfig({ ask: [{ rounds: [[{ name: 'propose_confluence_update', input: { pageId: '9001', newHtml: html, summary: 'Set the rollout date.' } }]], text: 'Proposed.' }] }));
+      await askGlobal(page, 'Set the rollout date');
+      const card = page.locator('[data-card][data-kind="confluence"]');
+      await expect(card.locator('[data-problem="lost"]')).toContainText('Claude’s version would remove page elements (e.g. a Jira macro), so it can’t be applied.');
+      await expect(card.locator('[data-problem="lost"]')).toContainText('Missing: ' + lost);
+      await expect(card.locator('[data-replace-warn]')).toHaveCount(0);
+      await expect(card.locator('[data-card-go]')).toHaveAttribute('aria-disabled', 'true');
+      await card.locator('[data-card-go]').click({ force: true });
+      expect(await tool(app, 'updateConfluencePage')).toHaveLength(0);
+      expect((await toolRuns(page))[0].result).toMatch(/^Refused: your version removes or changes page elements/);
+    });
+  }
+
+  test('a proposal that keeps the macro and edits the status text is allowed', async ({ app, page }) => {
+    await app.boot(atlConfig({ ask: [{ rounds: [[{ name: 'propose_confluence_update', input: { pageId: '9001', newHtml: NEW_HTML.replace('ON TRACK</span>', 'AT RISK</span>'), summary: 'Status at risk.' } }]], text: 'Proposed.' }] }));
+    await askGlobal(page, 'Set the status to at risk');
+    const card = page.locator('[data-card][data-kind="confluence"]');
+    await expect(card.locator('[data-replace-warn]')).toBeVisible();
+    await card.locator('[data-card-go]').click();
+    await expect(card.locator('[data-card-sent]')).toContainText('Page updated 10:00');
+    expect((await tool(app, 'updateConfluencePage'))[0].input.body).toContain(JIRA_MACRO);
+  });
+
+  test('the page reader unwraps the live getConfluencePage shape; markdown has no macros', async ({ app, page }) => {
+    await app.boot(atlConfig());
+    const got = await page.evaluate(async () => {
+      const md = await window.Droplet.atl.readPage('9001', null, 'markdown');
+      const html = await window.Droplet.atl.readPage('9001');
+      return { md: md.body, html: html.body, title: html.title, space: html.spaceKey, url: html.webUrl };
+    });
+    expect(got.md).toBe(OVERVIEW);
+    expect(got.html).toBe(OVERVIEW_HTML);
+    expect(got).toMatchObject({ title: 'OIDC | Project Overview', space: 'OIDC', url: 'https://planon.atlassian.net/wiki/spaces/OIDC/pages/9001' });
+    const reads = (await tool(app, 'getConfluencePage')).map((c) => c.input.contentFormat);
+    expect(reads).toEqual(['markdown', 'html']);
   });
 
   test('draft_jira_comment makes a card that posts once on click', async ({ app, page }) => {
@@ -312,7 +362,7 @@ test.describe('Ask Claude on an item', () => {
 test.describe('Phone (390 px)', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   test('the sheet is full screen, no horizontal scroll, 44 px targets', async ({ app, page }) => {
-    await app.boot(atlConfig({ ask: [{ rounds: [[{ name: 'propose_confluence_update', input: { pageId: '9001', newMarkdown: NEW_OVERVIEW + '\n' + 'A very long line without spaces '.repeat(3) + 'x'.repeat(200), summary: 'Set the rollout date.' } }]], text: 'Proposed.' }] }));
+    await app.boot(atlConfig({ ask: [{ rounds: [[{ name: 'propose_confluence_update', input: { pageId: '9001', newHtml: NEW_HTML + '<p>' + 'A very long line without spaces '.repeat(3) + 'x'.repeat(200) + '</p>', summary: 'Set the rollout date.' } }]], text: 'Proposed.' }] }));
     const bar = await page.locator('#askBar').boundingBox();
     expect(bar.height).toBeGreaterThanOrEqual(44);
     await page.tap('#askBar');
