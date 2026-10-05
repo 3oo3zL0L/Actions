@@ -9,7 +9,7 @@
 
   /* Timeouts (ms). A page may override them before the scripts run with
      window.__dropletConfig (the tests use short ones). */
-  var cfg = rt.cfg = { callMs: 30000, pageMs: 45000, storeMs: 15000, useMs: 15000, sampleMs: 150000, rankDebounceMs: 250 };
+  var cfg = rt.cfg = { callMs: 30000, pageMs: 45000, storeMs: 15000, useMs: 15000, sampleMs: 150000, rankDebounceMs: 250, rankBatch: 8, rankRetryMs: [4000, 15000] };
   try { if (window.__dropletConfig) Object.keys(window.__dropletConfig).forEach(function (k) { cfg[k] = window.__dropletConfig[k]; }); } catch (e) { /* ignore */ }
 
   /* Settles like p, or rejects {code: "timeout"} after ms. */

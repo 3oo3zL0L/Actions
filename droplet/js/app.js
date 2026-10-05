@@ -1712,17 +1712,39 @@
   function rankNew(refresh) {
     /* One ranking at a time; anything added meanwhile is ranked right after. */
     if (S.ranking) { S.rankAgain = true; return S.rankRun || Promise.resolve(); }
-    var fresh = S.items.filter(function (m) { return (!m.r || m.rerank) && !actionDone(m); });
-    if (!fresh.length) { S.notes.rank = null; renderList(); return Promise.resolve(); }
+    /* At most rankBatch new items per call (a smaller prompt); the rest in the next call.
+       Items already tried in this round of calls aren't asked again until the next sync. */
+    S.rankTried = S.rankTried || {};
+    var all = S.items.filter(function (m) { return (!m.r || m.rerank) && !actionDone(m) && !S.rankTried[m.id]; });
+    if (!all.length) { S.rankTried = {}; if (!S.items.some(function (m) { return !m.r && !actionDone(m); })) S.notes.rank = null; renderList(); return Promise.resolve(); }
+    var fresh = all.slice(0, rt.cfg.rankBatch || 8), more = all.length > fresh.length;
+    fresh.forEach(function (m) { S.rankTried[m.id] = 1; });
     if (!rt.sample) {
       S.notes.rank = 'Claude isn’t available here, so new mail is newest first.';
-      fresh.forEach(function (m) { if (S.fresh[m.id]) { delete S.fresh[m.id]; placedToast(m); } });
+      S.rankTried = {};
+      all.forEach(function (m) { if (S.fresh[m.id]) { delete S.fresh[m.id]; placedToast(m); } });
       renderAll();
       return Promise.resolve();
     }
     S.ranking = fresh.length; S.rankingTeams = fresh.some(isTeams); setSrc('rank', 'loading'); renderList();
     var ranked = visible().filter(function (m) { return m.r && !m.rerank; }).map(function (m) { return { id: m.id, src: m.src, subject: titleOf(m), senderName: m.senderName, group: groupOf(m) }; });
-    var run = S.rankRun = rank.ask({ me: S.me, now: new Date(), items: fresh, ranked: ranked, feedback: S.feedback }, refresh).then(function (v) {
+    /* The other new items (ranked in another call) as context, so a duplicate across batches can still name them (R8). */
+    var pending = all.slice(fresh.length).concat(S.items.filter(function (m) { return !m.r && fresh.indexOf(m) < 0 && all.indexOf(m) < 0 && !actionDone(m) && !gone(m.id); }))
+      .slice(0, 40).map(function (m) { return { id: m.id, src: m.src, subject: titleOf(m), senderName: m.senderName, group: 'not ranked yet' }; });
+    var chain = S.rankChain = S.rankChain || { ok: 0, missing: 0, teams: false };
+    /* "sampling is unavailable right now" (upstream_error) is passing: try again after ~4 s, then ~15 s. */
+    var waitsMs = (rt.cfg.rankRetryMs || []).slice();
+    function askOnce() {
+      return rank.ask({ me: S.me, now: new Date(), items: fresh, ranked: ranked.concat(pending), feedback: S.feedback }, refresh).then(null, function (e) {
+        var code = e && e.code;
+        if ((code === 'upstream_error' || code === 'rate_limited' || code === 'overloaded') && waitsMs.length) {
+          var ms = waitsMs.shift();
+          return new Promise(function (r) { setTimeout(r, ms); }).then(askOnce);
+        }
+        throw e;
+      });
+    }
+    var run = S.rankRun = askOnce().then(function (v) {
       var existing = S.items.filter(function (m) { return m.r && !m.rerank && isFinite(m.r.pos); }).map(function (m) { return { id: m.id, pos: m.r.pos }; });
       var got = Object.keys(v.byId).map(function (id) { return { id: id, rank: v.byId[id].rank }; });
       var pos = rank.assignPositions(existing, got);
@@ -1736,10 +1758,20 @@
         writes.push([m.key, r]);
       });
       writes.reduce(function (p, w) { return p.then(function () { return store.putRanking(w[0], w[1]); }); }, Promise.resolve());
-      var missing = fresh.filter(function (m) { return !m.r; }).length;
-      S.notes.rank = missing ? 'Claude skipped ' + missing + (fresh.some(isTeams) ? ' item' : ' mail') + (missing === 1 ? '' : 's') + '; those are newest first.' : null;
+      chain.ok++;
+      chain.missing += fresh.filter(function (m) { return !m.r; }).length;
+      chain.teams = chain.teams || fresh.some(isTeams);
+      var missing = chain.missing;
+      S.notes.rank = missing ? 'Claude skipped ' + missing + (chain.teams ? ' item' : ' mail') + (missing === 1 ? '' : 's') + '; those are newest first.' : null;
     }, function (e) {
+      if (chain.ok && e && e.code === 'invalid_json') {
+        /* A later batch Claude answered without usable items: those are skipped, the rest goes on. */
+        chain.missing += fresh.length; chain.teams = chain.teams || fresh.some(isTeams);
+        S.notes.rank = 'Claude skipped ' + chain.missing + (chain.teams ? ' item' : ' mail') + (chain.missing === 1 ? '' : 's') + '; those are newest first.';
+        return;
+      }
       S.notes.rank = rt.sampleCopy(e) + ', so new mail is newest first.';
+      more = false; /* the rest waits for Try again or the next sync */
       setSrc('rank', e && e.code === 'timeout' ? 'timeout' : 'error', e || {});
     }).then(function () {
       S.ranking = 0; S.rankingTeams = false; S.rankRun = null;
@@ -1750,7 +1782,8 @@
       placed.forEach(placedToast);
       var cur = S.view === 'item' && S.byId[S.cur];
       if (cur) ensureDraft(cur);
-      if (S.rankAgain) { S.rankAgain = false; return rankNew(false); }
+      if (S.rankAgain || more) { S.rankAgain = false; return rankNew(false); }
+      S.rankTried = {}; S.rankChain = null;
     });
     return run;
   }
@@ -2196,6 +2229,7 @@
       if (a.dueBy !== 'you') { var d = mine.parseDue(text, new Date()); a.due = d || null; a.dueBy = d ? 'parser' : null; }
       /* Ranked again with the new text; it keeps its place until then. */
       it.rerank = true;
+      if (S.rankTried) delete S.rankTried[it.id];
     } else if (field === 'notes') {
       delete ed.notes;
       if (String(value) === String(a.notes || '')) return;
@@ -2648,7 +2682,7 @@
       if (id === 'mail') { S.notes.mail = null; return (rt.mcp ? Promise.resolve() : rt.retryUse('mcp')).then(function () { reloadSource('mail'); }); }
       if (id === 'teams') { S.notes.teams = null; renderNotes(); return (rt.mcp ? Promise.resolve() : rt.retryUse('mcp')).then(function () { reloadSource('teams'); }); }
       if (id === 'store') { S.notes.store = null; renderNotes(); return (rt.db ? Promise.resolve() : rt.retryUse('db')).then(function () { reloadSource('store'); }); }
-      if (id === 'rank') { S.notes.rank = null; return (rt.sample ? Promise.resolve() : rt.retryUse('sample').then(rt.checkTools)).then(function () { renderAskbar(); rankNew(true); }); }
+      if (id === 'rank') { S.notes.rank = null; return (rt.sample ? Promise.resolve() : rt.retryUse('sample').then(rt.checkTools)).then(function () { renderAskbar(); S.rankTried = {}; rankNew(true); }); }
       if (id === 'save') { retrySaves(); return; }
       if (id === 'atl') { S.notes.atl = null; renderNotes(); return (rt.mcp ? Promise.resolve() : rt.retryUse('mcp')).then(function () { reloadSource('atl'); }); }
       return;

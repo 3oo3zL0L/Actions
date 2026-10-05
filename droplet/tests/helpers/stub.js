@@ -428,6 +428,8 @@ function installDropletStub(cfg) {
     });
     return later(null).then(function () { return new Promise(function (r) { setTimeout(r, extra); }); }).then(function () {
       if (cfg.sampleFault) throw { code: cfg.sampleFault, message: cfg.sampleFault };
+      /* cfg.rankFault {code, message, times}: the next ranking calls fail (e.g. "sampling is unavailable right now"). */
+      if (/You rank unread email/.test(prompt) && cfg.rankFault && cfg.rankFault.times > 0) { cfg.rankFault.times--; throw { code: cfg.rankFault.code, message: cfg.rankFault.message || cfg.rankFault.code }; }
       var a = /You rank unread email/.test(prompt) ? rankAnswer(prompt) : isDraft ? draftAnswer(prompt) : extraAnswer(prompt) ||
         (chatQueue.length > 1 ? chatQueue.shift() : chatQueue[0] || { reply: "OK.", draft: null });
       return deepFreeze(asJson ? a : { text: JSON.stringify(a), truncated: false, modelTierApplied: "default" });

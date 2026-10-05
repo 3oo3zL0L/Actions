@@ -12,7 +12,7 @@ async function add(page, text, how = 'enter') {
 
 test.describe('Your own actions', () => {
   test('Enter saves first and shows it at once; Claude then sets project, why and due, and places it', async ({ app, page }) => {
-    await app.boot({ actionPlan: { 'SIEM runbook': { group: 'later', rank: 7, project: 'SIEM Integration', why: 'SIEM go-live needs the runbook first.', due: '2026-10-08' } } });
+    await app.boot({ dropletConfig: { rankBatch: 50 }, actionPlan: { 'SIEM runbook': { group: 'later', rank: 7, project: 'SIEM Integration', why: 'SIEM go-live needs the runbook first.', due: '2026-10-08' } } });
     await page.evaluate(() => window.__stub.setRankDelay(600));
     await add(page, 'Review the SIEM runbook before go-live');
     // Saved and shown before Claude answers.

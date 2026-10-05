@@ -11,7 +11,7 @@ async function allIds(app, page) {
 
 test.describe('Jira (backlog 11)', () => {
   test('a Jira mention notification mail becomes a Jira item keyed by issue key, not noise', async ({ app, page }) => {
-    await app.boot(atlConfig());
+    await app.boot(atlConfig({ dropletConfig: { rankBatch: 50 } }));
     const ids = await allIds(app, page);
     // Two notification mails about OIDC-412: one item. The status robot (n3-jira) stays noise.
     expect(ids.filter((id) => id === 'jira:OIDC-412')).toHaveLength(1);
@@ -178,7 +178,7 @@ test.describe('Digests stay noise', () => {
 
 test.describe('Confluence (backlog 12)', () => {
   test('a mention page and a watched-page change appear as items, one per page, with their project by title', async ({ app, page }) => {
-    await app.boot(atlConfig());
+    await app.boot(atlConfig({ dropletConfig: { rankBatch: 50 } }));
     const cql = (await tool(app, 'searchConfluenceUsingCql')).map((c) => c.input);
     expect(cql).toEqual([
       { cloudId: CLOUD, cql: 'mention = currentUser() AND lastmodified >= now("-7d")', limit: 25 },
