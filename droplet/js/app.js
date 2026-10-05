@@ -513,7 +513,7 @@
   function emptyHTML() {
     return '<div class="iv-head"><span class="iv-crumb"><span class="tag"><i style="background:var(--faint)"></i>Item</span><span class="sep" aria-hidden="true">//</span><span class="c-sec">Standby</span></span></div>' +
       '<div class="empty"><div>' +
-      '<svg class="empty-mark" viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="44" fill="none" stroke="currentColor" stroke-width="2"/><path d="M60 4v16M60 100v16M4 60h16M100 60h16" fill="none" stroke="#ff8a1f" stroke-width="4" stroke-linecap="square"/><rect x="54" y="54" width="12" height="12" fill="#ff8a1f"/></svg>' +
+      '<svg class="empty-mark" viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="50" fill="none" stroke="#ff8a1f" stroke-width="5"/><path d="M33 28h15l42 64M63 56 33 92" fill="none" stroke="#ff8a1f" stroke-width="10" stroke-linecap="square" stroke-linejoin="miter"/></svg>' +
       '<h2>Standing by.</h2><p>Select an item to load its next action.</p><p style="margin-top:6px">Nothing is sent without your click.</p>' +
       '<div class="keys"><span><span class="kbd">↑</span><span class="kbd">↓</span>Move</span><span><span class="kbd">Enter</span>Open</span><span><span class="kbd">/</span>Search</span><span><span class="kbd">Esc</span>Close</span></div>' +
       '</div></div>';
