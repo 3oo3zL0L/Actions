@@ -66,3 +66,14 @@ Daaronder staat de rest, ingeklapt en doorzoekbaar. Daarnaast is er één global
 - **Teams versturen.** Volgens Action Desk was daarvoor een IT-permissie nodig. Krijgen we die niet, dan biedt de najaagkaart **Open in Teams** en **Copy**.
 - **Release management.** De Cowork-projecten zijn niet via een connector bereikbaar. Daarom geldt alleen de Confluence-pagina als signaal.
 - **Confluence schrijven.** De Rovo-scope `write:page:confluence` is aanwezig.
+
+## Wijzigingen na gebruik (5 okt 2026)
+- **"Do now" heet "Today".**
+- **Nieuwe actie:** een titel en een korte notitie. Een nieuwe actie komt altijd in Today en blijft daar tot hij Done is of tot "Not today" is gekozen.
+- **Vier toestanden** (ontwerp `design/states.html`, goedgekeurd):
+  - *Jouw zet*: oranje.
+  - *Ligt elders*: staalblauw, telt niet als open.
+  - *Wacht op iemand*: staalblauw label; na 3 werkdagen weer jouw zet.
+  - *Klaar*: verdwijnt uit de lijst.
+- **Recently done** staat standaard dichtgeklapt, toont 7 dagen en heeft Bring back.
+- **Automatisch afvinken:** een taak wordt afgevinkt zodra de vervolgactie is gedaan, in Droplet of daarbuiten. Daarbuiten alleen bij een duidelijke match. Undo kan altijd.
