@@ -105,6 +105,8 @@ function installDropletStub(cfg) {
     setDraftAnswer: function (d) { cfg.draftAnswer = d; },
     setActionPlan: function (p) { cfg.actionPlan = p; },
     setRankDelay: function (ms) { cfg.rankDelay = ms; },
+    setDbFault: function (f) { cfg.dbFault = f || null; },
+    setFulfilPlan: function (p) { cfg.fulfilPlan = p; },
     drafts: drafts, sent: sent
   };
   function findMail(id) { return mailList.concat(sentList).filter(function (m) { return m.id === id; })[0]; }
@@ -434,6 +436,22 @@ function installDropletStub(cfg) {
       var re = /<<<SENT \d+ id="([^"]+)">>>/g, mm, msgs = [];
       while ((mm = re.exec(prompt))) msgs.push({ id: mm[1], asks: JSON.parse(JSON.stringify((cfg.asksPlan || {})[mm[1]] || [])) });
       return { messages: msgs };
+    }
+    /* Done whichever way: cfg.fulfilPlan {itemKey: {action: "<piece of the action text>", clear}} or
+       cfg.fulfilAll (a Claude that obeys injected text: every item finishes every action). */
+    if (/^You check whether messages and meetings/.test(prompt)) {
+      var acts = [], ra = /<<<ACTION \d+ id="([^"]+)">>>\nText: ([^\n]*)/g, ma;
+      while ((ma = ra.exec(prompt))) acts.push({ id: ma[1], text: ma[2] });
+      var ri = /<<<ITEM \d+ id="([^"]+)">>>/g, mi, items = [];
+      while ((mi = ri.exec(prompt))) {
+        var key = mi[1];
+        if (cfg.fulfilRaw && cfg.fulfilRaw[key]) { cfg.fulfilRaw[key].forEach(function (x) { items.push(Object.assign({ id: key }, x)); }); continue; }
+        if (cfg.fulfilAll) { acts.forEach(function (a) { items.push({ id: key, action: a.id, clear: true }); }); continue; }
+        var p = (cfg.fulfilPlan || {})[key];
+        var hit = p && acts.filter(function (a) { return a.text.indexOf(p.action) >= 0; })[0];
+        items.push({ id: key, action: hit ? hit.id : null, clear: p ? p.clear !== false : false });
+      }
+      return { items: items };
     }
     if (/^You read one meeting transcript/.test(prompt)) {
       var subj = (/\nMeeting: "([^"]*)"/.exec(prompt) || [])[1] || "";

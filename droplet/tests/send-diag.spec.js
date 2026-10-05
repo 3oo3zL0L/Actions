@@ -60,7 +60,7 @@ test.describe('The MCP result envelope: every documented form', () => {
       await app.boot({ envelope });
       expect(await app.focusIds()).toEqual(['jira:OIDC-77', 'a3-bram', 'a2-anouk', 'a4-lena', 'a5-tom']);
       await sendBram(page);
-      await expect(page.locator('#sendBtn')).toHaveText('Sent ✓ 10:00 · locked');
+      await expect(page.locator('#sendBtn')).toHaveText('Sent 10:00 · locked');
       const w = (await app.calls('mcp')).filter((c) => /create|send_draft/.test(c.tool) || (c.tool === 'read_resource' && /AAkALg/.test(c.input.uri)));
       expect(w.map((c) => c.tool)).toEqual(['outlook_create_reply_draft', 'read_resource', 'outlook_send_draft']);
       const id = await page.evaluate(() => Object.keys(window.__stub.drafts)[0]);
@@ -109,7 +109,7 @@ test.describe('Finding the new draft’s id', () => {
     test(`Send works when the create answer is "${createShape}"`, async ({ app, page }) => {
       await app.boot({ createShape });
       await sendBram(page);
-      await expect(page.locator('#sendBtn')).toHaveText('Sent ✓ 10:00 · locked');
+      await expect(page.locator('#sendBtn')).toHaveText('Sent 10:00 · locked');
       const id = await page.evaluate(() => Object.keys(window.__stub.drafts)[0]);
       expect((await sends(app))[0].input).toEqual({ messageId: id });
       expect((await draftReads(app))[0].input.uri).toBe('mail:///messages/' + id);
@@ -163,7 +163,7 @@ test.describe('Read-back against the real read_resource shape', () => {
   test('the stub draft has mixed-case recipients and the send still goes through', async ({ app, page }) => {
     await app.boot();
     await sendBram(page);
-    await expect(page.locator('#sendBtn')).toHaveText('Sent ✓ 10:00 · locked');
+    await expect(page.locator('#sendBtn')).toHaveText('Sent 10:00 · locked');
     const to = await page.evaluate(() => Object.values(window.__stub.drafts)[0].toRecipients[0].address);
     expect(to).toBe('Bram.Kok@Planonsoftware.Com');
   });
@@ -172,7 +172,7 @@ test.describe('Read-back against the real read_resource shape', () => {
     test(`a draft read that ${mode} once is tried again once, after 1.5 s, then sends`, async ({ app, page }) => {
       await app.boot(cfg);
       await sendBram(page);
-      await expect(page.locator('#sendBtn')).toHaveText('Sent ✓ 10:00 · locked', { timeout: 6000 });
+      await expect(page.locator('#sendBtn')).toHaveText('Sent 10:00 · locked', { timeout: 6000 });
       const reads = await draftReads(app);
       expect(reads).toHaveLength(2);
       expect(reads[1].t - reads[0].t).toBeGreaterThanOrEqual(1400);
@@ -197,7 +197,7 @@ test.describe('Read-back against the real read_resource shape', () => {
     expect((await app.db())['done/a3-bram']).toBeUndefined();
     // Trying again reads the same draft back (now readable) and sends it; no second draft.
     await page.click('#sendBtn');
-    await expect(page.locator('#sendBtn')).toHaveText('Sent ✓ 10:00 · locked');
+    await expect(page.locator('#sendBtn')).toHaveText('Sent 10:00 · locked');
     expect((await app.calls('mcp')).filter((c) => c.tool === 'outlook_create_reply_draft')).toHaveLength(1);
   });
 });
@@ -256,7 +256,7 @@ test.describe('Send diagnostics', () => {
     await sendBram(page);
     await expect(page.locator('[data-problem="failed"]')).toBeVisible();
     await page.click('#sendBtn');
-    await expect(page.locator('#sendBtn')).toHaveText('Sent ✓ 10:00 · locked');
+    await expect(page.locator('#sendBtn')).toHaveText('Sent 10:00 · locked');
     expect(logs).toEqual([]);
   });
 });

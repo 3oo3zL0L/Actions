@@ -32,7 +32,9 @@
     jira: '<path d="M12 3 21 12l-9 9-9-9z"/><path d="m12 8.5 3.5 3.5-3.5 3.5L8.5 12z"/>',
     confluence: '<path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4M9 12h7M9 16h7"/>',
     close: '<path d="M6 6l12 12M18 6 6 18"/>',
-    stop: '<rect x="7" y="7" width="10" height="10"/>'
+    stop: '<rect x="7" y="7" width="10" height="10"/>',
+    lock: '<rect x="5" y="11" width="14" height="9"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+    bring: '<path d="M4 12a8 8 0 1 0 2.3-5.7M4 4v4h4"/>'
   };
   function ico(name, cls) { return '<svg class="ico ' + (cls || '') + '" viewBox="0 0 24 24" aria-hidden="true">' + P[name] + '</svg>'; }
 
@@ -59,18 +61,20 @@
     if (it.src === 'wait' && g === 'hidden') return 'later';
     if (it.src === 'mine') {
       /* Your own action: due today or earlier is "now"; a new one shows in
-         Do now while Claude places it; it is never hidden. */
+         Today while Claude places it; it is never hidden. */
       if (it.due && it.due <= mine.today()) return 'now';
+      if (pinned(it)) return 'now';
       if (S.fresh[it.id] && !it.r) return 'now';
       if (g === 'hidden') return 'later';
     }
     return g;
   }
   /* Your own action due today or earlier, or just added and still being
-     placed by Claude: shown at the top of Do now (after R1 and ★). */
+     placed by Claude: shown at the top of Today (after R1 and ★). */
   function urgentMine(it) {
-    return it.src === 'mine' && S.verdict[it.id] !== 'down' && (!!(it.due && it.due <= mine.today()) || !!(S.fresh[it.id] && !it.r));
+    return it.src === 'mine' && (pinned(it) || S.verdict[it.id] !== 'down' && (!!(it.due && it.due <= mine.today()) || !!(S.fresh[it.id] && !it.r)));
   }
+  function pinned(it) { var a = it && it.src === 'mine' && S.actions[it.docId]; return !!(a && a.pinnedToday && !a.done); }
   function GI(g) { return g === 'now' ? 0 : g === 'later' ? 1 : 2; }
   function cmp(a, b) {
     var x, y;
@@ -96,13 +100,14 @@
       return groupOf(it) !== 'hidden';
     }).sort(cmp);
   }
-  /* Do now: the "now" items; when Claude put fewer than three there, the
+  /* Today: the "now" items; when Claude put fewer than three there, the
      best-ranked of the rest fill up to three, so the top is never empty while
      there is work. */
   var FOCUS_MIN = 3;
   function topItems() {
-    var vis = visible().filter(function (it) { return S.verdict[it.id] !== 'down'; });
+    var vis = visible().filter(function (it) { return S.verdict[it.id] !== 'down' || pinned(it); });
     var top = vis.filter(function (it) { return groupOf(it) === 'now'; }).slice(0, FOCUS_MAX);
+    vis.forEach(function (it) { if (pinned(it) && top.indexOf(it) < 0) top.push(it); }); /* pinned to Today: never cut */
     if (top.length < FOCUS_MIN) vis.forEach(function (it) { if (top.length < FOCUS_MIN && top.indexOf(it) < 0) top.push(it); });
     return top;
   }
@@ -217,12 +222,66 @@
     if (S.notes.store) line('store', S.notes.store, S.notes.store === 'Couldn’t load your saved items.');
     $('notes').innerHTML = h;
   }
+  /* Where an item stands (approved states): your move, elsewhere (handed off
+     to Teams, or sent · locked after you took the done mark off), waiting on
+     (a label on a wait), done (off the list). */
+  function stateOf(it) {
+    if (isWait(it) || isMine(it)) return 'open';
+    if (waitingTeams(it.id)) return 'handoff';
+    if (sendState(it.id).phase === 'sent') return 'locked';
+    return 'open';
+  }
+  function isHeld(it) { return stateOf(it) !== 'open'; }
+  function todayIso() { return mine.today(); }
+  function doneToday() {
+    var n = 0, today = todayIso();
+    Object.keys(S.doneDb || {}).forEach(function (k) { var d = S.doneDb[k]; if (d && d.how !== 'merged' && mine.dayOf(d.at) === today) n++; });
+    Object.keys(S.actions).forEach(function (k) { var a = S.actions[k]; if (a.done && a.doneAt && mine.dayOf(a.doneAt) === today) n++; });
+    return n;
+  }
   function renderHeader() {
-    var top = topItems(), open = top.filter(function (it) { return !isClosed(it.id); }).length, rest = restItems().length;
-    $('sub').textContent = S.loading && !S.loaded ? 'Reading your inbox…' :
-      (open ? open + ' action' + (open === 1 ? '' : 's') + ' queued · ' + rest + ' deferred' : 'All clear · ' + rest + ' deferred') +
+    var top = topItems(), open = top.filter(function (it) { return !isClosed(it.id) && !isHeld(it); }).length, rest = restItems().length;
+    var held = visible().filter(function (it) { return !isClosed(it.id) && isHeld(it); }).length;
+    $('sub').innerHTML = S.loading && !S.loaded ? 'Reading your inbox…' :
+      (open || held ? '<b>' + open + '</b> open' + (held ? ' · <span class="h">' + held + ' elsewhere</span>' : '') + ' · ' + rest + ' deferred' : 'All clear · ' + rest + ' deferred') +
       (S.waitPre.length ? ' · ' + S.waitPre.length + ' waiting on others' : '');
+    var t = $('tally');
+    if (t) {
+      t.innerHTML = ico('check') + '<b>' + pad(doneToday()) + '</b><span>done today</span>';
+      t.classList.toggle('bump', !!S.bump);
+    }
     renderStatus(); renderNotes();
+  }
+  /* ---------- The moment of completion ----------
+     The item is off every list at once; a green copy of its Today card says
+     "✓ … · done", strikes through, and folds away after 650 ms (280 ms).
+     With reduced motion there is no fold: the line shows, then it goes. */
+  function reducedMotion() { try { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); } catch (e) { return false; } }
+  var DONE_LABEL = { manual: 'Done', merged: 'Done', sent: 'Sent', commented: 'Commented', invited: 'Invite sent', copied: 'Copied to Teams', chased: 'Chased', updated: 'Page updated', teams: 'Sent in Teams', seen: 'Done' };
+  function celebrate(it, how) {
+    var top = topItems(), i = top.indexOf(it);
+    S.leaving = S.leaving || {};
+    if (i > -1) {
+      var label = (DONE_LABEL[how] || 'Done') + ' ' + U.hhmm(new Date()) + (how === 'manual' ? '' : ' · done');
+      var g = S.leaving[it.id] = { idx: i, phase: 'line', html: '', it: it, label: label };
+      var reduce = reducedMotion();
+      setTimeout(function () {
+        if (reduce) { delete S.leaving[it.id]; renderFocus(); return; }
+        g.phase = 'fold'; renderFocus();
+        setTimeout(function () { delete S.leaving[it.id]; renderFocus(); }, 290);
+      }, 650);
+    }
+    S.bump = true; S.flash = true;
+    clearTimeout(S.bumpTimer);
+    S.bumpTimer = setTimeout(function () { S.bump = false; S.flash = false; renderHeader(); renderDone(); }, 1400);
+  }
+  function ghostHTML(g) {
+    var it = g.it;
+    return '<li class="fi is-completing' + (g.phase === 'fold' ? ' is-leaving' : '') + '" data-leaving="' + esc(it.id) + '" aria-hidden="true">' +
+      '<div class="fi-open"><span class="fi-rank">' + pad(g.idx + 1) + '</span><span class="fi-body">' +
+        '<span class="fi-meta">' + srcHTML(it) + '<span class="sep">·</span><span>' + esc(project(it)) + '</span></span>' +
+        '<span class="fi-title">' + esc(titleOf(it)) + '</span></span></div>' +
+      '<div class="fi-act"><div class="done-line" data-done-line>' + ico('check') + esc(g.label) + '</div></div></li>';
   }
   function srcKind(it) { return isTeams(it) ? 'teams' : isWait(it) ? 'wait' : fromMeeting(it) ? 'meeting' : isMine(it) ? 'mine' : isJira(it) ? 'jira' : isPage(it) ? 'confluence' : 'mail'; }
   function srcHTML(it) { var k = srcKind(it); return '<span class="src" data-src="' + k + '">' + ico(k) + esc(srcLabel(it)) + '</span>'; }
@@ -246,28 +305,65 @@
     if (isClosed(it.id)) return stateChip(it.id);
     return '<button class="btn-act" data-act="' + esc(it.id) + '">' + esc(rk(it).label) + '</button>';
   }
+  function waitChip(it) {
+    if (!isWait(it)) return '';
+    var first = U.firstName(it.senderName) || it.senderName || 'them';
+    return '<span class="st st-wait" data-wait-chip>' + ico('wait') + esc(it.due ? 'Waiting on ' + first + ' · ' + it.n + ' wd' : 'Day ' + Math.max(1, it.n) + ' of 3') + '</span>';
+  }
+  function heldHTML(it, i) {
+    var st = stateOf(it), cur = isCur(it.id), chip, note, btns;
+    if (st === 'handoff') {
+      var ho = waitingTeams(it.id);
+      chip = '<span class="st st-hold">' + ico('out') + 'In Teams · copied ' + esc(U.hhmm(new Date(ho.at))) + '</span>';
+      note = 'Waiting for you to paste and send it in Teams. Clears on the next sync once your message is in the chat.';
+      btns = '<button class="btn-q" data-held-copy="' + esc(it.id) + '">' + ico('copy') + 'Copy again</button>' +
+        '<button class="btn-q ok" data-held-sent="' + esc(it.id) + '">' + ico('check') + 'I sent it</button>';
+    } else {
+      chip = '<span class="st st-hold">' + ico('lock') + (isJira(it) ? 'Commented ' : 'Sent ') + esc(U.hhmm(sendState(it.id).sentAt)) + ' · locked</span>';
+      note = 'It went out once and can’t be sent again. You took off the done mark.';
+      btns = '<button class="btn-q ok" data-held-done="' + esc(it.id) + '">' + ico('check') + 'Mark done</button>';
+    }
+    return '<li class="fi is-held' + (cur ? ' is-current' : '') + '" data-id="' + esc(it.id) + '" data-state="' + st + '">' +
+      '<button class="fi-open" data-open="' + esc(it.id) + '"' + (cur ? ' aria-current="true"' : '') + ' aria-label="Open ' + (i + 1) + ': ' + esc(titleOf(it)) + '">' +
+        '<span class="fi-rank" aria-hidden="true">' + pad(i + 1) + '</span>' +
+        '<span class="fi-body"><span class="held-chip">' + chip + '</span>' +
+          '<span class="fi-meta">' + srcHTML(it) + '<span class="sep" aria-hidden="true">·</span><span>' + esc(project(it)) + '</span><span class="cur-tag" aria-hidden="true">In panel</span></span>' +
+          '<span class="fi-title held-title">' + esc(titleOf(it)) + '</span><span class="held-note">' + note + '</span></span>' +
+      '</button>' +
+      '<div class="held-act">' + btns + '</div></li>';
+  }
   function renderFocus() {
-    var items = topItems(), h = '';
-    var firstOpen = items.filter(function (it) { return !isClosed(it.id); })[0];
+    var items = topItems(), cards = [];
+    var firstOpen = items.filter(function (it) { return !isClosed(it.id) && !isHeld(it); })[0];
     items.forEach(function (it, i) {
+      if (isHeld(it)) { cards.push(heldHTML(it, i)); return; }
       var cur = isCur(it.id), r = rk(it), n = dupCount(it), fl = flag(it);
-      var cls = 'fi' + (it === firstOpen ? ' is-first' : '') + (isClosed(it.id) ? ' is-closed' : '') + (cur ? ' is-current' : '');
-      h += '<li class="' + cls + '" data-id="' + esc(it.id) + '">' +
+      var cls = 'fi' + (it === firstOpen ? ' is-first' : '') + (cur ? ' is-current' : '');
+      cards.push('<li class="' + cls + '" data-id="' + esc(it.id) + '">' +
         '<button class="fi-open" data-open="' + esc(it.id) + '"' + (cur ? ' aria-current="true"' : '') + ' aria-label="Open ' + (i + 1) + ': ' + esc(titleOf(it)) + '">' +
           '<span class="fi-rank" aria-hidden="true">' + pad(i + 1) + '</span>' +
           '<span class="fi-body">' +
             '<span class="fi-meta">' + srcHTML(it) + '<span class="sep" aria-hidden="true">·</span><span>' + esc(project(it)) + '</span>' +
-              (fl ? '<span class="flag">' + esc(fl) + '</span>' : '') + meetingHTML(it) + dueHTML(it) +
+              (fl ? '<span class="flag">' + esc(fl) + '</span>' : '') + waitChip(it) + meetingHTML(it) + dueHTML(it) +
               (n ? '<span>+' + n + ' in thread</span>' : '') + alsoTag(it) +
               '<span class="cur-tag" aria-hidden="true">In panel</span></span>' +
             '<span class="fi-title">' + esc(titleOf(it)) + '</span>' +
             '<span class="fi-why">' + ico('spark') + '<span>' + esc(r.why) + '</span></span>' +
           '</span>' +
         '</button>' +
-        '<div class="fi-act">' + actHTML(it) + '</div>' +
-      '</li>';
+        '<div class="fi-act">' + actHTML(it) +
+          (isClosed(it.id) ? '' : '<button class="btn-done" data-card-done="' + esc(it.id) + '" aria-label="Mark done: ' + esc(titleOf(it)) + '">' + ico('check') + '<span>Done</span></button>') +
+        '</div>' +
+      '</li>');
     });
-    if (!items.length) h = stillLoading() ? '<li class="loading-line">' + esc(stillLoading()) + '</li>' : '<li class="allclear">All clear. Nothing needs you right now.</li>';
+    /* Green copies of what was just completed, where they stood. */
+    var lv = S.leaving || {}, vis = visible();
+    Object.keys(lv).forEach(function (k) { if (vis.indexOf(lv[k].it) > -1 || S.byId[k] && vis.some(function (o) { return o.id === k; })) delete lv[k]; }); /* undone: no green copy */
+    Object.keys(lv).map(function (k) { return lv[k]; }).sort(function (a, b) { return a.idx - b.idx; }).forEach(function (g) {
+      cards.splice(Math.min(g.idx, cards.length), 0, ghostHTML(g));
+    });
+    var h = cards.join('');
+    if (!items.length) h = (stillLoading() ? '<li class="loading-line">' + esc(stillLoading()) + '</li>' : '<li class="allclear">All clear. Nothing needs you right now.</li>') + h;
     $('focus').innerHTML = h;
   }
   function renderRest() {
@@ -293,12 +389,83 @@
         (isWait(it) && !n ? ' · asked ' + it.n + ' working day' + (it.n === 1 ? '' : 's') + ' ago' : '') +
         (it.meeting ? ' · meeting ' + esc(it.meeting.hhmm) : '') + (waitingTeams(it.id) ? ' · waiting for you to send in Teams' : '') +
         (isMine(it) && it.due ? ' · ' + esc(mine.dueLabel(it.due).toLowerCase()) : '') +
-        (S.verdict[it.id] === 'down' ? ' · marked not important' : '') + '</span></span></button></li>';
+        (S.verdict[it.id] === 'down' ? ' · marked not important' : '') + (isWait(it) ? ' ' + waitChip(it) : '') + '</span></span></button></li>';
     });
     if (!list.length) h = '<li class="rest-empty">' + (q ? 'Nothing matches “' + esc(S.q) + '”.' : 'Nothing else right now.') + '</li>';
     $('restList').innerHTML = h;
     $('restToggle').setAttribute('aria-expanded', String(S.restOpen));
     $('restPanel').hidden = !S.restOpen;
+  }
+
+  /* ---------------- Recently done (7 days) ----------------
+     Flat rows: a check, the title struck through, when and from where, the
+     reason, and Bring back (it returns where it was; nothing is unsent). */
+  var REASON = { manual: 'Marked done by you', sent: 'You sent the reply', commented: 'You commented', invited: 'You sent the invite', copied: 'Copied to Teams and opened the chat',
+    chased: 'You chased', updated: 'You updated the page', teams: 'You said you sent it in Teams', followup: 'Done from Ask Claude' };
+  function recentDone() {
+    var cut = Date.now() - 7 * 864e5, out = [];
+    Object.keys(S.doneDb || {}).forEach(function (k) {
+      var d = S.doneDb[k], t = Date.parse(d && d.at || '');
+      if (!d || d.how === 'merged' || !t || t < cut) return;
+      out.push({ ref: 'done:' + k, title: d.title || '(no title)', src: d.src || 'mail', t: t, how: d.how, why: d.why || REASON[d.how] || 'Marked done' });
+    });
+    Object.keys(S.actions).forEach(function (k) {
+      var a = S.actions[k], t = Date.parse(a.doneAt || '');
+      if (!a.done || !t || t < cut) return;
+      var b = a.doneBy, why = b ? (b.kind === 'mail' ? 'Sent ‘' + (b.subject || '') + '’ to ' + (b.who || '') : 'Invited ' + (b.who || '') + ' to ‘' + (b.subject || '') + '’') : a.doneWhy || 'Marked done by you';
+      out.push({ ref: 'mine:' + k, title: a.text, src: 'mine', t: t, how: b ? 'seen' : a.doneHow || 'manual', why: why });
+    });
+    return out.sort(function (a, b) { return b.t - a.t; });
+  }
+  function renderDone() {
+    var list = recentDone(), tg = $('doneToggle'); if (!tg) return;
+    $('doneCount').textContent = list.length;
+    tg.classList.toggle('flash', !!S.flash);
+    tg.setAttribute('aria-expanded', String(!!S.doneOpen));
+    $('donePanel').hidden = !S.doneOpen;
+    if (!S.doneOpen) return;
+    var today = todayIso();
+    $('doneList').innerHTML = list.length ? list.map(function (r) {
+      var when = mine.dayOf(r.t) === today ? U.hhmm(new Date(r.t)) : U.when(new Date(r.t).toISOString(), new Date());
+      return '<li class="dr" data-done-row="' + esc(r.ref) + '"><span class="dr-ic">' + ico('check') + '</span>' +
+        '<span class="dr-t"><span class="dr-title">' + esc(r.title) + '</span>' +
+        '<span class="dr-sub"><span class="t">' + (r.how === 'manual' ? 'Done ' : 'Auto ') + esc(when) + '</span><span>·</span><span>' + esc(SRC[r.src] || 'Mail') + '</span></span>' +
+        '<span class="dr-why">' + esc(r.why) + '</span></span>' +
+        '<button class="btn-bring" data-bring="' + esc(r.ref) + '" aria-label="Bring back: ' + esc(r.title) + '">' + ico('bring') + 'Bring back</button></li>';
+    }).join('') : '<li class="dr is-empty"><span></span><span class="dr-why">Nothing closed in the last 7 days.</span><span></span></li>';
+  }
+  /* Bring back: off Recently done, back where it was. A sent reply stays sent (Sent · locked). */
+  function bringBack(ref) {
+    var m = /^(done|mine):(.+)$/.exec(ref || ''); if (!m) return;
+    if (m[1] === 'mine') {
+      var a = S.actions[m[2]]; if (!a) return;
+      var it = S.byId['mine:' + m[2]] || syncAction(mine.toItem(m[2], a));
+      delete a.doneHow; delete a.doneWhy;
+      undoActionDone(it);
+      (S.autoNotes || []).forEach(function (n) { if (n.docId === m[2]) n.undone = true; });
+      S.autoNotes = (S.autoNotes || []).filter(function (n) { return !n.undone; });
+      renderAll();
+      return toast('Back in Today.');
+    }
+    var key = m[2], rec = S.doneDb[key];
+    delete S.doneDb[key];
+    saveDone('done/' + key, function () { return store.clearDone(key); });
+    var w = /^wait-(.+)$/.exec(key), docId = w && w[1];
+    if (docId && S.waits[docId]) {
+      var wd = S.waits[docId];
+      if (wd.status === 'dismissed') { wd.status = 'open'; delete wd.dismissedAt; }
+      if (rec && rec.how === 'chased') delete wd.chasedAt;
+      saveDone('waits/' + docId, function () { return store.setWait(docId, wd); });
+      refreshWaits();
+    }
+    var back = S.items.filter(function (o) { return o.key === key; })[0];
+    if (back) { delete S.doneNow[back.id]; S.items.forEach(function (o) { if (rk(o).dupOf === back.id && S.doneNow[o.id] && S.doneNow[o.id].how === 'merged') delete S.doneNow[o.id]; }); }
+    rebuild();
+    back = S.items.filter(function (o) { return o.key === key; })[0];
+    renderAll();
+    if (!back) return toast('It’s no longer in its source, so it can’t come back here.');
+    if (!back.r) rankNew(false); /* closed before this session: Claude places it again */
+    toast(stateOf(back) === 'locked' ? 'Back in the list. The reply stays sent.' : 'Back in the list.');
   }
 
   /* ---------------- Render: item view ---------------- */
@@ -391,7 +558,7 @@
   function headHTML(it, inFocus, n) {
     return '<div class="iv-head">' +
         '<button class="btn-back" data-back aria-label="Back to the list">' + ico('back') + '<span class="lbl-phone">Back</span><span class="lbl-desk">Close</span></button>' +
-        '<span class="iv-crumb" aria-label="Location"><span class="c-sec">' + (inFocus ? 'Do now' : 'Everything else') + '</span><span class="sep" aria-hidden="true">›</span>' +
+        '<span class="iv-crumb" aria-label="Location"><span class="c-sec">' + (inFocus ? 'Today' : 'Everything else') + '</span><span class="sep" aria-hidden="true">›</span>' +
           '<span class="c-n">#' + pad(n) + '</span><span class="sep" aria-hidden="true">›</span><b>' + esc(isMine(it) ? 'My action' : tag(it)) + '</b></span>' +
         '<span class="kbd" aria-hidden="true">Esc</span>' +
       '</div>';
@@ -462,7 +629,7 @@
     var srcLink = w.src === 'teams' ? U.safeTeamsLink(w.ref.webUrl) : U.safeOutlookLink(w.ref.webLink);
     var h = '<div class="iv-head">' +
         '<button class="btn-back" data-back aria-label="Back to the list">' + ico('back') + '<span class="lbl-phone">Back</span><span class="lbl-desk">Close</span></button>' +
-        '<span class="iv-crumb" aria-label="Location"><span class="c-sec">' + (inFocus ? 'Do now' : pre ? 'Waiting on others' : 'Everything else') + '</span><span class="sep" aria-hidden="true">›</span>' +
+        '<span class="iv-crumb" aria-label="Location"><span class="c-sec">' + (inFocus ? 'Today' : pre ? 'Waiting on others' : 'Everything else') + '</span><span class="sep" aria-hidden="true">›</span>' +
           (n ? '<span class="c-n">#' + pad(n) + '</span><span class="sep" aria-hidden="true">›</span>' : '') + '<b>' + esc(first) + '</b></span>' +
         '<span class="kbd" aria-hidden="true">Esc</span>' +
       '</div>' +
@@ -520,7 +687,7 @@
     if (canMailChase(it)) btns.push(byMail ? q('chaseteams', 'teams', 'Chase by Teams') : q('chasemail', 'mail', 'Chase by mail'));
     var empty = !String(S.drafts[draftKey(it)] || '').trim(), btn;
     if (byMail) {
-      if (locked) btn = '<button class="btn-send is-sent" id="sendBtn" aria-disabled="true">Sent ✓ ' + U.hhmm(st.sentAt) + ' · locked</button>';
+      if (locked) btn = '<span class="st st-hold sent-chip" id="sendBtn" aria-disabled="true">' + ico('lock') + 'Sent ' + U.hhmm(st.sentAt) + ' · locked</span>';
       else if (busy) btn = '<button class="btn-send" id="sendBtn" aria-disabled="true" aria-busy="true">' + ico('send') + 'Sending…</button>';
       else if (st.phase === 'unclear') btn = '<button class="btn-send is-confirm" id="sendBtn" data-send>' + (st.confirm ? 'Yes, send again' : 'Send again anyway') + '</button>';
       else btn = '<button class="btn-send" id="sendBtn" data-send' + (empty ? ' aria-disabled="true"' : '') + '>' + ico('send') + 'Send</button>';
@@ -767,7 +934,7 @@
         (S.doneNow[it.id] ? '<div class="sent-note">Marked done</div>' : '');
     }
     var st = sendState(it.id), empty = !String(S.drafts[it.id] || '').trim(), btn;
-    if (st.phase === 'sent') btn = '<button class="btn-send is-sent" id="sendBtn" aria-disabled="true">Commented ✓ ' + U.hhmm(st.sentAt) + ' · locked</button>';
+    if (st.phase === 'sent') btn = '<span class="st st-hold sent-chip" id="sendBtn" aria-disabled="true">' + ico('lock') + 'Commented ' + U.hhmm(st.sentAt) + ' · locked</span>';
     else if (st.phase === 'sending') btn = '<button class="btn-send" id="sendBtn" aria-disabled="true" aria-busy="true">' + ico('send') + 'Posting…</button>';
     else if (st.phase === 'unclear') btn = '<button class="btn-send is-confirm" id="sendBtn" data-jira-post>' + (st.confirm ? 'Yes, post again' : 'Post again anyway') + '</button>';
     else btn = '<button class="btn-send" id="sendBtn" data-jira-post' + (empty ? ' aria-disabled="true"' : '') + '>' + ico('send') + 'Comment</button>';
@@ -825,7 +992,7 @@
     out.innerHTML =
       '<div class="iv-head">' +
         '<button class="btn-back" data-back aria-label="Back to the list">' + ico('back') + '<span class="lbl-phone">Back</span><span class="lbl-desk">Close</span></button>' +
-        '<span class="iv-crumb" aria-label="Location"><span class="c-sec">' + (inFocus ? 'Do now' : 'Everything else') + '</span><span class="sep" aria-hidden="true">›</span>' +
+        '<span class="iv-crumb" aria-label="Location"><span class="c-sec">' + (inFocus ? 'Today' : 'Everything else') + '</span><span class="sep" aria-hidden="true">›</span>' +
           '<span class="c-n">#' + pad(n) + '</span><span class="sep" aria-hidden="true">›</span><b>' + esc(tag(it)) + '</b></span>' +
         '<span class="kbd" aria-hidden="true">Esc</span>' +
       '</div>' +
@@ -859,7 +1026,7 @@
     };
     if (isWait(it)) return waitBarHTML(it);
     if (isMine(it)) {
-      return '<div class="quiet">' + askBtn() + q('delete', 'trash', 'Delete') + q('notimp', 'down', 'Not important', 'n') +
+      return '<div class="quiet">' + askBtn() + q('delete', 'trash', 'Delete') + (pinned(it) ? q('nottoday', 'down', 'Not today', 'n') : q('notimp', 'down', 'Not important', 'n')) +
         q('star', 'star', '<span class="q-l">Important</span>', '', S.verdict[it.id] === 'up') + '</div>' +
         '<button class="btn-send" id="sendBtn" data-done-primary>' + ico('check') + 'Done</button>';
     }
@@ -867,7 +1034,7 @@
     if (isTeams(it)) {
       btn = '<button class="btn-send" id="sendBtn" data-copyopen' + (empty ? ' aria-disabled="true"' : '') + '>' + ico('copy') +
         (waitingTeams(it.id) ? 'Copy & open again' : 'Copy & open in Teams') + '</button>';
-    } else if (locked) btn = '<button class="btn-send is-sent" id="sendBtn" aria-disabled="true">Sent ✓ ' + U.hhmm(st.sentAt) + ' · locked</button>';
+    } else if (locked) btn = '<span class="st st-hold sent-chip" id="sendBtn" aria-disabled="true">' + ico('lock') + 'Sent ' + U.hhmm(st.sentAt) + ' · locked</span>';
     else if (busy) btn = '<button class="btn-send" id="sendBtn" aria-disabled="true" aria-busy="true">' + ico('send') + 'Sending…</button>';
     else if (st.phase === 'unclear') btn = '<button class="btn-send is-confirm" id="sendBtn" data-send>' + (st.confirm ? 'Yes, send again' : 'Send again anyway') + '</button>';
     else btn = '<button class="btn-send" id="sendBtn" data-send' + (empty ? ' aria-disabled="true"' : '') + '>' + ico('send') + 'Send</button>';
@@ -881,7 +1048,7 @@
     $('listCol').classList.toggle('is-active', p === 'list');
     $('itemCol').classList.toggle('is-active', p === 'item');
   }
-  function renderList() { renderHeader(); renderFocus(); renderRest(); }
+  function renderList() { renderHeader(); renderFocus(); renderRest(); renderDone(); }
   /* As renderAll, but whoever is typing in the item keeps focus and caret. */
   function renderAllKeepFocus() {
     if (S.view === 'item' && !S.byId[S.cur]) return renderAll();
@@ -1003,6 +1170,7 @@
     S.waits = Object.assign({}, r.waits || {}, S.waits);
     S.asksDb = Object.assign({}, r.asks || {}, S.asksDb);
     S.meetingsDb = Object.assign({}, r.meetings || {}, S.meetingsDb);
+    S.matchesDb = Object.assign({}, r.matches || {}, S.matchesDb || {});
     var have = {};
     S.feedback.forEach(function (f) { have[f.key] = 1; });
     S.feedback = S.feedback.concat((r.feedback || []).filter(function (f) { return !have[f.key]; }));
@@ -1420,7 +1588,7 @@
           }, function () { /* Claude couldn't answer: these are checked again on the next sync */ });
         });
       }, Promise.resolve());
-      return detect.then(function () {
+      return detect.then(function () { return got[0].ok ? scanFulfil(now, sent) : null; }).then(function () {
         var open = Object.keys(S.waits).filter(function (k) { return S.waits[k].status === 'open'; });
         if (!open.length) return;
         var needMail = open.some(function (k) { return S.waits[k].src === 'mail'; });
@@ -1437,6 +1605,61 @@
         });
       });
     });
+  }
+  /* Done "whichever way": your sent mail and the meetings you set up today,
+     against your open own actions. One Claude call per batch, each mail or
+     meeting checked once per action (matches/<key>). */
+  function scanFulfil(now, sent) {
+    S.matchesDb = S.matchesDb || {};
+    var F = D.fulfil, open = Object.keys(S.actions).filter(function (k) { return !S.actions[k].done; })
+      .map(function (k) { var a = S.actions[k]; return { docId: k, text: a.text, notes: a.notes || '', created: a.created }; });
+    if (!open.length) return Promise.resolve();
+    var cands = F.fromSent(sent).concat(F.fromEvents(meet.lastRaw || [], S.me)), todo = [];
+    cands.forEach(function (c) {
+      var hit = S.matchesDb[c.key];
+      if (hit && hit.match && !hit.undone) { applyMatch(c, hit.match); return; }
+      var checked = hit && hit.checked || [];
+      var acts = open.filter(function (a) { return checked.indexOf(a.docId) < 0 && F.eligible(a, c); });
+      if (acts.length) todo.push({ c: c, acts: acts });
+    });
+    if (!todo.length || !rt.sample) return Promise.resolve();
+    var batches = [];
+    for (var i = 0; i < todo.length && i < 30; i += F.BATCH) batches.push(todo.slice(i, i + F.BATCH));
+    return batches.reduce(function (p, b) {
+      return p.then(function () {
+        var acts = [], have = {};
+        b.forEach(function (x) { x.acts.forEach(function (a) { if (!have[a.docId]) { have[a.docId] = 1; acts.push(a); } }); });
+        return F.ask({ me: S.me, now: now, cands: b.map(function (x) { return x.c; }), actions: acts }).then(function (v) {
+          b.forEach(function (x) {
+            if (!(x.c.key in v)) return; /* skipped: asked again next time */
+            var prev = S.matchesDb[x.c.key] || {}, match = v[x.c.key];
+            if (match && x.acts.every(function (a) { return a.docId !== match; })) match = null;
+            var d = { at: new Date().toISOString(), kind: x.c.kind, checked: (prev.checked || []).concat(x.acts.map(function (a) { return a.docId; })).slice(-50), match: match || null };
+            S.matchesDb[x.c.key] = d; store.setMatch(x.c.key, d);
+            if (match) applyMatch(x.c, match);
+          });
+        }, function () { /* Claude couldn't answer: checked again on the next sync */ });
+      });
+    }, Promise.resolve());
+  }
+  function applyMatch(c, docId) {
+    var a = S.actions[docId]; if (!a || a.done) return;
+    var it = S.byId['mine:' + docId] || syncAction(mine.toItem(docId, a));
+    var who = D.fulfil.named(a, c).map(function (p) { return U.firstName(p.name) || p.name; }).join(', ');
+    setActionDone(it, { doneBy: { kind: c.kind, ref: c.id, at: new Date(c.t).toISOString(), subject: U.clip(c.subject, 160), who: who } });
+    var text = c.kind === 'mail' ? 'Marked done because you sent ‘' + U.clip(c.subject || '(no subject)', 60) + '’ to ' + who
+      : 'Marked done because you invited ' + who + ' to ‘' + U.clip(c.subject || 'a meeting', 60) + '’';
+    S.autoNotes = (S.autoNotes || []).concat([{ id: 'n' + docId, docId: docId, key: c.key, text: text }]);
+    if (S.view === 'item' && S.cur === it.id) back(); else renderAllKeepFocus();
+  }
+  function undoAutoNote(id) {
+    var n = (S.autoNotes || []).filter(function (x) { return x.id === id; })[0]; if (!n || n.undone) return;
+    n.undone = true;
+    var hit = S.matchesDb[n.key];
+    if (hit) { hit.undone = true; store.setMatch(n.key, hit); }
+    var it = S.byId['mine:' + n.docId] || (S.actions[n.docId] && syncAction(mine.toItem(n.docId, S.actions[n.docId])));
+    S.autoNotes = S.autoNotes.filter(function (x) { return x !== n; });
+    if (it) undoActionDone(it); else renderNotes();
   }
   function scanMeetings(now) {
     if (!rt.sample) return Promise.resolve();
@@ -1545,7 +1768,7 @@
   function placedToast(m) {
     if (!S.byId[m.id] || actionDone(m)) return;
     var top = topItems(), i = top.indexOf(m);
-    if (i > -1) toast('Added to Do now at #' + (i + 1) + '.');
+    if (i > -1) toast('Added to Today at #' + (i + 1) + '.');
     else toast('Added under Everything else' + (m.due ? ' (' + mine.dueLabel(m.due).toLowerCase() + ')' : '') + '.');
   }
 
@@ -1675,17 +1898,12 @@
       if (res.phase === 'unclear') { ns.confirm = 0; ns.armAt = performance.now() + 700; }
       if (res.phase === 'blocked' && !res.keepDraft) { ns.draftId = ''; }
       if (res.phase === 'sent' && w) {
-        S.doneNow[id] = { how: 'sent' };
-        autoDone(it, 'sent', 'Chase sent by mail.');
+        autoDone(it, 'chased', 'Chase sent by mail.');
       } else if (res.phase === 'sent') {
-        S.doneNow[id] = { how: 'sent' };
-        var rec = Object.assign(doneRecord(it, 'sent'), { sentAt: res.sentAt.toISOString() });
-        S.doneDb = S.doneDb || {}; S.doneDb[it.key] = rec;
-        saveDone('done/' + it.key, function () { return store.setDone(it.key, rec); });
         store.setSent(it.key, { sentAt: res.sentAt.toISOString() });
         if (S.sentDb) S.sentDb[it.key] = { sentAt: res.sentAt.toISOString() };
         S.chatOpen = false;
-        toast(doneLine(it, 'Sent.'), function () { undoDone(id); });
+        autoDone(it, 'sent', 'Sent.', null, { sentAt: res.sentAt.toISOString() });
       }
       renderAll();
       var b = $('sendBtn'); if (b && S.cur === id) b.focus({ preventScroll: true });
@@ -1750,6 +1968,14 @@
     });
   }
 
+  /* "Copy again" on a card handed off to Teams: the text again, the chat again. */
+  function copyAgain(id) {
+    var it = S.byId[id]; if (!it) return;
+    var text = String(S.drafts[id] || '').trim();
+    var link = isWait(it) ? waitLink(it) : U.safeTeamsLink(it.webUrl);
+    if (link) { try { window.open(link, '_blank', 'noopener,noreferrer'); } catch (e) { /* ignore */ } }
+    Promise.resolve(text ? copyText(text) : Promise.reject()).then(function () { toast('Copied again. Paste it in Teams.'); }, function () { toast('Couldn’t copy. Open the item and copy the text.'); });
+  }
   function copyText(text) {
     try { return navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(text) : Promise.reject(); } catch (e) { return Promise.reject(); }
   }
@@ -1771,9 +1997,10 @@
       rankNew(false);
     });
   }
-  function notWaiting() {
-    var it = S.byId[S.cur]; if (!isWait(it)) return;
+  function notWaiting(w0) {
+    var it = w0 && w0.src ? w0 : S.byId[S.cur]; if (!isWait(it)) return;
     if (!doneGuard()) return;
+    celebrate(it, 'manual');
     changeWait(it, function (w) { w.status = 'dismissed'; w.dismissedAt = new Date().toISOString(); }, 'No longer waiting on ' + (U.firstName(it.senderName) || 'them') + '.', true);
   }
   function snoozeWait() {
@@ -1939,11 +2166,13 @@
 
   /* ---------------- Your own actions ---------------- */
   /* Saved first (db), shown at once, then ranked by Claude in the background. */
-  function addAction(raw) {
+  /* A new action always lands in Today (pinnedToday) until it is done or
+     you say "Not today". Claude may enrich it, never demote it. */
+  function addAction(raw, notes) {
     var text = mine.clean(raw); if (!text) return false;
     var now = new Date(), docId = mine.newId();
     var due = mine.parseDue(text, now);
-    var a = { text: text, created: now.toISOString(), done: false, doneAt: null, due: due || null, dueBy: due ? 'parser' : null, notes: '' };
+    var a = { text: text, created: now.toISOString(), done: false, doneAt: null, due: due || null, dueBy: due ? 'parser' : null, notes: String(notes || '').trim().slice(0, 4000), pinnedToday: true };
     S.actions[docId] = a;
     store.setAction(docId, a);
     var it = syncAction(mine.toItem(docId, a));
@@ -1997,7 +2226,7 @@
   }
   function undoActionDone(it) {
     var a = S.actions[it.docId]; if (!a) return;
-    a.done = false; a.doneAt = null; delete a.doneBy;
+    a.done = false; a.doneAt = null; delete a.doneBy; delete a.doneHow; delete a.doneWhy;
     saveDone('actions/' + it.docId, function () { return store.setAction(it.docId, a); });
     if (!S.byId[it.id]) { S.items.push(it); S.byId[it.id] = it; }
     renderAll();
@@ -2006,7 +2235,8 @@
     var a = S.actions[it.docId]; if (!a) return;
     if (a.done) return closeAfterDone(it, placeOf(it)); /* already done (e.g. after the follow-up): just close */
     var place = placeOf(it);
-    setActionDone(it);
+    celebrate(it, 'manual');
+    setActionDone(it, { doneHow: 'manual', doneWhy: 'Marked done by you' });
     closeAfterDone(it, place);
     toast('Done. Removed from the list.', function () { undoActionDone(it); });
   }
@@ -2037,8 +2267,22 @@
       store.clearFeedback(it.key);
     }
   }
+  /* "Not today": the action leaves Today (its pin is cleared); Claude's rank places it again. */
+  function notToday() {
+    var it = curAction(); if (!it) return;
+    var a = S.actions[it.docId]; if (!a || !a.pinnedToday) return;
+    a.pinnedToday = false;
+    saveDone('actions/' + it.docId, function () { return store.setAction(it.docId, a); });
+    back();
+    toast('Moved out of Today.', function () {
+      a.pinnedToday = true;
+      saveDone('actions/' + it.docId, function () { return store.setAction(it.docId, a); });
+      renderAll();
+    });
+  }
   function notImportant() {
     var it = S.byId[S.cur]; if (!it) return;
+    if (pinned(it)) return notToday();
     var prev = S.verdict[it.id] || null;
     setVerdict(it, 'down'); back();
     toast('Moved to Everything else. I’ll rank it lower next time.', function () { setVerdict(it, prev); renderAll(); });
@@ -2094,21 +2338,22 @@
     back();
   }
   function hideDone(it, how) {
-    var rec = doneRecord(it, how);
+    var rec = doneRecord(it, how === 'teams' ? 'teams' : how);
     S.doneDb = S.doneDb || {};
     S.doneNow[it.id] = { how: how, hidden: true, prev: S.doneNow[it.id] || null };
     S.doneDb[it.key] = rec;
     saveDone('done/' + it.key, function () { return store.setDone(it.key, rec); });
   }
-  function markDone() {
-    var it = S.byId[S.cur]; if (!it) return;
-    if (isWait(it)) return notWaiting();
+  function markDone(id, how) {
+    var it = S.byId[id || S.cur]; if (!it) return;
+    if (isWait(it)) return notWaiting(it);
     if (!doneGuard()) return;
     if (isMine(it)) return markActionDone(it);
     var place = placeOf(it);
     /* R8: what merged into it is done with it. */
     var merged = S.items.filter(function (o) { return o !== it && rk(o).dupOf === it.id && !gone(o.id); });
-    hideDone(it, 'manual');
+    celebrate(it, how || 'manual');
+    hideDone(it, how || 'manual');
     merged.forEach(function (o) { hideDone(o, 'merged'); });
     closeAfterDone(it, place);
     toast('Marked done.', function () {
@@ -2128,33 +2373,39 @@
      Sent, invited, commented, updated or copied to Teams (unverifiable, so
      Undo stays): the item is marked done, with "Marked done: <title> · Undo". */
   function doneLine(it, lead) { return (lead ? lead + ' ' : '') + 'Marked done: ' + U.clip(titleOf(it), 80); }
-  function autoDone(it, how, lead, extraUndo) {
+  function autoDone(it, how, lead, extraUndo, recExtra) {
     if (!it) return false;
     if (isMine(it)) {
       var a = S.actions[it.docId]; if (!a) return false;
       if (a.done) { if (lead) toast(lead); return true; }
-      setActionDone(it);
+      celebrate(it, how);
+      setActionDone(it, { doneHow: how, doneWhy: REASON[how] || 'Done' });
       renderAllKeepFocus();
       toast(doneLine(it, lead), function () { if (extraUndo) extraUndo(); undoActionDone(it); });
       return true;
     }
     if (isWait(it)) {
       var w = waitDoc(it); if (!w) return false;
-      var prevChase = w.chasedAt || null;
+      var prevChase = w.chasedAt || null, wrec = doneRecord(it, how);
+      celebrate(it, how);
       w.chasedAt = new Date().toISOString(); saveDone('waits/' + it.docId, function () { return store.setWait(it.docId, w); });
-      S.doneNow[it.id] = S.doneNow[it.id] || { how: how, at: w.chasedAt };
+      S.doneNow[it.id] = { how: how, at: w.chasedAt, hidden: true };
+      S.doneDb = S.doneDb || {}; S.doneDb[it.key] = wrec;
+      saveDone('done/' + it.key, function () { return store.setDone(it.key, wrec); });
       renderAllKeepFocus();
       toast(doneLine(it, lead), function () {
         if (extraUndo) extraUndo();
         if (prevChase) w.chasedAt = prevChase; else delete w.chasedAt;
         saveDone('waits/' + it.docId, function () { return store.setWait(it.docId, w); });
+        delete S.doneDb[it.key]; saveDone('done/' + it.key, function () { return store.clearDone(it.key); });
         delete S.doneNow[it.id]; renderAll();
       });
       return true;
     }
-    var rec = doneRecord(it, how), had = S.doneNow[it.id] || null;
+    var rec = Object.assign(doneRecord(it, how), recExtra || {});
+    celebrate(it, how);
     S.doneDb = S.doneDb || {};
-    S.doneNow[it.id] = had || { how: how, at: rec.at };
+    S.doneNow[it.id] = { how: how, at: rec.at, hidden: true };
     S.doneDb[it.key] = rec;
     saveDone('done/' + it.key, function () { return store.setDone(it.key, rec); });
     renderAllKeepFocus();
@@ -2171,7 +2422,8 @@
 
   /* ---------------- Jira: Comment on KEY (once, on your click) ---------------- */
   function jiraDone(it, how) {
-    S.doneNow[it.id] = { how: how || 'commented' };
+    celebrate(it, 'commented');
+    S.doneNow[it.id] = { how: how || 'commented', hidden: true };
     var d = doneRecord(it, how || 'commented');
     S.doneDb = S.doneDb || {}; S.doneDb[it.key] = d;
     saveDone('done/' + it.key, function () { return store.setDone(it.key, d); });
@@ -2293,32 +2545,53 @@
     if (S.view === 'item' && S.cur === id) back(); else renderAll();
   }
   function openInviteFromAsk(o) {
+    /* About one of your open actions: Find a time on that action itself, so the invite finishes it. */
+    var own = o.scope && S.byId[o.scope];
+    if (isMine(own) && !actionDone(own)) {
+      openItem(own.id, false);
+      startNs('meeting', { who: o.who, title: o.title, agenda: o.agenda });
+      return;
+    }
     var docId = addAction(o.title || 'Meeting'); if (!docId) return;
     var id = 'mine:' + docId;
     openItem(id, false);
     startNs('meeting', { who: o.who, title: o.title, agenda: o.agenda });
   }
+  /* A reply card sent from Ask Claude: that mail is done (Undo keeps it sent and locked). */
   function replySent(mailId, res) {
-    var it = S.byId[mailId]; if (!it || it.src !== 'mail') return;
+    var it = S.byId[mailId]; if (!it || it.src !== 'mail') return false;
     S.send[mailId] = { phase: 'sent', sentAt: res.sentAt };
-    S.doneNow[mailId] = { how: 'sent' };
-    store.setDone(it.key, { at: new Date().toISOString(), how: 'sent', sentAt: res.sentAt.toISOString() });
     store.setSent(it.key, { sentAt: res.sentAt.toISOString() });
     if (S.sentDb) S.sentDb[it.key] = { sentAt: res.sentAt.toISOString() };
-    renderAllKeepFocus();
+    return autoDone(it, 'sent', 'Sent.');
   }
-  function jiraCommentedKey(key, res) {
-    var it = S.byId['jira:' + key]; if (!it) return;
+  function jiraCommentedKey(key, res, lead) {
+    var it = S.byId['jira:' + key]; if (!it) return false;
     S.send[it.id] = { phase: 'sent', sentAt: res.sentAt };
-    jiraDone(it, 'commented');
-    renderAllKeepFocus();
+    return autoDone(it, 'commented', lead);
+  }
+  /* Update page on a card: the Confluence item of that page is done. */
+  function pageUpdated(pageId, lead) {
+    var it = S.byId['conf:' + pageId]; if (!it || !isPage(it)) return false;
+    return autoDone(it, 'updated', lead);
+  }
+  /* A card executed while Ask Claude was about one item: that item is done
+     too (unless the card already finished that very item). */
+  function cardFollowUp(card, res, lead) {
+    var it = card.scope && S.byId[card.scope];
+    if (!it || gone(it.id) || actionDone(it)) return false;
+    if (isClosed(it.id) && !isMine(it) && !isWait(it)) return false;
+    if (card.kind === 'reply' && card.mailId === it.id) return false;
+    if (card.kind === 'jira' && isJira(it) && it.issueKey === card.key) return false;
+    if (card.kind === 'confluence' && isPage(it) && 'conf:' + card.pageId === it.id) return false;
+    return autoDone(it, card.kind === 'jira' ? 'commented' : card.kind === 'confluence' ? 'updated' : 'sent', lead || 'Sent.');
   }
   ask.init({
     ico: ico, item: function (id) { return S.byId[id] || null; }, title: titleOf, me: function () { return S.me; }, toast: toast,
     isExternal: isExternal, nameFor: nameFor, draftTarget: draftTarget, draftKind: function (it) { var t = draftTarget(it); return t ? t.kind : ''; },
     setDraft: setDraftFromClaude, undoDraft: undoClaudeDraft, chatContext: chatContext, focusList: focusList,
     addAction: function (t) { return addAction(t); }, removeAction: removeActionQuiet, openInvite: openInviteFromAsk,
-    replySent: replySent, jiraCommented: jiraCommentedKey
+    replySent: replySent, jiraCommented: jiraCommentedKey, pageUpdated: pageUpdated, followUp: cardFollowUp
   });
   function renderAskbar() {
     var b = $('askBar'); if (!b) return;
@@ -2352,6 +2625,7 @@
     if (t.tagName === 'A') return; /* only safe Outlook, Teams and Atlassian links are rendered as links */
     if (t.closest('#sheetHost')) return askClick(t);
     if (t.hasAttribute('data-perm-allow')) return allowPerms();
+    if (t.hasAttribute('data-autodone-undo')) return undoAutoNote(t.getAttribute('data-autodone-undo'));
     if (t.hasAttribute('data-diag-copy')) return copyDiag();
     var id;
     if (t.hasAttribute('data-ask')) { if (ask.available()) ask.openSheet(null); return; }
@@ -2362,6 +2636,12 @@
     if ((id = t.getAttribute('data-open'))) return openItem(id, false);
     if ((id = t.getAttribute('data-act'))) { var it = S.byId[id]; return openItem(id, !!(it && rk(it).kind === 'reply')); }
     if (t.id === 'restToggle') { S.restOpen = !S.restOpen; renderRest(); if (S.restOpen) $('q').focus(); return; }
+    if (t.id === 'doneToggle') { S.doneOpen = !S.doneOpen; renderDone(); return; }
+    if ((id = t.getAttribute('data-bring'))) return bringBack(id);
+    if ((id = t.getAttribute('data-card-done'))) { if (performance.now() < (S.doneGuardUntil || 0)) return; return markDone(id); }
+    if ((id = t.getAttribute('data-held-done'))) return markDone(id);
+    if ((id = t.getAttribute('data-held-sent'))) return markDone(id, 'teams');
+    if ((id = t.getAttribute('data-held-copy'))) return copyAgain(id);
     if (t.hasAttribute('data-back')) return back();
     if (t.hasAttribute('data-sync')) { if (!S.loading) load({ full: false }); return; }
     if ((id = t.getAttribute('data-retry'))) {
@@ -2411,13 +2691,15 @@
     if (t.hasAttribute('data-conf-ask') && cur) return ask.openSheet(cur, 'Update this page: ');
     if (t.hasAttribute('data-star') && cur) return toggleStar();
     if (t.hasAttribute('data-notimp') && cur) return notImportant();
+    if (t.hasAttribute('data-nottoday') && cur) return notToday();
     if (t.hasAttribute('data-done') && cur) return markDone();
   });
   document.addEventListener('submit', function (e) {
     e.preventDefault();
     if (e.target.hasAttribute('data-addform')) {
-      var ai = $('addIn');
-      if (ai && addAction(ai.value)) { ai.value = ''; ai.focus({ preventScroll: true }); }
+      var ai = $('addIn'), an = $('addNotes');
+      if (ai && addAction(ai.value, an ? an.value : '')) { ai.value = ''; if (an) an.value = ''; addForm(false); ai.focus({ preventScroll: true }); }
+      else if (ai) ai.focus({ preventScroll: true });
       return;
     }
     if (e.target.hasAttribute('data-ns-addform')) { nsAdd(); return; }
@@ -2458,7 +2740,22 @@
     else if (e.target.id === 'actDue') commitActionField('due', e.target.value);
     else if (e.target.id === 'nsOnline' && nsTarget()) nsTarget()[1].online = !!e.target.checked;
   });
+  function addForm(open) { var m = $('addMore'); if (m) m.hidden = !open; $('addForm').classList.toggle('is-open', !!open); }
+  function addCancel() {
+    var ai = $('addIn'), an = $('addNotes');
+    if (ai) ai.value = ''; if (an) an.value = '';
+    addForm(false);
+    if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+  }
+  document.addEventListener('focusout', function (e) {
+    if (e.target.id !== 'addIn' && e.target.id !== 'addNotes') return;
+    setTimeout(function () {
+      var f = $('addForm'), ae = document.activeElement;
+      if (f && !f.contains(ae) && !$('addIn').value.trim() && !$('addNotes').value.trim()) addForm(false);
+    }, 0);
+  });
   document.addEventListener('focusin', function (e) {
+    if (e.target.id === 'addIn') addForm(true);
     if (S.view !== 'item') return;
     var p = $('listCol').contains(e.target) ? 'list' : $('itemCol').contains(e.target) ? 'item' : null;
     if (p && p !== S.pane) { S.pane = p; renderPane(); }
@@ -2482,10 +2779,13 @@
     /* Esc in the draft only leaves the text field; a second Esc closes. */
     if (e.key === 'Escape') {
       if (e.target.id === 'draftText' || e.target.id === 'actText' || e.target.id === 'actNotes' || e.target.id === 'actDue') { e.target.blur(); return; }
-      if (e.target.id === 'addIn') { e.target.blur(); return; }
+      if (e.target.id === 'addIn' || e.target.id === 'addNotes') { addCancel(); return; }
       if (S.view === 'item') return back();
       return;
     }
+    /* The add form: Enter adds; Shift+Enter or Tab goes to Notes; Ctrl/⌘+Enter in Notes adds. */
+    if (e.target.id === 'addIn' && ((e.key === 'Enter' && e.shiftKey) || (e.key === 'Tab' && !e.shiftKey))) { e.preventDefault(); addForm(true); $('addNotes').focus(); return; }
+    if (e.target.id === 'addNotes' && e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); $('addForm').requestSubmit(); return; }
     if (e.key === 'Enter' && /^nsAddr\d+$/.test(e.target.id || '')) { e.preventDefault(); nsUse(+e.target.id.slice(6)); return; }
     /* Enter in the action text saves it (it is one line of text). */
     if (e.key === 'Enter' && e.target.id === 'actText' && !e.shiftKey) { e.preventDefault(); e.target.blur(); return; }

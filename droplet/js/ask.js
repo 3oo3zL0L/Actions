@@ -12,7 +12,7 @@
   var api = null, convs = {}, cardN = 0, returnFocus = null;
 
   ask.init = function (a) { api = a; };
-  function conv(scope) { var k = scope || "*"; return convs[k] || (convs[k] = { log: [] }); }
+  function conv(scope) { var k = scope || "*"; return convs[k] || (convs[k] = { log: [], scope: scope || null }); }
   ask.conv = function (scope) { return conv(scope); };
   function $(id) { return document.getElementById(id); }
   function ico(n, c) { return api.ico(n, c); }
@@ -176,6 +176,8 @@
   }
   function addCard(c, card) {
     card.id = "k" + (++cardN); card.st = card.st || { phase: "idle" };
+    /* The item Ask Claude was about when the card was made: executing the card is its follow-up. */
+    card.scope = c.scope || null;
     /* Cards go above Claude's answer, which is still being written. */
     var at = c.waitEntry ? c.log.indexOf(c.waitEntry) : -1;
     if (at >= 0) c.log.splice(at, 0, { card: card }); else c.log.push({ card: card });
@@ -207,7 +209,7 @@
       c.st = { phase: "sending", draftId: st.draftId, draftLink: st.draftLink, draftText: st.draftText }; ask.rerender();
       flow.sendNew({ to: c.to.slice(), subject: String(c.subject).trim(), text: body, reuse: reuse }).then(function (res) {
         finish(c, res);
-        if (res.phase === "sent") api.toast("Sent.");
+        if (res.phase === "sent" && !api.followUp(c, res)) api.toast("Sent.");
       });
     } else if (c.kind === "reply") {
       if (!body) return;
@@ -220,21 +222,29 @@
         return { phase: "failed", step: flow.STEPS.original, code: String(e && e.code || "unknown"), message: "Couldn’t read the original mail from Outlook, so nothing was sent. Try again." };
       }).then(function (res) {
         finish(c, res);
-        if (res.phase === "sent") { api.replySent(c.mailId, res); api.toast("Sent."); }
+        if (res.phase === "sent") { var r1 = api.replySent(c.mailId, res, c); if (!api.followUp(c, res) && !r1) api.toast("Sent."); }
       });
     } else if (c.kind === "jira") {
       if (!body) return;
       c.st = { phase: "sending" }; ask.rerender();
       atl.postComment(c.key, body).then(function (res) {
         finish(c, res);
-        if (res.phase === "sent") { api.jiraCommented(c.key, res); api.toast(res.verified === false ? "Posted. Droplet couldn’t read it back; check the issue." : "Commented on " + c.key + "."); }
+        if (res.phase === "sent") {
+          var lead = res.verified === false ? "Posted. Droplet couldn’t read it back; check the issue." : "Commented on " + c.key + ".";
+          var r2 = api.jiraCommented(c.key, res, lead);
+          if (!api.followUp(c, res, lead) && !r2) api.toast(lead);
+        }
       });
     } else if (c.kind === "confluence") {
       if (!c.check.ok) return;
       c.st = { phase: "sending" }; ask.rerender();
       atl.applyUpdate(c).then(function (res) {
         finish(c, res);
-        if (res.phase === "sent") api.toast(res.already ? "The page already has this text." : "Page updated. Review it in Confluence.");
+        if (res.phase === "sent") {
+          var lead3 = res.already ? "The page already has this text." : "Page updated. Review it in Confluence.";
+          var r3 = api.pageUpdated(c.pageId, lead3);
+          if (!api.followUp(c, res, lead3) && !r3) api.toast(lead3);
+        }
       });
     }
   };
@@ -252,7 +262,7 @@
     var c = findCard(id); if (!c || c.kind !== "invite" || c.st.phase === "sent") return;
     c.st = { phase: "sent" };
     ask.close();
-    api.openInvite({ who: c.who.slice(), title: c.title, agenda: c.agenda });
+    api.openInvite({ who: c.who.slice(), title: c.title, agenda: c.agenda, scope: c.scope });
   };
   ask.repropose = function (id) {
     var c = findCard(id); if (!c) return;
@@ -280,7 +290,7 @@
   ask.newConversation = function () {
     var c = conv(ask.scope);
     if (c.ctl) { try { c.ctl.abort(); } catch (e) { /* ignore */ } }
-    convs[ask.scope || "*"] = { log: [] };
+    convs[ask.scope || "*"] = { log: [], scope: ask.scope || null };
     render();
     var inp = $("chatIn"); if (inp) inp.focus({ preventScroll: true });
   };

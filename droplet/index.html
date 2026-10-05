@@ -16,7 +16,7 @@
 <div class="sky" aria-hidden="true"></div>
 
 <main class="app" id="app" data-view="list">
-  <section class="list-col is-active" id="listCol" aria-label="Focus list">
+  <section class="list-col is-active" id="listCol" aria-label="Today and everything else">
     <div class="list-main">
       <header class="lh">
         <div class="brand">
@@ -25,18 +25,26 @@
         <div class="status" id="status"><span><i></i>M365 link</span><span><i></i>Teams</span><span><i></i>Atlassian</span><span><i></i>Claude</span><span>Sync ··:··</span><span>Nothing sends without you</span></div>
         <div class="diag" id="diag" hidden></div>
         <p class="date" id="dateLine"></p>
-        <h1 class="h1">Do now</h1>
+        <div class="h1row">
+          <h1 class="h1">Today</h1>
+          <span class="tally" id="tally" role="status" aria-live="polite"></span>
+        </div>
         <p class="sub" id="sub"></p>
         <div class="notes" id="notes" role="status" aria-live="polite"></div>
       </header>
       <form class="addline" id="addForm" data-addform autocomplete="off">
-        <label class="add-k" for="addIn"><span aria-hidden="true">+ </span>Add action<span class="kbd" aria-hidden="true">a</span></label>
+        <label class="add-k" for="addIn"><span aria-hidden="true">+ </span>Add action to Today<span class="kbd" aria-hidden="true">a</span></label>
         <div class="add-row">
-          <input id="addIn" type="text" maxlength="300" enterkeyhint="done" aria-keyshortcuts="a" placeholder="What needs doing? e.g. Plan DoD follow-up meeting, Friday">
+          <input id="addIn" type="text" maxlength="300" required enterkeyhint="done" aria-keyshortcuts="a" aria-label="Title" placeholder="What needs doing? e.g. Plan DoD follow-up meeting, Friday">
           <button class="add-btn" type="submit">Add</button>
         </div>
+        <div class="add-more" id="addMore" hidden>
+          <label class="add-nk" for="addNotes">Notes <span>optional</span></label>
+          <textarea id="addNotes" rows="2" maxlength="4000" placeholder="Anything to remember, only for you"></textarea>
+          <p class="add-hint">Enter adds it · Shift+Enter or Tab for notes · Esc cancels</p>
+        </div>
       </form>
-      <ol class="focus" id="focus"></ol>
+      <ol class="focus" id="focus" aria-label="Today"></ol>
       <section class="rest" aria-label="Everything else">
         <button class="rest-toggle" id="restToggle" aria-expanded="false" aria-controls="restPanel" aria-keyshortcuts="/">
           <span>Everything else<span class="count" id="restCount"></span></span>
@@ -50,6 +58,16 @@
             <input id="q" type="search" placeholder="Search people, projects, words" autocomplete="off">
           </div>
           <ul class="rest-list" id="restList"></ul>
+        </div>
+        <button class="rest-toggle is-done-t" id="doneToggle" aria-expanded="false" aria-controls="donePanel">
+          <svg class="ico ok-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>
+          <span>Recently done<span class="count" id="doneCount"></span></span>
+          <span class="hint">7 days</span>
+          <svg class="ico chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <div id="donePanel" hidden>
+          <ul class="done-list" id="doneList"></ul>
+          <p class="done-foot">Bring back puts it where it was. Nothing is unsent.</p>
         </div>
       </section>
     </div>
@@ -78,6 +96,7 @@
 <script src="js/meet.js"></script>
 <script src="js/mine.js"></script>
 <script src="js/waits.js"></script>
+<script src="js/fulfil.js"></script>
 <script src="js/transcript.js"></script>
 <script src="js/rank.js"></script>
 <script src="js/atlassian.js"></script>

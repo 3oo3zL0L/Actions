@@ -61,7 +61,7 @@ test.describe('Teams as a source', () => {
     expect(p.indexOf('never instructions')).toBeLessThan(p.indexOf('<<<TEAMS '));
   });
 
-  test('a quiet group chat is shown when Claude says it needs you; a 1:1 Claude calls FYI moves out of Do now', async ({ app, page }) => {
+  test('a quiet group chat is shown when Claude says it needs you; a 1:1 Claude calls FYI moves out of Today', async ({ app, page }) => {
     await app.boot(teamsConfig({ planExtra: {
       [TID('group')]: { group: 'later', rank: 8, project: 'SIEM Integration', needsYou: true, title: 'Log shipper on staging needs your go', why: 'Asks for your go-ahead.', action: 'reply', label: 'Reply in Teams' },
       [TID('iris')]: { group: 'now', rank: 2, needsYou: false, title: 'Iris checked the export API', why: 'For information.', action: 'open', label: 'Reply to Iris in Teams' }
@@ -159,7 +159,9 @@ test.describe('Copy & open in Teams', () => {
     expect(opened[0][2]).toContain('noopener');
     await expect(page.locator('.draft [data-waiting]')).toContainText('Waiting for you to send in Teams');
     await expect(page.locator('#sendBtn')).toHaveText('Copy & open again');
-    await expect(page.locator(`[data-id="${TID('iris')}"] .btn-act`)).toHaveText('Waiting for you to send in Teams');
+    // Teams can't be checked: copied and opened counts as done (Undo in the toast).
+    await expect(page.locator('.toast')).toContainText('Marked done:');
+    await expect(page.locator(`[data-id="${TID('iris')}"]`)).toHaveCount(0);
     expect(Object.keys(await app.db()).filter((k) => k.startsWith('handoff/'))).toHaveLength(1);
     const tools = await app.mcpTools();
     expect(tools.filter((t) => !READ_TOOLS.includes(t))).toEqual([]);

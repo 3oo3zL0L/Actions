@@ -13,7 +13,7 @@ test.describe('Load and rank', () => {
     await expect(page.locator('[data-id="a3-bram"] .btn-act')).toHaveText(/Draft reply to Bram/i);
     await expect(page.locator('[data-id="a2-anouk"] .fi-meta')).toContainText('Platform Stability › C4A');
     await expect(page.locator('[data-id="a2-anouk"] .fi-meta')).toContainText('+1 in thread');
-    await expect(page.locator('#sub')).toHaveText('5 actions queued · 5 deferred');
+    await expect(page.locator('#sub')).toHaveText('5 open · 5 deferred');
     await expect(page.locator('.date')).toHaveText('Fri 02 Oct 2026 · 10:00');
 
     await app.openRest();

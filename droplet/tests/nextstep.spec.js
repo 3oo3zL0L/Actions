@@ -51,8 +51,9 @@ test.describe('Find a time', () => {
     await expect(page.locator('[data-ns-invite]')).toHaveCount(0);
     expect(await app.writeTools()).toEqual(['outlook_create_event']);
 
-    // One click marks the action done.
-    await page.click('[data-ns-done]');
+    // The invite was the follow-up: the action is marked done by itself, with Undo.
+    await expect(page.locator('.toast')).toContainText('Marked done: ');
+    await expect(page.locator('[data-ns-done]')).toHaveCount(0);
     expect((await actionDocs(app))[0][1].done).toBe(true);
   });
 
@@ -161,7 +162,7 @@ test.describe('Draft a mail', () => {
     expect(w[0].input).toEqual({ to: [PETER], subject: 'Signed addendum', body: '<p>Hi Peter,</p><p>Attached is the signed addendum, clause 4 as agreed.</p><p>KR<br>Sam</p>', bodyType: 'html' });
     expect(w[2].input.messageId).toMatch(/^AAkALg.*NewMail0001AAA$/);
     await expect(page.locator('[data-ns-send]')).toHaveCount(0);
-    await page.click('[data-ns-done]');
+    await expect(page.locator('.toast')).toHaveText('Sent. Marked done: Send the signed addendum to PeterUndo');
     expect((await actionDocs(app))[0][1].done).toBe(true);
   });
 });
@@ -183,6 +184,7 @@ test.describe('Chase in Teams (own action)', () => {
     expect(await page.evaluate(() => window.__opened)).toEqual(['https://teams.microsoft.com/l/chat/0/0?users=bram.kok%40planonsoftware.com']);
     expect(await page.evaluate(() => window.__copied)).toEqual(['Any news on this? I need it to plan the next step.']);
     expect(await app.writeTools()).toEqual([]);
-    await expect(page.locator('[data-ns-done]')).toBeVisible();
+    await expect(page.locator('.toast')).toContainText('Marked done: Nudge Bram about the replica');
+    expect((await actionDocs(app))[0][1].done).toBe(true);
   });
 });
