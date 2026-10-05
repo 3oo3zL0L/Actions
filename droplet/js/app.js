@@ -93,8 +93,15 @@
       return groupOf(it) !== 'hidden';
     }).sort(cmp);
   }
+  /* Do now: the "now" items; when Claude put fewer than three there, the
+     best-ranked of the rest fill up to three, so the top is never empty while
+     there is work. */
+  var FOCUS_MIN = 3;
   function topItems() {
-    return visible().filter(function (it) { return groupOf(it) === 'now' && S.verdict[it.id] !== 'down'; }).slice(0, FOCUS_MAX);
+    var vis = visible().filter(function (it) { return S.verdict[it.id] !== 'down'; });
+    var top = vis.filter(function (it) { return groupOf(it) === 'now'; }).slice(0, FOCUS_MAX);
+    if (top.length < FOCUS_MIN) vis.forEach(function (it) { if (top.length < FOCUS_MIN && top.indexOf(it) < 0) top.push(it); });
+    return top;
   }
   function restItems() {
     var top = topItems();
@@ -1074,6 +1081,9 @@
   /* The list from every source's latest data. Items keep their objects
      where they can (a draft, a re-rank flag, the open item). */
   function rebuild() {
+    try { rebuildInner(); } catch (e) { noteError('rebuild', e); try { renderAllKeepFocus(); } catch (e2) { noteError('render', e2); } }
+  }
+  function rebuildInner() {
     var now = new Date();
     var first = U.firstName((S.me || {}).displayName);
     if (S.jiraRaw && S.jiraFirst !== first) {
@@ -1104,7 +1114,9 @@
     });
     var wi = waitItemsNow(now);
     items = items.concat(wi.due); S.waitPre = wi.pre;
-    items.forEach(attach);
+    items = items.filter(function (m) {
+      try { attach(m); return true; } catch (e) { noteError('attach ' + (m.src || '?'), e); return !!m.src; }
+    });
     /* R8: an item merged into one that is done is done too. */
     items = items.filter(function (m) { return !(m.r && m.r.dupOf && doneIds[m.r.dupOf]); });
     S.items = items;
@@ -1212,6 +1224,18 @@
   }
   /* Plain text for a bug report: states, codes, times and counts. No mail
      content, no subjects, no addresses or links. */
+  /* Any exception the page swallowed: kept for Copy details (message and
+     the first frames only, no data). */
+  S.errs = [];
+  function noteError(where, e) {
+    var msg = String(e && (e.message || e.code) || e).slice(0, 160);
+    var st = String(e && e.stack || '').split('\n').slice(1, 4).map(function (l) { return l.trim().replace(/https?:\/\/[^\s)]*\//g, ''); }).join(' | ');
+    S.errs.push(where + ': ' + msg + (st ? ' @ ' + st : ''));
+    if (S.errs.length > 8) S.errs.shift();
+  }
+  D.noteError = noteError;
+  window.addEventListener('error', function (ev) { noteError('page', ev.error || ev.message); });
+  window.addEventListener('unhandledrejection', function (ev) { noteError('promise', ev.reason); });
   D.diagText = function () {
     var lines = ['Droplet diagnostics · ' + new Date().toISOString(), 'Capabilities: ' + capsLine()];
     DIAG_KEYS.forEach(function (k) {
@@ -1223,6 +1247,7 @@
     S.items.forEach(function (m) { n[m.src] = (n[m.src] || 0) + 1; });
     lines.push('Items: ' + (Object.keys(n).map(function (k) { return k + ' ' + n[k]; }).join(', ') || 'none') + ' · waiting (not due) ' + S.waitPre.length);
     rawLines().forEach(function (l) { lines.push(l); });
+    lines.push('Errors: ' + (S.errs.length ? S.errs.map(function (x) { return U.redact(x); }).join(' || ') : 'none'));
     lines.push('Timeouts: call ' + rt.cfg.callMs + ' ms, page ' + rt.cfg.pageMs + ' ms, store ' + rt.cfg.storeMs + ' ms');
     return lines.join('\n');
   };

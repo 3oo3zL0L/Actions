@@ -28,5 +28,9 @@ test('live-shaped saved actions and inbox mail both show after a load', async ({
   expect(ids).toEqual(expect.arrayContaining(['AAMkAGTEST1=', 'mine:amtest000000001', 'mine:amtest000000002']));
   expect(ids).not.toContain('AAMkAGTEST2=');
   expect(ids).not.toContain('AAMkAGTEST3=');
+  // Claude (stubbed) put everything in "later": Do now still shows the best three, not "All clear".
+  expect(await app.focusIds()).toHaveLength(3);
+  // No swallowed exceptions reached the diagnostics.
+  expect(await page.evaluate(() => window.Droplet.state.errs)).toEqual([]);
   expect(app.errors).toEqual([]);
 });
