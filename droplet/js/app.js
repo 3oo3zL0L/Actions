@@ -210,6 +210,10 @@
     if (S.ranking) line('ranking', 'Claude is ranking ' + S.ranking + noun + (S.ranking === 1 ? '' : 's') + '…', false);
     else if (S.notes.rank) line('rank', S.notes.rank, true);
     if (S.notes.waits) line('waits', S.notes.waits, false);
+    if (S.notes.save) line('save', S.notes.save, true);
+    (S.autoNotes || []).forEach(function (n) {
+      h += '<p class="note-line" data-note="autodone">' + ico('check') + '<span>' + esc(n.text) + '</span>' + (n.undone ? '' : '<button data-autodone-undo="' + esc(n.id) + '">Undo</button>') + '</p>';
+    });
     if (S.notes.store) line('store', S.notes.store, S.notes.store === 'Couldn’t load your saved items.');
     $('notes').innerHTML = h;
   }
@@ -506,7 +510,7 @@
     var st = sendState(it.id), locked = st.phase === 'sent', busy = st.phase === 'sending', byMail = chaseByMail(it), w = waitDoc(it) || {};
     var off = locked || busy ? ' aria-disabled="true"' : '';
     var q = function (key, icon, label, k, pressed) {
-      return '<button class="qbtn" data-' + key + off + (pressed !== undefined ? ' aria-pressed="' + pressed + '"' : '') + (k ? ' aria-keyshortcuts="' + k + '"' : '') + '>' +
+      return '<button class="qbtn" data-' + key + (key === 'notwaiting' ? '' : off) + (pressed !== undefined ? ' aria-pressed="' + pressed + '"' : '') + (k ? ' aria-keyshortcuts="' + k + '"' : '') + '>' +
         ico(icon) + '<span>' + label + '</span>' + (k ? '<span class="kbd" aria-hidden="true">' + k + '</span>' : '') + '</button>';
     };
     var btns = [];
@@ -602,9 +606,6 @@
     if (st.drafting && st.drafting.error) return '<p class="muted ns-note">' + esc(st.drafting.error) + '. Write it yourself, or <button data-ns-redraft>Try again</button></p>';
     return '';
   }
-  function doneOffer(it) {
-    return '<button class="ns-btn" data-ns-done>' + ico('check') + 'Mark action done</button>';
-  }
   function nsCardHTML(it, st) {
     var h = '<div class="sec-label">' + ico(NS_START[st.kind][0]) + (st.kind === 'meeting' ? 'Invite · Find a time' : st.kind === 'mail' ? 'New mail · Draft' : 'Chase · Teams') + '</div>' +
       '<div class="card draft ns-card" data-ns-card="' + st.kind + '">';
@@ -628,7 +629,7 @@
         '<label class="ns-toggle"><input type="checkbox" id="nsOnline"' + (st.online ? ' checked' : '') + (locked ? ' disabled' : '') + '><span>Teams meeting</span></label>' +
         '<label class="k ns-k" for="nsAgenda">Agenda</label><textarea id="nsAgenda"' + (locked ? ' readonly' : '') + ' placeholder="' + (st.drafting === 'loading' ? 'Claude is drafting an agenda…' : 'A short agenda') + '">' + esc(st.agenda) + '</textarea>' +
         nsDraftNote(st) + aiNoteHTML(it) + nsProblem(inv);
-      if (inv.phase === 'sent') h += '<div class="ns-done" data-ns-sent><span class="state-chip">' + ico('check') + 'Invite sent · ' + esc(inv.label) + '</span>' + doneOffer(it) + '</div>';
+      if (inv.phase === 'sent') h += '<div class="ns-done" data-ns-sent><span class="state-chip">' + ico('check') + 'Invite sent · ' + esc(inv.label) + '</span></div>';
       else {
         var label = inv.phase === 'sending' ? 'Sending…' : inv.phase === 'unclear' ? (inv.confirm ? 'Yes, send again' : 'Send invite again anyway') : 'Send invite';
         h += '<button class="btn-send ns-go' + (inv.phase === 'unclear' ? ' is-confirm' : '') + '" data-ns-invite' + (nsReady(st) && inv.phase !== 'sending' ? '' : ' aria-disabled="true"') + '>' + ico('send') + esc(label) + '</button>';
@@ -640,7 +641,7 @@
         '<label class="sr" for="nsBody">Mail text</label><textarea id="nsBody"' + (mlocked ? ' readonly' : '') + ' placeholder="' + (st.drafting === 'loading' ? 'Claude is writing in your style…' : 'Write your mail…') + '">' + esc(st.body) + '</textarea>' +
         (ok.some(function (p) { return isExternal(p.email); }) ? '<div class="warn" data-outside>' + ico('warn', 'ico-sm') + 'Goes outside Planon. Check before sending.</div>' : '') +
         nsDraftNote(st) + aiNoteHTML(it) + problemHTML(sd);
-      if (sd.phase === 'sent') h += '<div class="ns-done" data-ns-sent><span class="state-chip">' + ico('check') + 'Sent ' + esc(U.hhmm(sd.sentAt)) + ' · once</span>' + doneOffer(it) + '</div>';
+      if (sd.phase === 'sent') h += '<div class="ns-done" data-ns-sent><span class="state-chip">' + ico('check') + 'Sent ' + esc(U.hhmm(sd.sentAt)) + ' · once</span></div>';
       else {
         var ml = sd.phase === 'sending' ? 'Sending…' : sd.phase === 'unclear' ? (sd.confirm ? 'Yes, send again' : 'Send again anyway') : 'Send';
         h += '<button class="btn-send ns-go' + (sd.phase === 'unclear' ? ' is-confirm' : '') + '" data-ns-send' + (nsReady(st) && sd.phase !== 'sending' ? '' : ' aria-disabled="true"') + '>' + ico('send') + esc(ml) + '</button>';
@@ -650,7 +651,7 @@
         '<label class="sr" for="nsChase">Chase text</label><textarea id="nsChase" placeholder="' + (st.drafting === 'loading' ? 'Claude is writing a chase…' : 'Write your chase…') + '">' + esc(st.chase) + '</textarea>' +
         nsDraftNote(st) + aiNoteHTML(it) +
         '<div class="src-note">' + ico('warn', 'ico-sm') + '<span>Droplet can’t post in Teams, so it copies your text and opens a chat.</span></div>';
-      if (st.chased) h += '<div class="ns-done" data-ns-sent><span class="state-chip">' + ico('check') + 'Copied ' + esc(U.hhmm(st.chased)) + '</span>' + doneOffer(it) + '</div>';
+      if (st.chased) h += '<div class="ns-done" data-ns-sent><span class="state-chip">' + ico('check') + 'Copied ' + esc(U.hhmm(st.chased)) + '</span></div>';
       h += '<button class="btn-send ns-go" data-ns-chase' + (nsReady(st) ? '' : ' aria-disabled="true"') + '>' + ico('copy') + (st.chased ? 'Copy & open again' : 'Copy & open in Teams') + '</button>';
     }
     return h + '</div>';
@@ -773,17 +774,37 @@
     return quiet + btn + (st.phase === 'sent' ? '<div class="sent-note">Commented once · done</div>' : '');
   }
 
+  /* The action bar node is kept when its markup didn't change, so a click
+     that started on Done (or Send) still lands when the panel re-renders
+     between press and release (a ranking, a draft or a sync arriving). */
   function renderItem() {
-    var col = $('itemCol');
+    var col = $('itemCol'), bar = col.lastElementChild, barId = col.getAttribute('data-bar-for');
+    var keep = bar && bar.classList.contains('iv-bar') && barId && barId === (S.view === 'item' ? S.cur : null) ? bar : null;
+    if (!keep) { renderItemInner(); col.setAttribute('data-bar-for', S.view === 'item' && S.cur || ''); return; }
+    var host = document.createElement('div');
+    renderItemInner(host);
+    var nb = host.lastElementChild;
+    if (nb && nb.classList.contains('iv-bar') && nb.innerHTML === keep.innerHTML) {
+      while (col.firstChild && col.firstChild !== keep) col.removeChild(col.firstChild);
+      while (keep.nextSibling) col.removeChild(keep.nextSibling);
+      while (host.firstChild && host.firstChild !== nb) col.insertBefore(host.firstChild, keep);
+    } else {
+      col.innerHTML = '';
+      while (host.firstChild) col.appendChild(host.firstChild);
+    }
+    col.setAttribute('data-bar-for', S.view === 'item' && S.cur || '');
+  }
+  function renderItemInner(target) {
+    var col = $('itemCol'), out = target || col;
     var it = S.cur && S.byId[S.cur];
     col.classList.toggle('is-idle', S.view !== 'item' || !it);
-    if (S.view !== 'item' || !it) { col.innerHTML = emptyHTML(); return; }
-    if (isWait(it)) { col.innerHTML = waitItemHTML(it); S.anim = false; return; }
-    if (isJira(it)) { col.innerHTML = jiraItemHTML(it); S.anim = false; return; }
-    if (isPage(it)) { col.innerHTML = pageItemHTML(it); S.anim = false; return; }
+    if (S.view !== 'item' || !it) { out.innerHTML = emptyHTML(); return; }
+    if (isWait(it)) { out.innerHTML = waitItemHTML(it); S.anim = false; return; }
+    if (isJira(it)) { out.innerHTML = jiraItemHTML(it); S.anim = false; return; }
+    if (isPage(it)) { out.innerHTML = pageItemHTML(it); S.anim = false; return; }
     if (isMine(it)) {
       var top0 = topItems(), i0 = top0.indexOf(it);
-      col.innerHTML = actionItemHTML(it, i0 > -1, i0 > -1 ? i0 + 1 : restItems().indexOf(it) + top0.length + 1);
+      out.innerHTML = actionItemHTML(it, i0 > -1, i0 > -1 ? i0 + 1 : restItems().indexOf(it) + top0.length + 1);
       S.anim = false;
       return;
     }
@@ -801,7 +822,7 @@
     var wait = tm && waitingTeams(it.id);
     var hint = draftFoot(it, locked, busy);
     var writing = S.drafting[it.id] === 'loading' && !S.touched[it.id];
-    col.innerHTML =
+    out.innerHTML =
       '<div class="iv-head">' +
         '<button class="btn-back" data-back aria-label="Back to the list">' + ico('back') + '<span class="lbl-phone">Back</span><span class="lbl-desk">Close</span></button>' +
         '<span class="iv-crumb" aria-label="Location"><span class="c-sec">' + (inFocus ? 'Do now' : 'Everything else') + '</span><span class="sep" aria-hidden="true">›</span>' +
@@ -833,7 +854,7 @@
   function barHTML(it) {
     var st = sendState(it.id), locked = st.phase === 'sent', busy = st.phase === 'sending';
     var q = function (key, icon, label, k, pressed) {
-      return '<button class="qbtn" data-' + key + (key === 'star' ? ' title="Important"' : '') + (locked || busy ? ' aria-disabled="true"' : '') + (pressed !== undefined ? ' aria-pressed="' + pressed + '"' : '') +
+      return '<button class="qbtn" data-' + key + (key === 'star' ? ' title="Important"' : '') + ((locked || busy) && key !== 'done' ? ' aria-disabled="true"' : '') + (pressed !== undefined ? ' aria-pressed="' + pressed + '"' : '') +
         (k ? ' aria-keyshortcuts="' + k + '"' : '') + '>' + ico(icon) + '<span>' + label + '</span>' + (k ? '<span class="kbd" aria-hidden="true">' + k + '</span>' : '') + '</button>';
     };
     if (isWait(it)) return waitBarHTML(it);
@@ -882,11 +903,18 @@
   }
 
   /* ---------------- Toast ---------------- */
+  /* A plain message never pushes an Undo off screen: it waits until the
+     Undo toast is gone. */
   function toast(msg, undo) {
+    if (!undo && S.undo) { S.toastNext = msg; return; }
     clearTimeout(S.toastTimer);
+    S.toastNext = null;
     $('toastHost').innerHTML = '<div class="toast"><span>' + esc(msg) + '</span>' + (undo ? '<button data-undo>Undo</button>' : '') + '</div>';
     S.undo = undo || null;
-    S.toastTimer = setTimeout(function () { $('toastHost').innerHTML = ''; S.undo = null; }, 8000);
+    S.toastTimer = setTimeout(function () {
+      $('toastHost').innerHTML = ''; S.undo = null;
+      if (S.toastNext) toast(S.toastNext);
+    }, 8000);
   }
 
   /* ---------------- Loading: saved state first, then each source on its own ----------------
@@ -1648,25 +1676,27 @@
       if (res.phase === 'blocked' && !res.keepDraft) { ns.draftId = ''; }
       if (res.phase === 'sent' && w) {
         S.doneNow[id] = { how: 'sent' };
-        w.chasedAt = res.sentAt.toISOString(); store.setWait(it.docId, w);
-        toast('Chase sent by mail.');
+        autoDone(it, 'sent', 'Chase sent by mail.');
       } else if (res.phase === 'sent') {
         S.doneNow[id] = { how: 'sent' };
-        store.setDone(it.key, { at: new Date().toISOString(), how: 'sent', sentAt: res.sentAt.toISOString() });
+        var rec = Object.assign(doneRecord(it, 'sent'), { sentAt: res.sentAt.toISOString() });
+        S.doneDb = S.doneDb || {}; S.doneDb[it.key] = rec;
+        saveDone('done/' + it.key, function () { return store.setDone(it.key, rec); });
         store.setSent(it.key, { sentAt: res.sentAt.toISOString() });
         if (S.sentDb) S.sentDb[it.key] = { sentAt: res.sentAt.toISOString() };
         S.chatOpen = false;
-        toast('Sent. Marked done.', function () { undoDone(id); });
+        toast(doneLine(it, 'Sent.'), function () { undoDone(id); });
       }
       renderAll();
       var b = $('sendBtn'); if (b && S.cur === id) b.focus({ preventScroll: true });
     });
   }
-  function undoDone(id) {
-    var it = S.byId[id]; if (!it) return;
+  function undoDone(id, keep) {
+    var it = S.byId[id] || keep; if (!it) return;
     delete S.doneNow[id];
     if (S.doneDb) delete S.doneDb[it.key];
-    store.clearDone(it.key);
+    saveDone('done/' + it.key, function () { return store.clearDone(it.key); });
+    if (!S.byId[id]) { S.items.push(it); S.byId[id] = it; }
     renderAll();
   }
 
@@ -1700,14 +1730,10 @@
     var p = copyText(text);
     var link = isWait(it) ? waitLink(it) : U.safeTeamsLink(it.webUrl);
     if (link) { try { window.open(link, '_blank', 'noopener,noreferrer'); } catch (e) { /* the Open in Teams link stays on the card */ } }
-    var undo = null;
-    if (isWait(it)) {
-      /* The chase is yours to post; the wait comes back 3 working days after it. */
-      var w = waitDoc(it), prev = w.chasedAt || null, at = new Date().toISOString();
-      w.chasedAt = at; store.setWait(it.docId, w);
-      S.doneNow[id] = { how: 'chased', at: at };
-      undo = function () { if (prev) w.chasedAt = prev; else delete w.chasedAt; store.setWait(it.docId, w); delete S.doneNow[id]; renderAll(); };
-    } else {
+    /* Teams can't be checked from here: copied and opened counts as done, with Undo.
+       A wait's chase comes back 3 working days after it. */
+    var lead = link ? 'Copied. Paste it in the Teams chat that just opened.' : 'Copied. Open the chat in Teams and paste it.';
+    if (!isWait(it)) {
       var ho = S.handoff[id] = { at: new Date().toISOString(), key: it.key };
       if (S.handoffDb) S.handoffDb[it.key] = ho;
       store.setHandoff(it.key, ho);
@@ -1715,7 +1741,7 @@
     Promise.resolve(p).then(function () { return true; }, function () { return false; }).then(function (ok) {
       renderAll();
       if (ok) {
-        toast(link ? 'Copied. Paste it in the Teams chat that just opened.' : 'Copied. Open the chat in Teams and paste it.', undo);
+        autoDone(it, isWait(it) ? 'chased' : 'copied', lead);
       } else {
         var ta = $('draftText');
         if (ta && S.cur === id) { ta.focus({ preventScroll: true }); ta.select(); }
@@ -1729,21 +1755,26 @@
   }
 
   /* ---------------- Waits: not waiting, snooze, chase mode ---------------- */
-  function changeWait(it, change, msg) {
+  function changeWait(it, change, msg, asDone) {
     var w = waitDoc(it); if (!w) return;
-    var prev = JSON.parse(JSON.stringify(w));
-    change(w); store.setWait(it.docId, w);
+    var prev = JSON.parse(JSON.stringify(w)), place = asDone ? placeOf(it) : null, rec = asDone ? doneRecord(it, 'manual') : null;
+    change(w);
+    saveDone('waits/' + it.docId, function () { return store.setWait(it.docId, w); });
+    if (rec) { S.doneDb = S.doneDb || {}; S.doneDb[it.key] = rec; saveDone('done/' + it.key, function () { return store.setDone(it.key, rec); }); }
     refreshWaits();
-    back();
+    if (asDone) closeAfterDone(it, place); else back();
     toast(msg, function () {
-      S.waits[it.docId] = prev; store.setWait(it.docId, prev);
+      S.waits[it.docId] = prev;
+      saveDone('waits/' + it.docId, function () { return store.setWait(it.docId, prev); });
+      if (rec) { delete S.doneDb[it.key]; saveDone('done/' + it.key, function () { return store.clearDone(it.key); }); }
       refreshWaits(); renderAll();
       rankNew(false);
     });
   }
   function notWaiting() {
     var it = S.byId[S.cur]; if (!isWait(it)) return;
-    changeWait(it, function (w) { w.status = 'dismissed'; w.dismissedAt = new Date().toISOString(); }, 'No longer waiting on ' + (U.firstName(it.senderName) || 'them') + '.');
+    if (!doneGuard()) return;
+    changeWait(it, function (w) { w.status = 'dismissed'; w.dismissedAt = new Date().toISOString(); }, 'No longer waiting on ' + (U.firstName(it.senderName) || 'them') + '.', true);
   }
   function snoozeWait() {
     var it = S.byId[S.cur]; if (!isWait(it)) return;
@@ -1861,7 +1892,7 @@
       return rt.call('outlook_create_event', input);
     }).then(function () {
       st.inv = { phase: 'sent', label: ns.slotLabel(slot) };
-      toast('Invite sent for ' + ns.slotLabel(slot) + '.');
+      autoDone(it, 'invited', 'Invite sent for ' + ns.slotLabel(slot) + '.');
     }, function (e) {
       var base = { step: 'create event', code: String(e && e.code || 'unknown').replace(/[^A-Za-z0-9_.-]/g, '').slice(0, 40), detail: U.clip(e && e.message || '', 140) };
       st.inv = Object.assign(base, rt.isClear(e)
@@ -1888,7 +1919,7 @@
         step: res.step || '', code: res.code || '', detail: res.detail || '', safeDetail: res.safeDetail || '' };
       if (res.phase === 'unclear') { ns2.confirm = 0; ns2.armAt = performance.now() + 700; }
       if (res.phase === 'blocked' && !res.keepDraft) ns2.draftId = '';
-      if (res.phase === 'sent') toast('Sent.');
+      if (res.phase === 'sent') autoDone(it, 'sent', 'Sent.');
       nsRerender(it);
     });
   }
@@ -1901,7 +1932,8 @@
     st.chased = new Date();
     Promise.resolve(p).then(function () { return true; }, function () { return false; }).then(function (ok) {
       nsRerender(x[0]);
-      toast(ok ? 'Copied. Paste it in the Teams chat that just opened.' : 'Couldn’t copy. Select the text and copy it, then paste it in Teams.');
+      if (ok) autoDone(x[0], 'copied', 'Copied. Paste it in the Teams chat that just opened.');
+      else toast('Couldn’t copy. Select the text and copy it, then paste it in Teams.');
     });
   }
 
@@ -1955,17 +1987,28 @@
     if (field === 'text') rankNew(false);
     toast('Saved.');
   }
+  /* Your own action: done + doneAt (and doneBy when Droplet saw you do it). */
+  function setActionDone(it, extra) {
+    var a = S.actions[it.docId]; if (!a) return null;
+    a.done = true; a.doneAt = new Date().toISOString();
+    if (extra) Object.assign(a, extra);
+    saveDone('actions/' + it.docId, function () { return store.setAction(it.docId, a); });
+    return a;
+  }
+  function undoActionDone(it) {
+    var a = S.actions[it.docId]; if (!a) return;
+    a.done = false; a.doneAt = null; delete a.doneBy;
+    saveDone('actions/' + it.docId, function () { return store.setAction(it.docId, a); });
+    if (!S.byId[it.id]) { S.items.push(it); S.byId[it.id] = it; }
+    renderAll();
+  }
   function markActionDone(it) {
     var a = S.actions[it.docId]; if (!a) return;
-    a.done = true; a.doneAt = new Date().toISOString();
-    store.setAction(it.docId, a);
-    if (S.view === 'item' && S.cur === it.id) back(); else renderAll();
-    toast('Done. Removed from the list.', function () {
-      a.done = false; a.doneAt = null;
-      store.setAction(it.docId, a);
-      if (!S.byId[it.id]) { S.items.push(it); S.byId[it.id] = it; }
-      renderAll();
-    });
+    if (a.done) return closeAfterDone(it, placeOf(it)); /* already done (e.g. after the follow-up): just close */
+    var place = placeOf(it);
+    setActionDone(it);
+    closeAfterDone(it, place);
+    toast('Done. Removed from the list.', function () { undoActionDone(it); });
   }
   function deleteAction(it) {
     var a = S.actions[it.docId];
@@ -2007,23 +2050,131 @@
     renderAll();
     toast(on ? 'Marked important. I’ll weigh this next time.' : 'No longer marked important.');
   }
+  /* ---------------- Done (R4): one path for every item ----------------
+     Stores the done record, takes the item (and what merged into it) off
+     every list at once, closes the panel (phone: the list; laptop: the next
+     item or standby) and offers Undo. A failed write keeps it hidden for
+     this session and says so quietly, with Try again. */
+  function doneGuard() {
+    var t = performance.now();
+    if (t < (S.doneGuardUntil || 0)) return false; /* a double click or a held d */
+    S.doneGuardUntil = t + 500;
+    return true;
+  }
+  function doneRecord(it, how) { return { at: new Date().toISOString(), how: how, title: U.clip(titleOf(it), 160), src: it.src }; }
+  function saveDone(path, write) {
+    S.saveManaged = S.saveManaged || {}; S.saveFailed = S.saveFailed || {};
+    S.saveManaged[path] = write;
+    return Promise.resolve().then(write).then(function (ok) { return ok !== false; }, function () { return false; }).then(function (ok) {
+      if (S.saveManaged[path] !== write) return ok; /* a newer write of the same document decides */
+      if (ok) delete S.saveFailed[path]; else S.saveFailed[path] = write;
+      var bad = Object.keys(S.saveFailed).length > 0;
+      if (bad !== !!S.notes.save) { S.notes.save = bad ? 'Couldn’t save' : null; renderNotes(); }
+      return ok;
+    });
+  }
+  function retrySaves() {
+    var f = S.saveFailed || {};
+    Object.keys(f).forEach(function (path) { saveDone(path, f[path]); });
+  }
+  /* Where the item sits now: its section and index. */
+  function placeOf(it) {
+    var top = topItems(), i = top.indexOf(it);
+    if (i > -1) return { sec: 'top', i: i };
+    i = restItems().indexOf(it);
+    return i > -1 ? { sec: 'rest', i: i } : { sec: null, i: -1 };
+  }
+  function closeAfterDone(it, place) {
+    if (S.view !== 'item' || S.cur !== it.id) { renderAll(); return; }
+    if (desk() && place && place.sec) {
+      var list = place.sec === 'top' ? topItems() : restItems(), next = null;
+      for (var k = place.i; k < list.length && !next; k++) if (list[k] !== it && !isClosed(list[k].id) && !gone(list[k].id)) next = list[k];
+      if (next) { openItem(next.id, false); return; }
+    }
+    back();
+  }
+  function hideDone(it, how) {
+    var rec = doneRecord(it, how);
+    S.doneDb = S.doneDb || {};
+    S.doneNow[it.id] = { how: how, hidden: true, prev: S.doneNow[it.id] || null };
+    S.doneDb[it.key] = rec;
+    saveDone('done/' + it.key, function () { return store.setDone(it.key, rec); });
+  }
   function markDone() {
     var it = S.byId[S.cur]; if (!it) return;
-    if (isMine(it)) return markActionDone(it);
     if (isWait(it)) return notWaiting();
-    S.doneNow[it.id] = { how: 'manual' };
-    store.setDone(it.key, { at: new Date().toISOString(), how: 'manual' });
-    back();
-    toast('Marked done.', function () { undoDone(it.id); });
+    if (!doneGuard()) return;
+    if (isMine(it)) return markActionDone(it);
+    var place = placeOf(it);
+    /* R8: what merged into it is done with it. */
+    var merged = S.items.filter(function (o) { return o !== it && rk(o).dupOf === it.id && !gone(o.id); });
+    hideDone(it, 'manual');
+    merged.forEach(function (o) { hideDone(o, 'merged'); });
+    closeAfterDone(it, place);
+    toast('Marked done.', function () {
+      [it].concat(merged).forEach(function (o) {
+        var d = S.doneNow[o.id];
+        if (d && d.prev) S.doneNow[o.id] = d.prev; else delete S.doneNow[o.id];
+        if (S.doneNow[o.id]) return; /* it was sent before: that done mark stays */
+        if (S.doneDb) delete S.doneDb[o.key];
+        saveDone('done/' + o.key, function () { return store.clearDone(o.key); });
+        if (!S.byId[o.id]) { S.items.push(o); S.byId[o.id] = o; }
+      });
+      renderAll();
+    });
+  }
+
+  /* ---------------- Auto-done: the follow-up was made from the item ----------------
+     Sent, invited, commented, updated or copied to Teams (unverifiable, so
+     Undo stays): the item is marked done, with "Marked done: <title> · Undo". */
+  function doneLine(it, lead) { return (lead ? lead + ' ' : '') + 'Marked done: ' + U.clip(titleOf(it), 80); }
+  function autoDone(it, how, lead, extraUndo) {
+    if (!it) return false;
+    if (isMine(it)) {
+      var a = S.actions[it.docId]; if (!a) return false;
+      if (a.done) { if (lead) toast(lead); return true; }
+      setActionDone(it);
+      renderAllKeepFocus();
+      toast(doneLine(it, lead), function () { if (extraUndo) extraUndo(); undoActionDone(it); });
+      return true;
+    }
+    if (isWait(it)) {
+      var w = waitDoc(it); if (!w) return false;
+      var prevChase = w.chasedAt || null;
+      w.chasedAt = new Date().toISOString(); saveDone('waits/' + it.docId, function () { return store.setWait(it.docId, w); });
+      S.doneNow[it.id] = S.doneNow[it.id] || { how: how, at: w.chasedAt };
+      renderAllKeepFocus();
+      toast(doneLine(it, lead), function () {
+        if (extraUndo) extraUndo();
+        if (prevChase) w.chasedAt = prevChase; else delete w.chasedAt;
+        saveDone('waits/' + it.docId, function () { return store.setWait(it.docId, w); });
+        delete S.doneNow[it.id]; renderAll();
+      });
+      return true;
+    }
+    var rec = doneRecord(it, how), had = S.doneNow[it.id] || null;
+    S.doneDb = S.doneDb || {};
+    S.doneNow[it.id] = had || { how: how, at: rec.at };
+    S.doneDb[it.key] = rec;
+    saveDone('done/' + it.key, function () { return store.setDone(it.key, rec); });
+    renderAllKeepFocus();
+    toast(doneLine(it, lead), function () {
+      if (extraUndo) extraUndo();
+      delete S.doneNow[it.id];
+      if (S.doneDb) delete S.doneDb[it.key];
+      saveDone('done/' + it.key, function () { return store.clearDone(it.key); });
+      if (!S.byId[it.id]) { S.items.push(it); S.byId[it.id] = it; }
+      renderAll();
+    });
+    return true;
   }
 
   /* ---------------- Jira: Comment on KEY (once, on your click) ---------------- */
   function jiraDone(it, how) {
-    var at = new Date().toISOString();
     S.doneNow[it.id] = { how: how || 'commented' };
-    var d = { at: at, how: how || 'commented' };
-    store.setDone(it.key, d);
-    if (S.doneDb) S.doneDb[it.key] = d;
+    var d = doneRecord(it, how || 'commented');
+    S.doneDb = S.doneDb || {}; S.doneDb[it.key] = d;
+    saveDone('done/' + it.key, function () { return store.setDone(it.key, d); });
   }
   /* R4: you already commented after the item came in. */
   function jiraCheckDone(it, iss) {
@@ -2051,7 +2202,7 @@
       if (res.phase === 'sent') {
         jiraDone(it, 'commented');
         delete S.aiUndo[id];
-        toast(res.verified === false ? 'Posted. Droplet couldn’t read it back; check the issue.' : 'Commented on ' + it.issueKey + '. Marked done.', function () { undoDone(id); });
+        toast(doneLine(it, res.verified === false ? 'Posted. Droplet couldn’t read it back; check the issue.' : 'Commented on ' + it.issueKey + '.'), function () { undoDone(id, it); });
       }
       renderAll();
       var b = $('sendBtn'); if (b && S.cur === id) b.focus({ preventScroll: true });
@@ -2204,6 +2355,10 @@
     if (t.hasAttribute('data-diag-copy')) return copyDiag();
     var id;
     if (t.hasAttribute('data-ask')) { if (ask.available()) ask.openSheet(null); return; }
+    /* The second click of a double click on Done: never another item's Done, and
+       on a phone never the list row that is now under the finger. */
+    if ((t.hasAttribute('data-done') || t.hasAttribute('data-done-primary') || t.hasAttribute('data-notwaiting')) && performance.now() < (S.doneGuardUntil || 0)) return;
+    if ((t.hasAttribute('data-open') || t.hasAttribute('data-act')) && !desk() && performance.now() < (S.doneGuardUntil || 0) - 150) return;
     if ((id = t.getAttribute('data-open'))) return openItem(id, false);
     if ((id = t.getAttribute('data-act'))) { var it = S.byId[id]; return openItem(id, !!(it && rk(it).kind === 'reply')); }
     if (t.id === 'restToggle') { S.restOpen = !S.restOpen; renderRest(); if (S.restOpen) $('q').focus(); return; }
@@ -2214,11 +2369,12 @@
       if (id === 'teams') { S.notes.teams = null; renderNotes(); return (rt.mcp ? Promise.resolve() : rt.retryUse('mcp')).then(function () { reloadSource('teams'); }); }
       if (id === 'store') { S.notes.store = null; renderNotes(); return (rt.db ? Promise.resolve() : rt.retryUse('db')).then(function () { reloadSource('store'); }); }
       if (id === 'rank') { S.notes.rank = null; return (rt.sample ? Promise.resolve() : rt.retryUse('sample').then(rt.checkTools)).then(function () { renderAskbar(); rankNew(true); }); }
+      if (id === 'save') { retrySaves(); return; }
       if (id === 'atl') { S.notes.atl = null; renderNotes(); return (rt.mcp ? Promise.resolve() : rt.retryUse('mcp')).then(function () { reloadSource('atl'); }); }
       return;
     }
     if (t.hasAttribute('data-reread') && S.cur) { delete S.detail[S.cur]; var ci0 = S.byId[S.cur]; if (ci0) readDetail(ci0); return; }
-    if (t.hasAttribute('data-undo')) { var u = S.undo; S.undo = null; $('toastHost').innerHTML = ''; if (u) u(); return; }
+    if (t.hasAttribute('data-undo')) { var u = S.undo; S.undo = null; S.toastNext = null; S.doneGuardUntil = 0; clearTimeout(S.toastTimer); $('toastHost').innerHTML = ''; if (u) u(); return; }
     if (t.getAttribute('aria-disabled') === 'true') return;
     var cur = S.cur;
     if (t.hasAttribute('data-send') && cur) return onSend();
@@ -2237,7 +2393,6 @@
     if (t.hasAttribute('data-ns-invite') && cur) return sendInvite();
     if (t.hasAttribute('data-ns-send') && cur) return sendNsMail();
     if (t.hasAttribute('data-ns-chase') && cur) return chaseNs();
-    if (t.hasAttribute('data-ns-done') && cur) { var dx = curAction(); if (dx) markActionDone(dx); return; }
     if (t.hasAttribute('data-done-primary') && cur) return markDone();
     if (t.hasAttribute('data-delete') && cur) {
       S.confirmDel = cur; renderItem();
@@ -2309,7 +2464,8 @@
     if (p && p !== S.pane) { S.pane = p; renderPane(); }
   });
   document.addEventListener('keydown', function (e) {
-    var tg = (e.target.tagName || '').toLowerCase(), typing = tg === 'input' || (tg === 'textarea' && !e.target.readOnly);
+    var tg = (e.target.tagName || '').toLowerCase(), ty = String(e.target.type || '').toLowerCase();
+    var typing = (tg === 'input' && ['checkbox', 'radio', 'button', 'submit', 'reset'].indexOf(ty) < 0) || (tg === 'textarea' && !e.target.readOnly) || !!e.target.isContentEditable;
     /* The sheet is modal: Esc closes it, Tab stays inside, other shortcuts wait. */
     if (ask.open) {
       if (e.key === 'Escape') { e.preventDefault(); ask.close(); return; }
@@ -2346,16 +2502,18 @@
     if (e.key === '/') { e.preventDefault(); if (!S.restOpen) { S.restOpen = true; renderRest(); } $('q').focus(); return; }
     if (e.key === 'a' && (desk() || S.view === 'list')) { e.preventDefault(); $('addIn').focus(); return; }
     if (e.key === 'k' && ask.available()) { e.preventDefault(); ask.openSheet(null); return; }
-    if (S.view !== 'item' || S.pane !== 'item' || !S.cur) return;
+    if (S.view !== 'item' || !S.cur) return;
+    /* d (Done) works from either pane and also after a send. */
+    if (e.key === 'd') { e.preventDefault(); markDone(); return; }
+    if (S.pane !== 'item') return;
     var ph = sendState(S.cur).phase;
     if (ph === 'sent' || ph === 'sending') return;
     if (e.key === 'c') { e.preventDefault(); toggleChat(); }
     else if (e.key === 'n') { e.preventDefault(); notImportant(); }
-    else if (e.key === 'd') { e.preventDefault(); markDone(); }
   });
 
   /* ---------------- Boot ---------------- */
-  store.onError = function () { S.notes.store = 'Couldn’t save a change; it may be gone after a reload.'; renderNotes(); };
+  store.onError = function (path) { if (S.saveManaged && S.saveManaged[path]) return; S.notes.store = 'Couldn’t save a change; it may be gone after a reload.'; renderNotes(); };
   renderAll(); renderAskbar();
   /* A capability that answers after use()'s timeout lights up late. */
   rt.onLate = function (name) {

@@ -402,7 +402,8 @@ svg { display: block; flex: none; }
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45);
 }
 .toast button { min-height: 44px; padding: 0 12px; color: var(--accent-hi); font-weight: 600; font-family: var(--f-meta); text-transform: uppercase; letter-spacing: 0.06em; font-size: 13px; }
-@media (min-width: 960px) { .toast { bottom: 40px; } }
+/* Laptop: over the list column, never over the item's action bar (Done, Send). */
+@media (min-width: 960px) { .toast { bottom: 96px; left: max(16px, calc(50vw - 574px)); transform: none; max-width: 420px; } }
 
 /* ---------- Motion (only when allowed) ---------- */
 @media (prefers-reduced-motion: no-preference) {
