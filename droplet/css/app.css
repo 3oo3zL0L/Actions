@@ -119,7 +119,10 @@ svg { display: block; flex: none; }
   display: flex; align-items: center; gap: 8px;
   font-family: var(--f-display); font-weight: 600; letter-spacing: 0.24em; text-transform: uppercase; color: var(--ink); font-size: 14px;
 }
-.brand { min-height: 28px; } /* the plain wordmark keeps the header's height */
+.brand { min-height: 28px; }
+/* The caret mark: an upward chevron in an orange ring. */
+.mark { display: grid; place-items: center; width: 28px; height: 28px; flex: none; border: 1.5px solid var(--accent); border-radius: 50%; color: var(--accent); }
+.mark svg { display: block; }
 .status {
   display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 14px; padding: 8px 10px;
   border: 1px solid var(--line); background: var(--surface);
