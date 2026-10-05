@@ -1222,9 +1222,34 @@
     var n = {};
     S.items.forEach(function (m) { n[m.src] = (n[m.src] || 0) + 1; });
     lines.push('Items: ' + (Object.keys(n).map(function (k) { return k + ' ' + n[k]; }).join(', ') || 'none') + ' · waiting (not due) ' + S.waitPre.length);
+    rawLines().forEach(function (l) { lines.push(l); });
     lines.push('Timeouts: call ' + rt.cfg.callMs + ' ms, page ' + rt.cfg.pageMs + ' ms, store ' + rt.cfg.storeMs + ' ms');
     return lines.join('\n');
   };
+  /* One line per source: the SHAPE of its last raw answer (keys, types,
+     content block types and lengths; never values) and counts per stage. */
+  function rawLines() {
+    var out = [], raw = rt.raw || {}, sr = store.raw || {};
+    function sh(x) { return x || 'none yet'; }
+    var cols = ['actions', 'waits', 'done', 'sent', 'rankings', 'handoff', 'asks', 'meetings', 'feedback'];
+    var a = sr.actions;
+    out.push('Saved raw: ' + (rt.db ? sh(a && a.shape) : 'in memory (no db)') + ' · ' + cols.map(function (c) {
+      var r = sr[c];
+      if (!r) return c + ' -';
+      if (r.unknown) return c + ' (unknown shape)';
+      return c + ' ' + r.docs + (c === 'actions' ? ' (open ' + r.open + ', done ' + r.done + ')' : '');
+    }).join(', '));
+    out.push('Profile raw: ' + sh(raw.get_me));
+    var ms = mail.stats;
+    out.push('Mail raw: ' + sh(ms && ms.shape) + (ms ? ' · raw objects ' + ms.raw + ' · parsed ' + ms.mail + ' · unread ' + ms.unread +
+      (ms.unknownRead ? ' (no read flag ' + ms.unknownRead + ')' : '') + ' · after noise rules ' + (ms.afterNoise != null ? ms.afterNoise : '-') +
+      ' · jira ' + (ms.jira != null ? ms.jira : '-') + ' · items ' + (ms.afterNoise != null ? ms.items : '-') + (ms.unparsed ? ' · unparsed' : '') : ''));
+    var ts = teams.stats || { raw: 0, msgs: 0 };
+    out.push('Teams raw: ' + sh(raw.chat_message_search) + ' · raw objects ' + ts.raw + ' · messages ' + ts.msgs + ' · items ' + S.srcTeams.length);
+    out.push('Jira raw: ' + sh(raw.searchJiraIssuesUsingJql) + ' · Confluence raw: ' + sh(raw.searchConfluenceUsingCql));
+    out.push('Calendar raw: ' + sh(raw.outlook_calendar_search));
+    return out;
+  }
   function toggleDiag() {
     S.diagOpen = !S.diagOpen;
     renderDiag();

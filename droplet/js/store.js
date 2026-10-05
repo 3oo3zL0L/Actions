@@ -21,14 +21,68 @@
     chains[path] = next;
     return next;
   }
+  /* What the last read of each collection looked like (diagnostics):
+     store.raw[name] = {shape, docs, open, done}. Keys and types only. */
+  store.raw = {};
+  /* The documents of one query snapshot, per the db contract
+     (QuerySnapshot {docs: DocumentSnapshot[], size, empty}, data() a
+     function). Tolerated as well: an array of documents, an object with
+     forEach, and data as a plain object. null = a shape we don't know. */
+  function docsOf(snap) {
+    if (!snap || typeof snap !== "object") return null;
+    if (Array.isArray(snap.docs)) return snap.docs;
+    if (snap.docs && typeof snap.docs.forEach === "function") { var a = []; snap.docs.forEach(function (d) { a.push(d); }); return a; }
+    if (Array.isArray(snap)) return snap;
+    if (typeof snap.forEach === "function") { var b = []; snap.forEach(function (d) { b.push(d); }); return b; }
+    return null;
+  }
+  function bodyOf(d) {
+    if (!d || typeof d !== "object" || d.exists === false) return { skip: true };
+    var v = typeof d.data === "function" ? d.data() : d.data;
+    if (v && typeof v === "object" && !Array.isArray(v)) return { v: v };
+    if (v === undefined && typeof d.data === "function") return { skip: true }; /* exists unknown, no body */
+    return null;
+  }
+  /* A next page, when a runtime ever pages (not in the contract today):
+     snap.next() or a cursor we can hand back. */
+  function nextPage(snap) {
+    if (snap && typeof snap.next === "function" && (snap.hasMore === true || snap.nextPageToken || snap.nextCursor)) return snap.next();
+    return null;
+  }
+  var MAX_DB_PAGES = 20;
   function readAll(name) {
     if (!db()) return Promise.resolve(mem[name]);
-    return Promise.resolve().then(function () { return db().collection(name).get(); }).then(function (snap) {
-      var out = {};
-      (snap && snap.docs || []).forEach(function (d) { var v = d.data && d.data(); if (v) out[d.id] = v; });
+    var out = {}, n = 0, pages = 0, first = null;
+    function shapeErr(snap) {
+      store.raw[name] = { shape: U().shapeOf(snap), docs: n, unknown: true };
+      return Promise.reject({ code: "unknown_shape", message: "The saved " + name + " came back in a form Droplet doesn’t know." });
+    }
+    function take(snap) {
+      pages++;
+      if (!first) first = snap;
+      var docs = docsOf(snap);
+      if (!docs) return shapeErr(snap);
+      for (var i = 0; i < docs.length; i++) {
+        var d = docs[i], b = bodyOf(d);
+        if (!b || (!b.skip && (typeof d.id !== "string" || !d.id))) return shapeErr(snap);
+        if (b.skip) continue;
+        out[d.id] = b.v; n++;
+      }
+      var more = pages < MAX_DB_PAGES ? nextPage(snap) : null;
+      if (more) return Promise.resolve(more).then(take);
+      var open = 0, done = 0;
+      Object.keys(out).forEach(function (k) { if (out[k].done) done++; else open++; });
+      store.raw[name] = { shape: U().shapeOf(first), docs: n, open: open, done: done, pages: pages };
       return out;
-    });
+    }
+    return Promise.resolve().then(function () {
+      var ref = db().collection(name);
+      /* At most 1000 per query (db contract); no default page size is documented. */
+      if (ref && typeof ref.limit === "function") ref = ref.limit(1000);
+      return ref.get();
+    }).then(take);
   }
+  function U() { return D.util; }
   var NAMES = ["rankings", "done", "feedback", "sent", "handoff", "actions", "waits", "asks", "meetings"];
   function build(got) {
     var r = got.map(function (g) { return g.v; }), failed = [], err = null, timedOut = false;

@@ -92,6 +92,8 @@
      cfg.callMs) rejects {code: "timeout"}: a failure for a read, an
      unclear outcome for a write (never retried automatically). A read is
      also aborted then; a write never is. */
+  /* The SHAPE of each tool's last raw answer (keys and types only), for diagnostics. */
+  rt.raw = {};
   rt.call = function (tool, input, options) { return rt.callOn(rt.SERVER, tool, input, options); };
   /* The same, on another connector (Atlassian Rovo). */
   rt.callOn = function (server, tool, input, options) {
@@ -106,6 +108,7 @@
     }
     try {
       var p = Promise.resolve(rt.mcp.callTool(server, tool, input || {}, opts)).then(function (res) {
+        rt.raw[tool] = U().shapeOf(res);
         if (res && res.isError) throw { code: "tool_error", message: U().clip(U().resultText(res), 200) || "The tool reported a failure.", result: res };
         return res;
       }, function (e) {

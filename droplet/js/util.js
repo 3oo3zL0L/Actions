@@ -110,6 +110,50 @@
     return "";
   };
 
+  /* A SHAPE signature of a raw result for diagnostics: keys and types only,
+     never values. At most depth 3 and 12 keys per level. Content blocks show
+     their type and text length (text(5321)); arrays of other things show
+     their length and the shape of the first one (3×{id:str}). Keys that look
+     like data (an address, a link, an id) are shown as #. */
+  var SAFE_KEY = /^[A-Za-z_$][A-Za-z0-9_$-]{0,39}$/;
+  function keyName(k) { return SAFE_KEY.test(k) && !/@/.test(k) ? k : "#"; }
+  U.shapeOf = function (v, depth) {
+    depth = depth == null ? 3 : depth;
+    try {
+      if (v === null) return "null";
+      var t = typeof v;
+      if (t === "string") return "str";
+      if (t === "number") return "num";
+      if (t === "boolean") return "bool";
+      if (t === "undefined") return "undef";
+      if (t === "function") return "fn";
+      if (t !== "object") return t;
+      if (Array.isArray(v)) {
+        if (!v.length) return "[]";
+        var blocks = v.every(function (b) { return b && typeof b === "object" && typeof b.type === "string"; });
+        if (blocks) {
+          var bs = v.slice(0, 12).map(function (b) {
+            var ty = /^[a-z_-]{1,20}$/i.test(b.type) ? b.type : "?";
+            var len = typeof b.text === "string" ? b.text.length : typeof b.data === "string" ? b.data.length :
+              b.resource && typeof b.resource.text === "string" ? b.resource.text.length : null;
+            return ty + (len != null ? "(" + len + ")" : "");
+          });
+          return "[" + bs.join(",") + (v.length > 12 ? ",…+" + (v.length - 12) : "") + "]";
+        }
+        return "[" + v.length + "×" + (depth > 1 ? U.shapeOf(v[0], depth - 1) : "…") + "]";
+      }
+      if (depth <= 0) return "{…}";
+      var keys = [];
+      for (var k in v) keys.push(k); /* own and inherited enumerable (frozen snapshots, getters) */
+      if (!keys.length) return "{}";
+      var parts = keys.slice(0, 12).map(function (k) {
+        var x; try { x = v[k]; } catch (e) { return keyName(k) + ":err"; }
+        return keyName(k) + ":" + (depth > 1 ? U.shapeOf(x, depth - 1) : (x && typeof x === "object" ? (Array.isArray(x) ? "[" + x.length + "]" : "{…}") : U.shapeOf(x, 0)));
+      });
+      return "{" + parts.join(",") + (keys.length > 12 ? ",…+" + (keys.length - 12) : "") + "}";
+    } catch (e) { return "?"; }
+  };
+
   /* HTML mail body to plain text. DOMParser builds an inert document: no
      scripts run and nothing loads. Hidden elements are left out. */
   U.htmlToText = function (html) {

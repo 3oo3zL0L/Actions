@@ -156,6 +156,13 @@ function installDropletStub(cfg) {
       var page = list.slice(off, off + lim).map(function (m, i) {
         var o = Object.assign({ uri: "mail:///messages/" + encodeURIComponent(m.id) }, m); o.offset = off + i; return o;
       });
+      /* cfg.search (inbox only): "noReadFlag" leaves isRead out, "wrapper" answers {value: [...], moreResults, nextOffset},
+         "prose" answers plain text Droplet can't read, "noneText" answers "No emails found." */
+      var inbox = input.folderName !== "Sent Items", sm = inbox && cfg.search;
+      if (sm === "noReadFlag") page.forEach(function (o) { delete o.isRead; });
+      if (sm === "prose") return result("Found " + page.length + " emails.\n" + page.map(function (o) { return "- " + o.subject + " from " + o.sender; }).join("\n"));
+      if (sm === "noneText" && !page.length) return result("No emails found.");
+      if (sm === "wrapper") return result(JSON.stringify({ value: page, moreResults: off + lim < list.length, nextOffset: off + lim }));
       var parts = page.map(function (o) { return JSON.stringify(o); });
       if (off + lim < list.length) parts.push(JSON.stringify({ moreResults: true, nextOffset: off + lim, totalResultCount: list.length }));
       /* Like the real connector: concatenated objects, split over two content blocks. */
@@ -510,7 +517,27 @@ function installDropletStub(cfg) {
       getNow: function () {
         var docs = Object.keys(data).filter(function (k) { return k.indexOf(path + "/") === 0 && k.split("/").length === path.split("/").length + 1; })
           .sort().map(function (k) { return snap(k.split("/").pop(), data[k]); });
+        /* cfg.dbShape: how the snapshot comes back. "docs" (the contract, default), "array" (the docs array itself),
+           "forEach" (an object with forEach only), "dataObject" (data a plain object), "paged" (one doc per page, next()),
+           "unknown" (a form Droplet doesn't know). */
+        var shape = cfg.dbShape;
+        if (shape === "dataObject") docs = docs.map(function (d) { return { id: d.id, exists: true, data: d.data() }; });
+        if (shape === "array") return Promise.resolve(docs);
+        if (shape === "forEach") return Promise.resolve({ size: docs.length, forEach: function (f) { docs.forEach(f); } });
+        if (shape === "unknown") return Promise.resolve({ items: docs.map(function (d) { return { key: d.id, value: d.data() }; }), count: docs.length });
+        if (shape === "paged") {
+          var pageAt = function (i) {
+            return { docs: docs.slice(i, i + 1), size: Math.min(1, docs.length - i), empty: i >= docs.length, hasMore: i + 1 < docs.length,
+              next: function () { calls.push({ kind: "db", op: "next", path: path }); return Promise.resolve(pageAt(i + 1)); } };
+          };
+          return Promise.resolve(pageAt(0));
+        }
         return Promise.resolve({ docs: docs, size: docs.length, empty: !docs.length, docChanges: function () { return []; }, metadata: {} });
+      },
+      limit: function (n) {
+        calls.push({ kind: "db", op: "limit", path: path, n: n });
+        var self = this;
+        return { get: function () { return self.get(); } };
       }
     };
   }
