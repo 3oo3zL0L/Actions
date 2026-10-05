@@ -34,6 +34,8 @@
     confluence: '<path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4M9 12h7M9 16h7"/>',
     close: '<path d="M6 6l12 12M18 6 6 18"/>',
     stop: '<rect x="7" y="7" width="10" height="10"/>',
+    later: '<path d="M4 12h11M10 7l5 5-5 5"/><path d="M20 5v14"/>',
+    today: '<path d="M20 12H9M14 7l-5 5 5 5"/><path d="M4 5v14"/>',
     lock: '<rect x="5" y="11" width="14" height="9"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
     bring: '<path d="M4 12a8 8 0 1 0 2.3-5.7M4 4v4h4"/>'
   };
@@ -46,7 +48,7 @@
     notes: { mail: null, teams: null, cal: null, rank: null, store: null }, rankings: {}, feedback: [], verdict: {}, doneNow: {},
     drafts: {}, touched: {}, drafting: {}, send: {}, detail: {}, chat: {}, undo: null, handoff: {}, meetings: [], actions: {}, confirmDel: null, rankAgain: false, fresh: {}, actEdit: {},
     waits: {}, asksDb: {}, meetingsDb: {}, waitPre: [], scanning: false, teams10: [], sentMsgs: [], chaseMail: {}, ns: {},
-    atlOk: null, atlItems: [], jiraMail: [], aiUndo: {}
+    atlOk: null, atlItems: [], jiraMail: [], aiUndo: {}, places: {}, placesTouched: {}, drag: null
   };
   D.state = S;
   var $ = function (id) { return document.getElementById(id); };
@@ -55,8 +57,16 @@
 
   /* ---------------- Model ---------------- */
   function rk(it) { return it.r || rank.fallbackFor(it); }
+  /* Where Thomas put a card himself (dragged, Move to… or m): db places/<key>.
+     "today" pins it to Today (with an optional order), "later" keeps it out
+     of Today until he moves it back. Wins over Claude's ranking. */
+  function placeRec(it) { return it && it.key && S.places[it.key] || null; }
+  function movedLater(it) { var p = placeRec(it); return !!(p && p.place === 'later'); }
+  function movedToday(it) { var p = placeRec(it); return !!(p && p.place === 'today'); }
   function groupOf(it) {
     var g = rk(it).group;
+    if (movedToday(it)) return 'now';
+    if (movedLater(it)) return 'later';
     if (it.standstill) return 'now';
     if (it.src === 'hours') return 'now'; /* the weekly hours recap: pinned to Today until Done */
     if (S.verdict[it.id] === 'up') return 'now';
@@ -74,10 +84,11 @@
   /* Your own action due today or earlier, or just added and still being
      placed by Claude: shown at the top of Today (after R1 and ★). */
   function urgentMine(it) {
+    if (movedLater(it)) return false;
     if (it.src === 'hours') return true;
     return it.src === 'mine' && (pinned(it) || S.verdict[it.id] !== 'down' && (!!(it.due && it.due <= mine.today()) || !!(S.fresh[it.id] && !it.r)));
   }
-  function pinned(it) { if (it && it.src === 'hours') return true; var a = it && it.src === 'mine' && S.actions[it.docId]; return !!(a && a.pinnedToday && !a.done); }
+  function pinned(it) { if (movedLater(it)) return false; if (movedToday(it)) return true; if (it && it.src === 'hours') return true; var a = it && it.src === 'mine' && S.actions[it.docId]; return !!(a && a.pinnedToday && !a.done); }
   function GI(g) { return g === 'now' ? 0 : g === 'later' ? 1 : 2; }
   function cmp(a, b) {
     var x, y;
@@ -111,8 +122,10 @@
     var vis = visible().filter(function (it) { return S.verdict[it.id] !== 'down' || pinned(it); });
     var top = vis.filter(function (it) { return groupOf(it) === 'now'; }).slice(0, FOCUS_MAX);
     vis.forEach(function (it) { if (pinned(it) && top.indexOf(it) < 0) top.push(it); }); /* pinned to Today: never cut */
-    if (top.length < FOCUS_MIN) vis.forEach(function (it) { if (top.length < FOCUS_MIN && top.indexOf(it) < 0) top.push(it); });
-    return top;
+    if (top.length < FOCUS_MIN) vis.forEach(function (it) { if (top.length < FOCUS_MIN && top.indexOf(it) < 0 && !movedLater(it)) top.push(it); });
+    /* A card dragged to a spot in Today keeps that spot. */
+    return top.map(function (it, i) { var p = placeRec(it); return { it: it, i: i, o: p && p.place === 'today' && isFinite(p.order) ? p.order : i }; })
+      .sort(function (a, b) { return a.o - b.o || a.i - b.i; }).map(function (x) { return x.it; });
   }
   function restItems() {
     var top = topItems();
@@ -344,8 +357,8 @@
       if (isHeld(it)) { cards.push(heldHTML(it, i)); return; }
       var cur = isCur(it.id), r = rk(it), n = dupCount(it), fl = flag(it);
       var cls = 'fi' + (it === firstOpen ? ' is-first' : '') + (cur ? ' is-current' : '');
-      cards.push('<li class="' + cls + '" data-id="' + esc(it.id) + '">' +
-        '<button class="fi-open" data-open="' + esc(it.id) + '"' + (cur ? ' aria-current="true"' : '') + ' aria-label="Open ' + (i + 1) + ': ' + esc(titleOf(it)) + '">' +
+      cards.push('<li class="' + cls + '" data-id="' + esc(it.id) + '" data-drop-i="' + i + '">' +
+        '<button class="fi-open" data-open="' + esc(it.id) + '" data-drag="' + esc(it.id) + '"' + (cur ? ' aria-current="true"' : '') + ' aria-keyshortcuts="m" aria-label="Open ' + (i + 1) + ': ' + esc(titleOf(it)) + '">' +
           '<span class="fi-rank" aria-hidden="true">' + pad(i + 1) + '</span>' +
           '<span class="fi-body">' +
             '<span class="fi-meta">' + srcHTML(it) + '<span class="sep" aria-hidden="true">·</span><span>' + esc(project(it)) + '</span>' +
@@ -358,6 +371,7 @@
         '</button>' +
         '<div class="fi-act">' + actHTML(it) +
           (isClosed(it.id) ? '' : '<button class="btn-done" data-card-done="' + esc(it.id) + '" aria-label="Mark done: ' + esc(titleOf(it)) + '">' + ico('check') + '<span>Done</span></button>') +
+          '<button class="btn-move" data-move="' + esc(it.id) + '" aria-haspopup="menu" aria-label="Move: ' + esc(titleOf(it)) + '" title="Move (m)">' + ico('later') + '<span>Later</span></button>' +
         '</div>' +
       '</li>');
     });
@@ -371,12 +385,33 @@
     if (!items.length) h = (stillLoading() ? '<li class="loading-line">' + esc(stillLoading()) + '</li>' : '<li class="allclear">All clear. Nothing needs you right now.</li>') + h;
     $('focus').innerHTML = h;
   }
+  function restRow(it, n) {
+    var cur = isCur(it.id);
+    return '<li><button class="rr' + (isClosed(it.id) ? ' is-closed' : '') + (cur ? ' is-current' : '') + '" data-open="' + esc(it.id) + '" data-drag="' + esc(it.id) + '"' + (cur ? ' aria-current="true"' : '') + ' aria-keyshortcuts="m">' +
+      '<span class="rr-n">' + (n ? pad(n) : '··') + '</span>' + ico(srcKind(it)) +
+      '<span class="rr-t"><span class="rr-title">' + esc(titleOf(it)) + '</span><span class="rr-sub">' + esc(srcLabel(it)) + ' · ' + esc(project(it)) + ' · ' + esc(it.senderName) +
+      (isWait(it) && !n ? ' · asked ' + it.n + ' working day' + (it.n === 1 ? '' : 's') + ' ago' : '') +
+      (it.meeting ? ' · meeting ' + esc(it.meeting.hhmm) : '') + (waitingTeams(it.id) ? ' · waiting for you to send in Teams' : '') +
+      (isMine(it) && it.due ? ' · ' + esc(mine.dueLabel(it.due).toLowerCase()) : '') +
+      (S.verdict[it.id] === 'down' ? ' · marked not important' : '') + (movedLater(it) ? ' · moved by you' : '') + (isWait(it) ? ' ' + waitChip(it) : '') + '</span></span></button>' +
+      '<button class="btn-today" data-move-today="' + esc(it.id) + '" aria-label="Move to Today: ' + esc(titleOf(it)) + '" title="Move to Today (m)">' + ico('today') + '<span>Today</span></button></li>';
+  }
+  /* Layout C: the overview on the right. Waiting on (R3) and Elsewhere (held
+     in Teams or sent) get their own boxes; Later holds the rest, searchable. */
   function renderRest() {
     var all = restItems(), q = S.q.trim().toLowerCase(), base = topItems().length;
-    $('restCount').textContent = all.length;
+    var num = function (it) { var i = all.indexOf(it); return i > -1 ? i + base + 1 : 0; };
+    var waits = all.filter(isWait), els = all.filter(function (it) { return !isWait(it) && isHeld(it); });
+    var later = all.filter(function (it) { return waits.indexOf(it) < 0 && els.indexOf(it) < 0; });
+    var box = function (id, arr) {
+      $(id + 'Box').hidden = !arr.length;
+      $(id + 'Count').textContent = arr.length;
+      $(id + 'List').innerHTML = arr.map(function (it) { return restRow(it, num(it)); }).join('');
+    };
+    box('wait', waits); box('else', els);
+    $('restCount').textContent = later.length;
     /* Waits younger than 3 working days are not listed, only found by search. */
-    var list = all.concat(q ? S.waitPre : []).filter(function (it) {
-      if (!q) return true;
+    var list = !q ? later : all.concat(S.waitPre).filter(function (it) {
       var extra = isTeams(it) ? ' ' + it.subject + ' ' + (it.people || []).join(' ') + ' ' + (it.participants || []).join(' ') :
         isMine(it) ? ' ' + (it.notes || '') + ' mine ' + (it.due ? mine.dueLabel(it.due) : '') + (it.origin ? ' meeting ' + it.origin.subject : '') :
         isWait(it) ? ' waiting on others ' + it.what + ' ' + it.summary :
@@ -385,21 +420,24 @@
       return (titleOf(it) + ' ' + project(it) + ' ' + it.senderName + ' ' + it.sender + ' ' + rk(it).why + ' ' + srcLabel(it) + extra +
         (it.meeting ? ' meeting ' + it.meeting.hhmm : '')).toLowerCase().indexOf(q) !== -1;
     });
-    var h = '';
-    list.forEach(function (it) {
-      var n = all.indexOf(it) > -1 ? all.indexOf(it) + base + 1 : 0, cur = isCur(it.id);
-      h += '<li><button class="rr' + (isClosed(it.id) ? ' is-closed' : '') + (cur ? ' is-current' : '') + '" data-open="' + esc(it.id) + '"' + (cur ? ' aria-current="true"' : '') + '>' +
-        '<span class="rr-n">' + (n ? pad(n) : '··') + '</span>' + ico(srcKind(it)) +
-        '<span class="rr-t"><span class="rr-title">' + esc(titleOf(it)) + '</span><span class="rr-sub">' + esc(srcLabel(it)) + ' · ' + esc(project(it)) + ' · ' + esc(it.senderName) +
-        (isWait(it) && !n ? ' · asked ' + it.n + ' working day' + (it.n === 1 ? '' : 's') + ' ago' : '') +
-        (it.meeting ? ' · meeting ' + esc(it.meeting.hhmm) : '') + (waitingTeams(it.id) ? ' · waiting for you to send in Teams' : '') +
-        (isMine(it) && it.due ? ' · ' + esc(mine.dueLabel(it.due).toLowerCase()) : '') +
-        (S.verdict[it.id] === 'down' ? ' · marked not important' : '') + (isWait(it) ? ' ' + waitChip(it) : '') + '</span></span></button></li>';
-    });
-    if (!list.length) h = '<li class="rest-empty">' + (q ? 'Nothing matches “' + esc(S.q) + '”.' : 'Nothing else right now.') + '</li>';
+    var h = list.map(function (it) { return restRow(it, num(it)); }).join('');
+    if (!list.length) h = '<li class="rest-empty">' + (q ? 'Nothing matches “' + esc(S.q) + '”.' : 'Nothing for later. Drag a card here to move it out of Today.') + '</li>';
     $('restList').innerHTML = h;
     $('restToggle').setAttribute('aria-expanded', String(S.restOpen));
     $('restPanel').hidden = !S.restOpen;
+    renderHoursBox();
+  }
+  /* The weekly hours reminders: what the last Monday run did, at a glance. */
+  function renderHoursBox() {
+    var el = $('hoursBox'); if (!el) return;
+    var xs = hours && hours.state && hours.state.loaded ? hours.recaps() : [];
+    var x = xs[0]; /* newest first */
+    if (!x) { el.hidden = true; return; }
+    var it = S.byId['hours:' + x.week], open = it && visible().indexOf(it) > -1;
+    el.hidden = false;
+    el.innerHTML = '<h2 class="ov-h"><b>Hours reminders</b><span class="count">week ' + esc(String(hours.weekNr(x.week))) + '</span></h2>' +
+      (open ? '<button class="rr" data-open="' + esc(it.id) + '">' + ico('hours') + '<span class="rr-t"><span class="rr-title">' + esc(hours.summary(x)) + '</span><span class="rr-sub">Open the recap</span></span></button>'
+        : '<p class="ov-p">' + esc(hours.summary(x)) + '</p>');
   }
 
   /* ---------------- Recently done (7 days) ----------------
@@ -515,14 +553,8 @@
         (note ? '<p class="muted">' + esc(note) + (d.state === 'error' ? ' <button data-reread>Try again</button>' : '') + '</p>' : '') + '</div>' +
       (link ? '<div class="src-note">' + ico('out', 'ico-sm') + '<a href="' + esc(link) + '" target="_blank" rel="noopener noreferrer" data-outlook>Open in Outlook</a></div>' : '');
   }
-  function emptyHTML() {
-    return '<div class="iv-head"><span class="iv-crumb"><span class="tag"><i style="background:var(--faint)"></i>Item</span><span class="sep" aria-hidden="true">//</span><span class="c-sec">Standby</span></span></div>' +
-      '<div class="empty"><div>' +
-      '<svg class="empty-mark" viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="50" fill="none" stroke="#ff8a1f" stroke-width="5"/><path d="M33 28h15l42 64M63 56 33 92" fill="none" stroke="#ff8a1f" stroke-width="10" stroke-linecap="square" stroke-linejoin="miter"/></svg>' +
-      '<h2>Standing by.</h2><p>Select an item to load its next action.</p><p style="margin-top:6px">Nothing is sent without your click.</p>' +
-      '<div class="keys"><span><span class="kbd">↑</span><span class="kbd">↓</span>Move</span><span><span class="kbd">Enter</span>Open</span><span><span class="kbd">/</span>Search</span><span><span class="kbd">Esc</span>Close</span></div>' +
-      '</div></div>';
-  }
+  /* Layout C: no Standing by; with no item open the overview shows instead. */
+  function emptyHTML() { return ''; }
   function problemHTML(st) {
     if (!st.message || st.phase === 'sent' || st.phase === 'sending' || st.phase === 'idle') return '';
     var link = U.safeOutlookLink(st.draftLink);
@@ -1159,6 +1191,7 @@
     opts = opts || {};
     var now = new Date();
     if (opts.full || !S.savedOk) startSaved();
+    if (opts.full) loadPlaces();
     startMe();
     startMail(now); startTeams(now); startAtl();
     S.calWanted = true;
@@ -2683,6 +2716,176 @@
     if ((id = t.getAttribute('data-ask-undo-draft'))) return undoClaudeDraft(id);
   }
 
+
+  /* ---------------- Moving cards (layout C) ----------------
+     Today ⇄ Later by dragging (mouse: press and move; touch: hold, then
+     move), by the Later / Today buttons, or with m on a focused card. Saved
+     in db places/<key>, so it survives a reload and a new ranking. Undo. */
+  function loadPlaces() {
+    rt.timeout(Promise.resolve().then(function () { return store.readColl('places'); }), rt.cfg.storeMs, 'Reading places').then(function (r) {
+      var got = U.clone(r || {});
+      Object.keys(S.placesTouched).forEach(function (k) { if (S.places[k]) got[k] = S.places[k]; else delete got[k]; });
+      S.places = got;
+      renderAllKeepFocus();
+    }, function (e) { noteError('places', e); });
+  }
+  function setPlace(it, rec) {
+    S.placesTouched[it.key] = 1;
+    if (rec) { S.places[it.key] = rec; saveDone('places/' + it.key, function () { return store.put('places', it.key, U.clone(rec)); }); }
+    else { delete S.places[it.key]; saveDone('places/' + it.key, function () { return store.drop('places', it.key); }); }
+  }
+  /* Today with each card's sort value (an explicit order, else its spot). */
+  function todayOrders() {
+    return topItems().map(function (it, i) { var p = placeRec(it); return { it: it, o: p && p.place === 'today' && isFinite(p.order) ? p.order : i }; });
+  }
+  /* The order value that puts a card before Today's card at index j (j = length: last). */
+  function orderAt(j, skip) {
+    var l = todayOrders().filter(function (x) { return x.it !== skip; });
+    if (!l.length) return 0;
+    if (j <= 0) return l[0].o - 1;
+    if (j >= l.length) return l[l.length - 1].o + 1;
+    return (l[j - 1].o + l[j].o) / 2;
+  }
+  function moveTo(id, where, j) {
+    var it = S.byId[id]; if (!it || !it.key) return;
+    if (where === 'done') return markDone(id);
+    var inToday = topItems().indexOf(it) > -1;
+    if (where === 'later' && !inToday) return;
+    var prev = S.places[it.key] ? U.clone(S.places[it.key]) : null;
+    var rec = { place: where, at: new Date().toISOString(), title: U.clip(titleOf(it), 160) };
+    if (where === 'today') {
+      if (j != null) {
+        var i0 = topItems().filter(function (o) { return o !== it; }).length;
+        rec.order = orderAt(Math.min(j, i0), it);
+      } else rec.order = orderAt(Infinity, it);
+    }
+    setPlace(it, rec);
+    if (where === 'later' && S.view === 'item' && S.cur === id && !desk()) back();
+    else renderAll();
+    var drop = $('focus').querySelector('[data-id="' + cssEsc(id) + '"]') || $('over').querySelector('[data-open="' + cssEsc(id) + '"]');
+    if (drop) { drop.classList.add('just-moved'); setTimeout(function () { drop.classList.remove('just-moved'); }, 900); }
+    toast(where === 'later' ? 'Moved to Later.' : inToday ? 'Moved in Today.' : 'Moved to Today.', function () { setPlace(it, prev); renderAll(); });
+  }
+  function cssEsc(v) { return window.CSS && CSS.escape ? CSS.escape(v) : String(v).replace(/["\\]/g, '\\$&'); }
+  /* m on a focused card: Today goes to Later, Later comes to Today. */
+  function moveFocused() {
+    var a = document.activeElement, el = a && a.closest && a.closest('[data-drag]'), id = el && el.getAttribute('data-drag');
+    if (!id && S.view === 'item' && S.cur) id = S.cur;
+    var it = id && S.byId[id]; if (!it) return false;
+    moveTo(id, topItems().indexOf(it) > -1 ? 'later' : 'today');
+    var back2 = document.querySelector('[data-drag="' + cssEsc(id) + '"]'); if (back2) back2.focus({ preventScroll: true });
+    return true;
+  }
+
+  /* Drag: pointer events, a 6px threshold so a click still opens the card;
+     on touch a 350ms hold first, so a swipe still scrolls. */
+  var DRAG_PX = 6, HOLD_MS = 350;
+  function dragTarget(x, y) {
+    var el = document.elementFromPoint(x, y); if (!el) return null;
+    var f = el.closest('#focus');
+    if (f) {
+      var lis = [].slice.call(f.querySelectorAll('li[data-drop-i]')).filter(function (li) { return li.getAttribute('data-id') !== S.drag.id; });
+      var j = lis.length;
+      for (var i = 0; i < lis.length; i++) { var r = lis[i].getBoundingClientRect(); if (y < r.top + r.height / 2) { j = i; break; } }
+      return { where: 'today', j: j, el: lis[j] || null, end: j === lis.length && lis.length ? lis[lis.length - 1] : null };
+    }
+    if (el.closest('.list-col')) return { where: 'today', j: Infinity, el: null };
+    if (el.closest('[data-drop="done"]')) return { where: 'done' };
+    if (el.closest('#over')) return { where: 'later' };
+    return null;
+  }
+  function clearPaint() {
+    [].forEach.call(document.querySelectorAll('.drop-before, .drop-after, .drop-on'), function (n) { n.classList.remove('drop-before', 'drop-after', 'drop-on'); });
+  }
+  function dragPaint(t) {
+    clearPaint();
+    var d = S.drag; d.t = t;
+    if (!t) return;
+    if (t.where === 'today') {
+      if (d.from === 'today' && !t.el && !t.end) return;
+      if (t.el) t.el.classList.add('drop-before'); else if (t.end) t.end.classList.add('drop-after'); else $('focus').classList.add('drop-on');
+    } else if (t.where === 'later') { if (d.from === 'today') $('laterBox').classList.add('drop-on'); }
+    else if (t.where === 'done') document.querySelector('[data-drop="done"]').classList.add('drop-on');
+  }
+  function dragStart(e) {
+    var d = S.drag;
+    d.active = true;
+    var src = d.el.closest('li') || d.el, r = src.getBoundingClientRect();
+    var g = src.cloneNode(true);
+    g.removeAttribute('id'); [].forEach.call(g.querySelectorAll('[id]'), function (n) { n.removeAttribute('id'); });
+    g.className += ' drag-ghost'; g.setAttribute('aria-hidden', 'true');
+    g.style.width = Math.min(r.width, 460) + 'px';
+    d.dx = Math.min(e.clientX - r.left, 440); d.dy = e.clientY - r.top;
+    document.body.appendChild(g); d.ghost = g; d.src = src;
+    src.classList.add('is-dragsrc');
+    root.classList.add('is-dragging');
+    if (navigator.vibrate && d.touch) try { navigator.vibrate(10); } catch (x) { /* none */ }
+    dragMove(e);
+  }
+  function dragMove(e) {
+    var d = S.drag;
+    d.x = e.clientX; d.y = e.clientY;
+    d.ghost.style.transform = 'translate(' + (e.clientX - d.dx) + 'px,' + (e.clientY - d.dy) + 'px) rotate(-1deg)';
+    dragPaint(dragTarget(e.clientX, e.clientY));
+    /* Near an edge: scroll the page (phone) or the column under the pointer. */
+    var edge = 56, dy = e.clientY < edge ? -14 : e.clientY > window.innerHeight - edge ? 14 : 0;
+    if (dy) {
+      var under = document.elementFromPoint(e.clientX, e.clientY), col = under && under.closest('.list-col, .over');
+      if (col && col.scrollHeight > col.clientHeight) col.scrollTop += dy; else window.scrollBy(0, dy);
+    }
+  }
+  function dragEnd(drop) {
+    var d = S.drag; S.drag = null;
+    clearTimeout(d && d.hold);
+    if (!d || !d.active) return;
+    if (d.ghost) d.ghost.remove();
+    if (d.src) d.src.classList.remove('is-dragsrc');
+    root.classList.remove('is-dragging');
+    clearPaint();
+    /* The click the browser fires right after the release opens nothing. */
+    S.dragSwallow = true; setTimeout(function () { S.dragSwallow = false; }, 0);
+    var t = drop && d.t;
+    if (!t) return;
+    if (t.where === 'later' && d.from === 'today') return moveTo(d.id, 'later');
+    if (t.where === 'done') return moveTo(d.id, 'done');
+    if (t.where === 'today') {
+      var j = t.j === Infinity ? null : t.j;
+      if (d.from === 'today' && j === d.i) return; /* dropped where it was */
+      return moveTo(d.id, 'today', j);
+    }
+  }
+  document.addEventListener('pointerdown', function (e) {
+    if (e.button !== 0 || S.drag) return;
+    var el = e.target.closest('[data-drag]'); if (!el) return;
+    var id = el.getAttribute('data-drag'), it = S.byId[id]; if (!it) return;
+    var top = topItems(), i = top.indexOf(it);
+    S.drag = { id: id, el: el, x0: e.clientX, y0: e.clientY, pid: e.pointerId, from: i > -1 ? 'today' : 'later', i: i, touch: e.pointerType === 'touch', ready: e.pointerType !== 'touch' };
+    if (S.drag.touch) S.drag.hold = setTimeout(function () { if (S.drag && S.drag.id === id) { S.drag.ready = true; dragStart({ clientX: S.drag.x, clientY: S.drag.y }); } }, HOLD_MS);
+    S.drag.x = e.clientX; S.drag.y = e.clientY;
+  });
+  document.addEventListener('pointermove', function (e) {
+    var d = S.drag; if (!d || e.pointerId !== d.pid) return;
+    if (d.active) { e.preventDefault(); return dragMove(e); }
+    var far = Math.abs(e.clientX - d.x0) > DRAG_PX || Math.abs(e.clientY - d.y0) > DRAG_PX;
+    d.x = e.clientX; d.y = e.clientY;
+    if (!far) return;
+    if (!d.ready) { clearTimeout(d.hold); S.drag = null; return; } /* touch moved before the hold: a scroll */
+    e.preventDefault();
+    try { window.getSelection().removeAllRanges(); } catch (x) { /* none */ }
+    dragStart(e);
+  });
+  document.addEventListener('pointerup', function (e) { if (S.drag && e.pointerId === S.drag.pid) dragEnd(true); });
+  document.addEventListener('pointercancel', function (e) { if (S.drag && e.pointerId === S.drag.pid && !S.drag.active) dragEnd(false); });
+  /* While a touch drag runs, the finger moves the card, not the page. */
+  document.addEventListener('touchmove', function (e) { if (S.drag && S.drag.active) e.preventDefault(); }, { passive: false });
+  document.addEventListener('contextmenu', function (e) { if (S.drag && S.drag.touch) e.preventDefault(); });
+  document.addEventListener('click', function (e) {
+    if (S.dragSwallow) { S.dragSwallow = false; e.stopPropagation(); e.preventDefault(); }
+  }, true);
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && S.drag && S.drag.active) { e.stopPropagation(); e.preventDefault(); S.drag.t = null; dragEnd(false); }
+  }, true);
+
   /* ---------------- Events ---------------- */
   document.addEventListener('click', function (e) {
     if (e.target.closest('[data-ask-close]')) { ask.close(); return; }
@@ -2703,6 +2906,8 @@
     if ((t.hasAttribute('data-open') || t.hasAttribute('data-act')) && !desk() && performance.now() < (S.doneGuardUntil || 0) - 150) return;
     if ((id = t.getAttribute('data-open'))) return openItem(id, false);
     if ((id = t.getAttribute('data-act'))) { var it = S.byId[id]; return openItem(id, !!(it && rk(it).kind === 'reply')); }
+    if ((id = t.getAttribute('data-move'))) return moveTo(id, 'later');
+    if ((id = t.getAttribute('data-move-today'))) return moveTo(id, 'today');
     if (t.id === 'restToggle') { S.restOpen = !S.restOpen; renderRest(); if (S.restOpen) $('q').focus(); return; }
     if (t.id === 'doneToggle') { S.doneOpen = !S.doneOpen; renderDone(); return; }
     if ((id = t.getAttribute('data-bring'))) return bringBack(id);
@@ -2868,6 +3073,7 @@
       return;
     }
     if (e.key === '/') { e.preventDefault(); if (!S.restOpen) { S.restOpen = true; renderRest(); } $('q').focus(); return; }
+    if (e.key === 'm' && moveFocused()) { e.preventDefault(); return; }
     if (e.key === 'a' && (desk() || S.view === 'list')) { e.preventDefault(); $('addIn').focus(); return; }
     if (e.key === 'k' && ask.available()) { e.preventDefault(); ask.openSheet(null); return; }
     if (S.view !== 'item' || !S.cur) return;
@@ -2881,6 +3087,7 @@
   });
 
   /* ---------------- Boot ---------------- */
+  S.restOpen = desk(); /* layout C: Later is open in the overview on a laptop */
   store.onError = function (path) { if (S.saveManaged && S.saveManaged[path]) return; S.notes.store = 'Couldn’t save a change; it may be gone after a reload.'; renderNotes(); };
   renderAll(); renderAskbar();
   /* A capability that answers after use()'s timeout lights up late. */

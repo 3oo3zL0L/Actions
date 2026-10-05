@@ -118,9 +118,9 @@ test.describe('Load and rank', () => {
     expect(await app.focusIds()).toEqual(before);
   });
 
-  test('Everything else is collapsed, in rank order, and searchable', async ({ app, page }) => {
+  test('Later is open in the overview (laptop), in rank order, and searchable', async ({ app, page }) => {
     await app.boot();
-    await expect(page.locator('#restPanel')).toBeHidden();
+    await expect(page.locator('#restPanel')).toBeVisible();
     await expect(page.locator('#restCount')).toHaveText('5');
     await page.keyboard.press('/');
     await expect(page.locator('#q')).toBeFocused();

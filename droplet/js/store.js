@@ -173,6 +173,7 @@
   /* The hours module (js/hours.js) reads and writes its own collections. */
   store.readColl = function (name) { return readAll(name); };
   store.put = function (name, key, data) { return set(name, key, data); };
+  store.drop = function (name, key) { return del(name, key); };
   store.setFeedback = function (key, f) { return set("feedback", key, f); };
   store.clearFeedback = function (key) { return del("feedback", key); };
 })(window.Droplet = window.Droplet || {});

@@ -78,8 +78,12 @@ svg { display: block; flex: none; }
 .list-col { display: flex; flex-direction: column; min-height: 100vh; min-height: 100dvh; }
 .list-main { flex: 1; }
 .item-col { position: relative; display: flex; flex-direction: column; background: var(--raised); }
+.item-col.is-idle { display: none; }
+.app[data-view="item"] .over { display: none; }
 .divider { display: none; }
 @media (max-width: 959.98px) {
+  .list-col { min-height: 0; }
+  .over { padding: 8px 0 24px; }
   .app[data-view="item"] .list-col { display: none; }
   .app[data-view="list"] .item-col { display: none; }
   /* Phone: the item is its own screen, edge to edge on the raised surface. */
@@ -91,8 +95,11 @@ svg { display: block; flex: none; }
   body { height: 100vh; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
   .app {
     flex: 1; min-height: 0; width: 100%;
-    display: grid; grid-template-columns: minmax(400px, 450px) 1px minmax(0, 1fr); gap: 0 24px; align-items: stretch;
+    display: grid; grid-template-columns: minmax(400px, 0.9fr) 1px minmax(0, 1.1fr); gap: 0 24px; align-items: stretch;
   }
+  .app[data-view="item"] { grid-template-columns: minmax(400px, 450px) 1px minmax(0, 1fr); }
+  .right-col { display: flex; flex-direction: column; min-height: 0; padding: 20px 0; }
+  .over { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 10px 0 0; margin-right: -10px; scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
   .list-col { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-right: 10px; margin-right: -10px; scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
   /* Vertical divider between list and panel, with HUD ticks. */
   .divider { display: block; position: relative; margin: 20px 0; background: var(--line-3); }
@@ -101,7 +108,7 @@ svg { display: block; flex: none; }
   .divider::after { bottom: 0; }
   /* The item panel: raised, solid edge, its own header bar, orange brackets. */
   .item-col {
-    margin: 20px 0; min-height: 0;
+    flex: 1; margin: 0; min-height: 0;
     border: 1px solid var(--line-3);
     box-shadow: 0 30px 70px -30px rgba(0, 0, 0, 0.85);
   }
@@ -814,3 +821,64 @@ html.has-sheet, html.has-sheet body { overflow: hidden; }
 .hr-n { font-weight: 500; }
 .hr-m { font-family: var(--f-meta); font-size: 12px; color: var(--muted); align-self: center; }
 .hr-why { flex-basis: 100%; color: var(--muted); font-size: 14px; overflow-wrap: anywhere; }
+
+/* ============================================================
+   Layout C · Today-first split (5 Oct 2026)
+   Today large on the left; the right half is a live overview
+   (Waiting on, Elsewhere, Later, hours reminders, Recently done)
+   until an item opens over it. Cards move Today ⇄ Later by drag.
+   ============================================================ */
+.ov-box { position: relative; margin: 0 0 14px; padding: 4px 12px 8px; background: var(--surface); border: 1px solid var(--line); }
+.ov-box.rest { margin: 0 0 14px; }
+.ov-box .rest-toggle { border-top: 0; }
+.ov-h {
+  display: flex; align-items: center; gap: 8px; min-height: 44px; margin: 0;
+  font-family: var(--f-meta); font-weight: 500; font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink);
+}
+.ov-h b { font-weight: 500; }
+.ov-h .count { color: var(--muted); }
+.ov-h.is-hold b { color: var(--hold); }
+.ov-p { margin: 0 0 8px; color: var(--muted); font-size: 14px; }
+.ov-hours .rr { grid-template-columns: 20px minmax(0, 1fr); border-bottom: 0; }
+.ov-keys { margin: 4px 2px 8px; color: var(--faint); font-family: var(--f-meta); font-size: 11.5px; letter-spacing: 0.04em; display: none; }
+@media (min-width: 960px) { .ov-keys { display: block; } }
+.ov-keys .kbd { display: inline-block; }
+.rest-list > li { display: flex; align-items: stretch; }
+.rest-list > li > .rr { flex: 1; min-width: 0; }
+.rest-list > li.rest-empty { display: block; }
+.btn-today {
+  flex: none; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-width: 44px; min-height: 44px; padding: 0 10px;
+  color: var(--muted); border-bottom: 1px solid var(--line); font-family: var(--f-meta); font-size: 11.5px; letter-spacing: 0.08em; text-transform: uppercase;
+}
+.btn-today:hover { color: var(--accent-hi); background: var(--accent-soft); }
+.btn-today span { display: none; }
+@media (min-width: 960px) { .rest-list > li:hover .btn-today span, .btn-today:focus-visible span { display: inline; } }
+.btn-move {
+  flex: none; width: 56px; min-height: 46px; align-self: stretch; display: grid; place-items: center;
+  color: var(--muted); border-left: 1px solid var(--line);
+  font-family: var(--f-meta); font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase;
+}
+.btn-move span { line-height: 1; margin-top: -6px; }
+.btn-move:hover { color: var(--ink); background: var(--surface-2); }
+.fi.is-first .btn-move { border-left-color: rgba(20, 10, 1, 0.25); }
+.fi.is-held .btn-move { display: none; }
+.drop-hint { display: none; margin: 0 0 8px; padding: 14px; text-align: center; border: 1px dashed var(--accent-line); color: var(--accent-hi);
+  font-family: var(--f-meta); font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; }
+
+/* Drag */
+[data-drag] { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+html.is-dragging, html.is-dragging * { cursor: grabbing !important; }
+html.is-dragging .ov-later .drop-hint { display: block; }
+.drag-ghost {
+  position: fixed; left: 0; top: 0; z-index: 60; margin: 0; pointer-events: none; list-style: none;
+  background: var(--raised); border: 1px solid var(--accent-line); box-shadow: 0 24px 48px -12px rgba(0, 0, 0, 0.8); opacity: 0.95;
+}
+.is-dragsrc { opacity: 0.35; }
+.ov-box.drop-on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent), 0 0 0 4px var(--accent-soft); }
+.ov-box.drop-on .drop-hint { background: var(--accent-soft); }
+#focus.drop-on { outline: 1px dashed var(--accent-line); outline-offset: 4px; }
+.fi.drop-before { box-shadow: 0 -8px 0 -5px var(--accent); }
+.fi.drop-after { box-shadow: 0 8px 0 -5px var(--accent); }
+.just-moved { animation: moved 0.9s ease; }
+@keyframes moved { from { background-color: var(--accent-soft); } to { background-color: transparent; } }
+@media (prefers-reduced-motion: reduce) { .just-moved { animation: none; } }

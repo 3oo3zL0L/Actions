@@ -57,7 +57,15 @@ const test = base.test.extend({
       db: () => page.evaluate(() => window.__db()),
       focusIds: () => page.$$eval('#focus .fi[data-id]', (els) => els.map((e) => e.getAttribute('data-id'))),
       async openItem(id) { await page.click(`[data-open="${id}"]`); await page.waitForSelector('#ivTitle'); },
-      async openRest() { if ((await page.getAttribute('#restToggle', 'aria-expanded')) !== 'true') await page.click('#restToggle'); }
+      /* Layout C: Later is in the overview, which an open item covers; close it first. */
+      async openRest() {
+        if ((await page.getAttribute('#app', 'data-view')) === 'item') {
+          await page.evaluate(() => document.activeElement && document.activeElement.blur());
+          await page.keyboard.press('Escape');
+          await page.waitForSelector('#app[data-view="list"]');
+        }
+        if ((await page.getAttribute('#restToggle', 'aria-expanded')) !== 'true') await page.click('#restToggle');
+      }
     };
     await use(app);
     base.expect(errors, 'console errors').toEqual([]);

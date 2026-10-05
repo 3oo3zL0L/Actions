@@ -210,6 +210,7 @@ test.describe('Hours reminders', () => {
     await page.click('[data-done-primary]');
     await expect(recap(page)).toHaveCount(0);
     expect((await app.db())['done/hours-2026-W39']).toMatchObject({ how: 'manual', src: 'hours', title: 'Hours · week 39' });
+    await app.openRest(); // layout C: Recently done is in the overview, behind the open item
     await page.click('#doneToggle');
     await expect(page.locator('[data-done-row="done:hours-2026-W39"]')).toContainText('Hours');
     // Stays done after a reload.

@@ -48,31 +48,6 @@
         </div>
       </form>
       <ol class="focus" id="focus" aria-label="Today"></ol>
-      <section class="rest" aria-label="Everything else">
-        <button class="rest-toggle" id="restToggle" aria-expanded="false" aria-controls="restPanel" aria-keyshortcuts="/">
-          <span>Everything else<span class="count" id="restCount"></span></span>
-          <span class="kbd" aria-hidden="true">/</span>
-          <svg class="ico chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
-        </button>
-        <div id="restPanel" hidden>
-          <div class="search">
-            <label class="sr" for="q">Search everything else</label>
-            <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg>
-            <input id="q" type="search" placeholder="Search people, projects, words" autocomplete="off">
-          </div>
-          <ul class="rest-list" id="restList"></ul>
-        </div>
-        <button class="rest-toggle is-done-t" id="doneToggle" aria-expanded="false" aria-controls="donePanel">
-          <svg class="ico ok-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>
-          <span>Recently done<span class="count" id="doneCount"></span></span>
-          <span class="hint">7 days</span>
-          <svg class="ico chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
-        </button>
-        <div id="donePanel" hidden>
-          <ul class="done-list" id="doneList"></ul>
-          <p class="done-foot">Bring back puts it where it was. Nothing is unsent.</p>
-        </div>
-      </section>
     </div>
     <div class="askbar-wrap">
       <button class="askbar" id="askBar" data-ask aria-haspopup="dialog" aria-disabled="true" aria-keyshortcuts="k">
@@ -85,7 +60,49 @@
 
   <div class="divider" aria-hidden="true"></div>
 
-  <section class="item-col is-idle" id="itemCol" aria-label="Item"></section>
+  <section class="right-col" id="rightCol" aria-label="Overview and item">
+    <div class="over" id="over" aria-label="Overview">
+      <section class="ov-box ov-wait" id="waitBox" aria-label="Waiting on" hidden>
+        <h2 class="ov-h is-hold"><b>Waiting on</b><span class="count" id="waitCount"></span></h2>
+        <ul class="rest-list" id="waitList"></ul>
+      </section>
+      <section class="ov-box ov-else" id="elseBox" aria-label="Elsewhere" hidden>
+        <h2 class="ov-h is-hold"><b>Elsewhere</b><span class="count" id="elseCount"></span></h2>
+        <ul class="rest-list" id="elseList"></ul>
+      </section>
+      <section class="ov-box ov-later rest" id="laterBox" aria-label="Later" data-drop="later">
+        <button class="rest-toggle" id="restToggle" aria-expanded="false" aria-controls="restPanel" aria-keyshortcuts="/">
+          <span>Later<span class="count" id="restCount"></span></span>
+          <span class="kbd" aria-hidden="true">/</span>
+          <svg class="ico chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <p class="drop-hint" aria-hidden="true">Drop here for later</p>
+        <div id="restPanel" hidden>
+          <div class="search">
+            <label class="sr" for="q">Search later</label>
+            <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg>
+            <input id="q" type="search" placeholder="Search people, projects, words" autocomplete="off">
+          </div>
+          <ul class="rest-list" id="restList"></ul>
+        </div>
+      </section>
+      <section class="ov-box ov-hours" id="hoursBox" aria-label="Hours reminders" hidden></section>
+      <section class="ov-box ov-done rest" aria-label="Recently done">
+        <button class="rest-toggle is-done-t" id="doneToggle" aria-expanded="false" aria-controls="donePanel">
+          <svg class="ico ok-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>
+          <span>Recently done<span class="count" id="doneCount"></span></span>
+          <span class="hint">7 days</span>
+          <svg class="ico chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <div id="donePanel" hidden>
+          <ul class="done-list" id="doneList"></ul>
+          <p class="done-foot">Bring back puts it where it was. Nothing is unsent.</p>
+        </div>
+      </section>
+      <p class="ov-keys">Drag a card to Later, or press <span class="kbd">m</span> on it to move. <span class="kbd">Enter</span> opens · <span class="kbd">Esc</span> closes.</p>
+    </div>
+    <section class="item-col is-idle" id="itemCol" aria-label="Item"></section>
+  </section>
 </main>
 
 <div id="toastHost" role="status" aria-live="polite"></div>

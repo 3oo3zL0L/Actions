@@ -98,7 +98,7 @@ test.describe('Done: every type, both sections, laptop and phone', () => {
     await expect(listed(page, b)).toHaveCount(0);
   });
 
-  test('laptop: Done opens the next item in its place; standby after the last one', async ({ app, page }) => {
+  test('laptop: Done opens the next item in its place; the overview after the last one', async ({ app, page }) => {
     await app.boot();
     const top = await app.focusIds();
     await app.openItem(top[1]);
@@ -106,13 +106,15 @@ test.describe('Done: every type, both sections, laptop and phone', () => {
     const now = await app.focusIds();
     expect(await page.evaluate(() => window.Droplet.state.cur)).toBe(now[1]);
     await expect(page.locator(`#focus [data-id="${now[1]}"]`)).toHaveClass(/is-current/);
-    // The last row of Everything else: nothing after it, so standby.
+    // The last row of Later: nothing after it, so the overview comes back.
     await app.openRest();
     const rest = await page.$$eval('#restList [data-open]', (els) => els.map((e) => e.getAttribute('data-open')));
     await page.click(`#restList [data-open="${rest[rest.length - 1]}"]`);
     await page.waitForTimeout(550);
     await page.click('[data-done], [data-done-primary]');
-    await expect(page.locator('.empty h2')).toHaveText('Standing by.');
+    await expect(page.locator('#app')).toHaveAttribute('data-view', 'list');
+    await expect(page.locator('#over')).toBeVisible();
+    await expect(page.locator('.empty')).toHaveCount(0);
   });
 });
 
@@ -209,7 +211,7 @@ test.describe('Done failures, reproduced', () => {
   test('failure: d did nothing while the list side had focus, or a checkbox did', async ({ app, page }) => {
     await app.boot({ actionPlan: { 'Anna': { group: 'now', rank: 1, why: 'x', next: 'Plan a meeting with Anna', nextKind: 'meeting', nextWho: ['Anna'] } } });
     await app.openItem('a2-anouk');
-    await page.locator('#q').evaluate((el) => el.closest('.list-col').querySelector('[data-open]').focus());
+    await page.locator('#focus [data-open]').first().focus();
     await page.keyboard.press('d');
     await expect(listed(page, 'a2-anouk')).toHaveCount(0);
   });

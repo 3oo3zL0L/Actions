@@ -77,3 +77,7 @@ Daaronder staat de rest, ingeklapt en doorzoekbaar. Daarnaast is er één global
   - *Klaar*: verdwijnt uit de lijst.
 - **Recently done** staat standaard dichtgeklapt, toont 7 dagen en heeft Bring back.
 - **Automatisch afvinken:** een taak wordt afgevinkt zodra de vervolgactie is gedaan, in Droplet of daarbuiten. Daarbuiten alleen bij een duidelijke match. Undo kan altijd.
+
+### Layout C · Today-first split (5 okt 2026)
+Gekozen door Thomas: Today groot links; rechts een live overzicht (Waiting on, Elsewhere, Later, Hours reminders, Recently done) in plaats van Standing by. Een geopend item vervangt het overzicht.
+Kaarten verschuiven van Today naar Later (en terug) door te slepen; ook met de knop Later / Today en de toets m. Herschikken binnen Today kan door te slepen. Opgeslagen in db `places/<key>`, met Undo; overleeft reload en nieuwe ranking. Telefoon: Today eerst, daaronder het overzicht; slepen na lang indrukken.
