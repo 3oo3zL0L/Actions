@@ -110,7 +110,7 @@
       var p = Promise.resolve(rt.mcp.callTool(server, tool, input || {}, opts)).then(function (res) {
         rt.raw[tool] = U().shapeOf(res);
         if (res && res.isError) throw { code: "tool_error", message: U().clip(U().resultText(res), 200) || "The tool reported a failure.", result: res };
-        return res;
+        return U().clone(res); /* mcp results are frozen */
       }, function (e) {
         /* A tool failure rejects with code tool_error and the tool's own
            envelope on .result: prefer its words over a generic message. */
@@ -129,7 +129,7 @@
   rt.sampleJson = function (input, options, ms) {
     if (!rt.sample || typeof rt.sample.json !== "function") return Promise.reject({ code: "not_granted" });
     var p;
-    try { p = Promise.resolve(rt.sample.json(input, options)); } catch (e) { return Promise.reject(e); }
+    try { p = Promise.resolve(rt.sample.json(input, options)).then(function (v) { return U().clone(v); }); } catch (e) { return Promise.reject(e); }
     return rt.timeout(p, ms || cfg.sampleMs, "Claude");
   };
   function U() { return D.util; }

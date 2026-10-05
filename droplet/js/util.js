@@ -251,6 +251,14 @@
       .replace(/[^\s@<>"'(),;:]+@[^\s@<>"'(),;:]+/g, "[address]")
       .replace(/\b(?:https?:\/\/|www\.)[^\s"'<>]+/gi, "[link]"), 160);
   };
+  /* A private, mutable deep copy. The runtime hands out FROZEN objects (db
+     snapshots and their data(), mcp results, sample.json results): anything
+     Droplet changes later must be a copy. */
+  U.clone = function (v) {
+    if (v == null || typeof v !== "object") return v;
+    try { if (typeof structuredClone === "function") return structuredClone(v); } catch (e) { /* not cloneable: JSON below */ }
+    try { return JSON.parse(JSON.stringify(v)); } catch (e2) { return v; }
+  };
   U.clip = function (s, n) {
     s = String(s == null ? "" : s).replace(/\s+/g, " ").trim();
     return s.length > n ? s.slice(0, n - 1).trim() + "…" : s;

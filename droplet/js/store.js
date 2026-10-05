@@ -41,7 +41,8 @@
   function bodyOf(d) {
     if (!d || typeof d !== "object" || d.exists === false) return { skip: true };
     var v = typeof d.data === "function" ? d.data() : d.data;
-    if (v && typeof v === "object" && !Array.isArray(v)) return { v: v };
+    /* data() is frozen (db contract): the app gets its own copy. */
+    if (v && typeof v === "object" && !Array.isArray(v)) return { v: U().clone(v) };
     if (v === undefined && typeof d.data === "function") return { skip: true }; /* exists unknown, no body */
     return null;
   }
