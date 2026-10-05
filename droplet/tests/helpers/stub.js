@@ -158,6 +158,11 @@ function installDropletStub(cfg) {
   var tools = {
     get_me: function () { return result(JSON.stringify(cfg.me || { displayName: "Sam de Vries", mail: "sam.devries@planonsoftware.com", id: "u1" })); },
     outlook_email_search: function (input) {
+      /* A search by sender (the hours module's address fallback): cfg.senderSearch {"<sender>": [mail objects]}. */
+      if (input.sender && !input.folderName && !input.query) {
+        var bySender = (cfg.senderSearch || {})[input.sender] || [];
+        return result(bySender.map(function (o) { return JSON.stringify(o); }).join("") || "[]");
+      }
       var off = input.offset || 0, lim = input.limit || 10;
       var list = input.folderName === "Sent Items" ? sentList : mailList;
       var page = list.slice(off, off + lim).map(function (m, i) {
@@ -277,6 +282,14 @@ function installDropletStub(cfg) {
       created.push(input);
       return result("Event created.\nid: AAMkADinventedEvent" + created.length + "\nwebLink: https://outlook.office365.com/calendar/item/new" + created.length);
     },
+    /* People search (hours reminders): cfg.people {"<query>": [person objects] | "FAIL"}; like the
+       real tool, one JSON object per person, concatenated. */
+    search_people: function (input) {
+      var q = input.query;
+      var list = (cfg.people || {})[q];
+      if (list === "FAIL") throw err("tool_error", "Search failed");
+      return result((list || []).map(function (o) { return JSON.stringify(o); }).join("") || "[]");
+    },
     outlook_send_draft: function (input) {
       if (!drafts[input.messageId]) throw err("tool_error", "Draft not found");
       sent.push(input.messageId);
@@ -376,9 +389,11 @@ function installDropletStub(cfg) {
     },
     listTools: function () { return Promise.resolve({ servers: [] }); }
   };
-  if (cfg.eventSchema) mcp.describeTool = function (server, tool) {
+  if (cfg.eventSchema || cfg.peopleSchema) mcp.describeTool = function (server, tool) {
     calls.push({ kind: "describe", tool: tool });
-    return tool === "outlook_create_event" ? Promise.resolve({ name: tool, inputSchema: cfg.eventSchema }) : Promise.reject(err("not_in_manifest"));
+    if (tool === "outlook_create_event" && cfg.eventSchema) return Promise.resolve({ name: tool, inputSchema: cfg.eventSchema });
+    if (tool === "search_people" && cfg.peopleSchema) return Promise.resolve(deepFreeze({ name: tool, inputSchema: JSON.parse(JSON.stringify(cfg.peopleSchema)) }));
+    return Promise.reject(err("not_in_manifest"));
   };
 
   /* ---------- sample ---------- */

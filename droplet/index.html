@@ -1,12 +1,14 @@
 <title>Droplet</title>
 <!-- Publish: declare the Microsoft 365 tools get_me, outlook_email_search, read_resource,
      outlook_create_reply_draft, outlook_create_draft, outlook_send_draft,
-     outlook_create_event, chat_message_search and outlook_calendar_search, and the
+     outlook_create_event, chat_message_search, outlook_calendar_search and search_people, and the
      Atlassian Rovo tools atlassianUserInfo, getAccessibleAtlassianResources,
      searchJiraIssuesUsingJql, getJiraIssue, addCommentToJiraIssue,
      searchConfluenceUsingCql, getConfluencePage and updateConfluencePage.
      The create/send tools, addCommentToJiraIssue and updateConfluencePage write,
-     and only on a click. Droplet never posts in Teams.
+     and only on a click, with ONE exception asked for by Thomas: the weekly hours
+     reminder mails (js/hours.js) go out automatically. search_people finds their
+     addresses. Droplet never posts in Teams.
      The full capabilities JSON is in README.md. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -102,6 +104,7 @@
 <script src="js/rank.js"></script>
 <script src="js/atlassian.js"></script>
 <script src="js/send.js"></script>
+<script src="js/hours.js"></script>
 <script src="js/nextstep.js"></script>
 <script src="js/chat.js"></script>
 <script src="js/ask.js"></script>

@@ -802,3 +802,15 @@ html.has-sheet, html.has-sheet body { overflow: hidden; }
 @keyframes tick { from { transform: scale(0.4); opacity: 0; } 60% { transform: scale(1.2); opacity: 1; } to { transform: none; } }
 @keyframes flip { from { transform: translateY(-60%); opacity: 0; } to { transform: none; opacity: 1; } }
 @keyframes fold { from { max-height: 260px; opacity: 1; } to { max-height: 0; opacity: 0; margin-bottom: 0; padding-top: 0; padding-bottom: 0; border-width: 0; transform: translateX(12px); } }
+
+/* The weekly hours recap (js/hours.js) */
+.src[data-src="hours"] .ico { color: var(--accent); }
+.hr-card p { margin: 0 0 6px; overflow-wrap: anywhere; }
+.hr-card p:last-child { margin-bottom: 0; }
+.hr-card .muted { color: var(--muted); }
+.hr-list { list-style: none; margin: 0; padding: 0; }
+.hr-list li { display: flex; flex-wrap: wrap; gap: 2px 10px; padding: 6px 0; border-top: 1px solid var(--line-2); min-width: 0; }
+.hr-list li:first-child { border-top: 0; padding-top: 0; }
+.hr-n { font-weight: 500; }
+.hr-m { font-family: var(--f-meta); font-size: 12px; color: var(--muted); align-self: center; }
+.hr-why { flex-basis: 100%; color: var(--muted); font-size: 14px; overflow-wrap: anywhere; }

@@ -4,7 +4,7 @@
 (function (D) {
   "use strict";
   var U = D.util, rt = D.rt, store = D.store, mail = D.mail, rank = D.rank, flow = D.sendflow, chat = D.chat, teams = D.teams, meet = D.meet, mine = D.mine,
-    waits = D.waits, tx = D.tx, ns = D.ns, atl = D.atl, ask = D.ask;
+    waits = D.waits, tx = D.tx, ns = D.ns, atl = D.atl, ask = D.ask, hours = D.hours;
   var esc = U.esc, pad = U.pad;
   var FOCUS_MAX = 5;
 
@@ -24,6 +24,7 @@
     check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
     send: '<path d="M4 12 20 4l-5 16-3-7z"/><path d="m12 13 8-9"/>',
     clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+    hours: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
     warn: '<path d="M12 4 21 20H3z"/><path d="M12 10v4M12 17v.5"/>',
     arrowUp: '<path d="M12 20V5M6 11l6-6 6 6"/>',
     star: '<path d="m12 3.5 2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.8z"/>',
@@ -57,6 +58,7 @@
   function groupOf(it) {
     var g = rk(it).group;
     if (it.standstill) return 'now';
+    if (it.src === 'hours') return 'now'; /* the weekly hours recap: pinned to Today until Done */
     if (S.verdict[it.id] === 'up') return 'now';
     if (it.src === 'wait' && g === 'hidden') return 'later';
     if (it.src === 'mine') {
@@ -72,9 +74,10 @@
   /* Your own action due today or earlier, or just added and still being
      placed by Claude: shown at the top of Today (after R1 and ★). */
   function urgentMine(it) {
+    if (it.src === 'hours') return true;
     return it.src === 'mine' && (pinned(it) || S.verdict[it.id] !== 'down' && (!!(it.due && it.due <= mine.today()) || !!(S.fresh[it.id] && !it.r)));
   }
-  function pinned(it) { var a = it && it.src === 'mine' && S.actions[it.docId]; return !!(a && a.pinnedToday && !a.done); }
+  function pinned(it) { if (it && it.src === 'hours') return true; var a = it && it.src === 'mine' && S.actions[it.docId]; return !!(a && a.pinnedToday && !a.done); }
   function GI(g) { return g === 'now' ? 0 : g === 'later' ? 1 : 2; }
   function cmp(a, b) {
     var x, y;
@@ -124,7 +127,8 @@
   function alsoIn(it) {
     return S.items.filter(function (o) { return o !== it && rk(o).dupOf === it.id && o.src !== it.src; });
   }
-  var SRC = { mail: 'Mail', teams: 'Teams', mine: 'My action', wait: 'Waiting', meeting: 'Meeting', jira: 'Jira', confluence: 'Confluence' };
+  var SRC = { mail: 'Mail', teams: 'Teams', mine: 'My action', wait: 'Waiting', meeting: 'Meeting', jira: 'Jira', confluence: 'Confluence', hours: 'Hours' };
+  function isHours(it) { return it && it.src === 'hours'; }
   function isJira(it) { return it && it.src === 'jira'; }
   function isPage(it) { return it && it.src === 'confluence'; }
   function isMine(it) { return it && it.src === 'mine'; }
@@ -283,7 +287,7 @@
         '<span class="fi-title">' + esc(titleOf(it)) + '</span></span></div>' +
       '<div class="fi-act"><div class="done-line" data-done-line>' + ico('check') + esc(g.label) + '</div></div></li>';
   }
-  function srcKind(it) { return isTeams(it) ? 'teams' : isWait(it) ? 'wait' : fromMeeting(it) ? 'meeting' : isMine(it) ? 'mine' : isJira(it) ? 'jira' : isPage(it) ? 'confluence' : 'mail'; }
+  function srcKind(it) { return isHours(it) ? 'hours' : isTeams(it) ? 'teams' : isWait(it) ? 'wait' : fromMeeting(it) ? 'meeting' : isMine(it) ? 'mine' : isJira(it) ? 'jira' : isPage(it) ? 'confluence' : 'mail'; }
   function srcHTML(it) { var k = srcKind(it); return '<span class="src" data-src="' + k + '">' + ico(k) + esc(srcLabel(it)) + '</span>'; }
   function dueHTML(it) { return isMine(it) && it.due ? '<span class="flag" data-due>' + esc(mine.dueLabel(it.due)) + '</span>' : ''; }
   function meetingHTML(it) { return it.meeting ? '<span class="flag" data-meeting>Meeting ' + esc(it.meeting.hhmm) + '</span>' : ''; }
@@ -301,6 +305,7 @@
     return '';
   }
   function actHTML(it) {
+    if (isHours(it)) return ''; /* the recap has no action, only Done */
     if (waitingTeams(it.id)) return '<button class="btn-act is-wait" data-act="' + esc(it.id) + '" data-waiting>' + 'Waiting for you to send in Teams' + '</button>';
     if (isClosed(it.id)) return stateChip(it.id);
     return '<button class="btn-act" data-act="' + esc(it.id) + '">' + esc(rk(it).label) + '</button>';
@@ -966,6 +971,7 @@
     var it = S.cur && S.byId[S.cur];
     col.classList.toggle('is-idle', S.view !== 'item' || !it);
     if (S.view !== 'item' || !it) { out.innerHTML = emptyHTML(); return; }
+    if (isHours(it)) { out.innerHTML = hoursItemHTML(it); S.anim = false; return; }
     if (isWait(it)) { out.innerHTML = waitItemHTML(it); S.anim = false; return; }
     if (isJira(it)) { out.innerHTML = jiraItemHTML(it); S.anim = false; return; }
     if (isPage(it)) { out.innerHTML = pageItemHTML(it); S.anim = false; return; }
@@ -1017,6 +1023,33 @@
       '</div>' +
       '<div class="iv-bar">' + barHTML(it) + '</div>';
     S.anim = false;
+  }
+  /* The weekly hours recap (js/hours.js): what the Monday run did. Only Done. */
+  function hoursItemHTML(it) {
+    var top = topItems(), i = top.indexOf(it), n = i > -1 ? i + 1 : restItems().indexOf(it) + top.length + 1;
+    return '<div class="iv-head">' +
+        '<button class="btn-back" data-back aria-label="Back to the list">' + ico('back') + '<span class="lbl-phone">Back</span><span class="lbl-desk">Close</span></button>' +
+        '<span class="iv-crumb" aria-label="Location"><span class="c-sec">' + (i > -1 ? 'Today' : 'Everything else') + '</span><span class="sep" aria-hidden="true">›</span>' +
+          '<span class="c-n">#' + pad(n) + '</span><span class="sep" aria-hidden="true">›</span><b>Hours</b></span>' +
+        '<span class="kbd" aria-hidden="true">Esc</span>' +
+      '</div>' +
+      '<div class="iv-scroll' + (S.anim ? ' enter' : '') + '" data-hours-recap="' + esc(it.week) + '">' +
+        '<div class="iv-meta">' + srcHTML(it) + '<span class="sep" aria-hidden="true">·</span><span>Salesforce</span><span class="sep" aria-hidden="true">·</span><span>' + esc(U.when(it.received, new Date())) + '</span></div>' +
+        '<h2 class="iv-title" id="ivTitle" tabindex="-1">' + esc(titleOf(it)) + '</h2>' +
+        '<div class="iv-why"><span class="who" aria-hidden="true">' + ico('hours') + '</span><p>' + esc(it.r.why) + '</p></div>' +
+        hours.recapHTML(it.recap) +
+      '</div>' +
+      '<div class="iv-bar"><div class="quiet"></div><button class="btn-send" id="sendBtn" data-done-primary>' + ico('check') + 'Done</button></div>';
+  }
+  function hoursItems() {
+    if (!hours || !hours.state.loaded) return [];
+    return hours.recaps().map(function (x) {
+      var id = 'hours:' + x.week, old = S.byId[id];
+      var it = old && isHours(old) ? old : { id: id, src: 'hours' };
+      return Object.assign(it, { key: 'hours-' + x.week, week: x.week, recap: x, subject: 'Hours · week ' + hours.weekNr(x.week),
+        senderName: 'Salesforce', sender: '', summary: hours.summary(x), received: new Date(x.at).toISOString(),
+        r: { group: 'now', why: hours.summary(x), project: 'Salesforce', label: '', action: 'open' } });
+    });
   }
   function barHTML(it) {
     var st = sendState(it.id), locked = st.phase === 'sent', busy = st.phase === 'sending';
@@ -1298,7 +1331,7 @@
       if (j) { j.status = j.status || x.status; j.projectName = j.projectName || x.projectName; if (!j.project0) j.project0 = x.project0; return; }
       atlList.push(x);
     });
-    var all = S.srcMail.concat(S.srcTeams, S.jiraMail, atlList), doneIds = {};
+    var all = S.srcMail.concat(S.srcTeams, S.jiraMail, atlList, hoursItems()), doneIds = {};
     var items = all.filter(function (m) {
       var done = S.doneDb && S.doneDb[m.key] && !S.doneNow[m.id];
       /* A Jira item comes back when a newer notification arrives after your comment. */
@@ -1314,6 +1347,7 @@
     var wi = waitItemsNow(now);
     items = items.concat(wi.due); S.waitPre = wi.pre;
     items = items.filter(function (m) {
+      if (isHours(m)) return true; /* never ranked, never drafted */
       try { attach(m); return true; } catch (e) { noteError('attach ' + (m.src || '?'), e); return !!m.src; }
     });
     /* R8: an item merged into one that is done is done too. */
@@ -2839,7 +2873,7 @@
     if (S.view !== 'item' || !S.cur) return;
     /* d (Done) works from either pane and also after a send. */
     if (e.key === 'd') { e.preventDefault(); markDone(); return; }
-    if (S.pane !== 'item') return;
+    if (S.pane !== 'item' || isHours(S.byId[S.cur])) return;
     var ph = sendState(S.cur).phase;
     if (ph === 'sent' || ph === 'sending') return;
     if (e.key === 'c') { e.preventDefault(); toggleChat(); }
@@ -2860,5 +2894,6 @@
     renderStatus(); renderAskbar();
     checkPerms();
     load({ full: true });
+    if (hours) hours.start({ onChange: rebuild });
   });
 })(window.Droplet = window.Droplet || {});

@@ -5,12 +5,14 @@
    waits/<docId> (R3: your asks to others: open, answered or dismissed),
    asks/<msgKey> (R3: a sent message Claude already checked for asks),
    meetings/<eventKey> (R6: a meeting whose transcript was read, or "none"),
-   matches/<key> (a sent mail or meeting checked for whether it finished an open own action). */
+   matches/<key> (a sent mail or meeting checked for whether it finished an open own action),
+   hours/<reportId>, hours-sent/<week>~<nameKey>, hours-people/<nameKey> (js/hours.js: the
+   weekly Salesforce hours reports, the reminders sent, and the addresses found). */
 (function (D) {
   "use strict";
   var rt = D.rt;
   var store = D.store = { persistent: false, failed: false };
-  var mem = { rankings: {}, done: {}, sent: {}, feedback: {}, handoff: {}, actions: {}, waits: {}, asks: {}, meetings: {}, matches: {} };
+  var mem = { rankings: {}, done: {}, sent: {}, feedback: {}, handoff: {}, actions: {}, waits: {}, asks: {}, meetings: {}, matches: {}, hours: {}, "hours-sent": {}, "hours-people": {} };
   var chains = {};
   var KEEP_RANKINGS_DAYS = 14, KEEP_FEEDBACK = 200;
 
@@ -168,6 +170,9 @@
   store.setMeeting = function (key, d) { return set("meetings", key, d); };
   /* matches/<key>: a sent mail or a meeting Claude already checked against your open actions. */
   store.setMatch = function (key, d) { return set("matches", key, d); };
+  /* The hours module (js/hours.js) reads and writes its own collections. */
+  store.readColl = function (name) { return readAll(name); };
+  store.put = function (name, key, data) { return set(name, key, data); };
   store.setFeedback = function (key, f) { return set("feedback", key, f); };
   store.clearFeedback = function (key) { return del("feedback", key); };
 })(window.Droplet = window.Droplet || {});
