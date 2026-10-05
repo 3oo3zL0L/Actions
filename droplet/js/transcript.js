@@ -222,7 +222,7 @@
   };
   tx.extract = function (o) {
     if (!rt.sample || typeof rt.sample.json !== "function") return Promise.reject({ code: "not_granted" });
-    return rt.sample.json(tx.prompt(o), { modelTier: "default" }).then(function (a) {
+    return rt.sampleJson(tx.prompt(o), { modelTier: "default" }).then(function (a) {
       var v = tx.validate(a, o);
       if (!v) throw { code: "invalid_json" };
       return v;

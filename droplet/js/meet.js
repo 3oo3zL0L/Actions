@@ -73,7 +73,9 @@
 
   /* Today's meetings that still count. Resolves a list; rejects with the connector error. */
   meet.load = function (me, now) {
+    /* me may be a function: who you are when the answer arrives (get_me may still be on its way). */
     return rt.call("outlook_calendar_search", { query: "*", afterDateTime: "today", beforeDateTime: "tomorrow", limit: 25 }).then(function (res) {
+      if (typeof me === "function") me = me();
       return U.resultObjects(res).filter(function (o) { return o.start || o.subject !== undefined; })
         .map(function (o) { return meet.normalize(o, me, now); }).filter(Boolean)
         .sort(function (a, b) { return a.start - b.start; });

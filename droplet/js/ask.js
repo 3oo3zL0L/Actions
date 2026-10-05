@@ -332,7 +332,12 @@
     history.slice(-ask.HISTORY).forEach(function (m) { turns.push({ role: m.u ? "user" : "assistant", content: String(m.t).slice(0, 2000) }); });
     turns.push({ role: "user", content: text.slice(0, 2000) });
     var tools = toolDefs(it).map(function (d) { return wrap(d, c, it, budget, ctl); });
-    return rt.sample(turns, { tools: tools, modelTier: "default", cache: false, signal: ctl.signal }).then(function (res) {
+    /* Bounded like every call (a tool loop may take a while: twice the sample timeout); Stop aborts sooner. */
+    var p = Promise.resolve().then(function () { return rt.sample(turns, { tools: tools, modelTier: "default", cache: false, signal: ctl.signal }); });
+    return rt.timeout(p, rt.cfg.sampleMs * 2, "Claude").then(null, function (e) {
+      if (e && e.code === "timeout") { try { ctl.abort(); } catch (x) { /* ignore */ } }
+      throw e;
+    }).then(function (res) {
       if (res && res.truncated) return String(res.text || "") + " (cut short)";
       return res && res.text;
     });

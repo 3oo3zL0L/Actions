@@ -427,7 +427,7 @@
     var prompt = rank.buildPrompt(o);
     var opts = { modelTier: "default" };
     if (refresh) opts.cache = { gcTime: 300000, refresh: true };
-    return rt.sample.json(prompt, opts).then(function (answer) {
+    return rt.sampleJson(prompt, opts).then(function (answer) {
       var v = rank.validate(answer, o.items, rank.signName(o.me), (o.ranked || []).map(function (r) { return r.id; }).filter(Boolean));
       if (!v || !Object.keys(v.byId).length) throw { code: "invalid_json", message: "No usable items" };
       return v;
@@ -507,7 +507,7 @@
   };
   rank.askDraft = function (o) {
     if (!rt.sample || typeof rt.sample.json !== "function") return Promise.reject({ code: "not_granted" });
-    return rt.sample.json(rank.draftPrompt(o), { modelTier: "default" }).then(function (a) {
+    return rt.sampleJson(rank.draftPrompt(o), { modelTier: "default" }).then(function (a) {
       var t = a && typeof a === "object" && typeof a.draft === "string" ? a.draft : typeof a === "string" ? a : "";
       if (!t.trim()) throw { code: "invalid_json", message: "No draft" };
       return o.item.src === "teams" || o.item.src === "wait" || o.item.src === "jira" ? rank.normalizeChat(t.slice(0, MAX.draft), { sign: rank.signName(o.me) })

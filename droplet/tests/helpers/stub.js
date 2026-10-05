@@ -7,6 +7,37 @@ function installDropletStub(cfg) {
   var calls = window.__calls = [];
   var SERVER = "Microsoft 365";
   var faults = cfg.faults || {};
+  /* Short app timeouts for tests (window.__dropletConfig, read by runtime.js). */
+  if (cfg.dropletConfig) window.__dropletConfig = cfg.dropletConfig;
+  /* cfg.hang: {tools: true | [tool names], servers: [server names], sample: bool, dbGet: bool | [collections], use: [capability names]}.
+     A hanging call never settles (an unanswered consent prompt, a stalled connector). */
+  var hang = cfg.hang || {};
+  /* A test can make the next load hang (after a reload) through sessionStorage. */
+  try { var hs = sessionStorage.getItem("__droplet_stub_hang"); if (hs) hang = JSON.parse(hs); } catch (e) { /* ignore */ }
+  function never(signal) {
+    return new Promise(function (res, rej) {
+      if (signal && typeof signal.addEventListener === "function") signal.addEventListener("abort", function () { rej({ code: "cancelled", message: "cancelled" }); });
+    });
+  }
+  function hangs(server, tool) {
+    return hang.tools === true || (Array.isArray(hang.tools) && hang.tools.indexOf(tool) >= 0) || (Array.isArray(hang.servers) && hang.servers.indexOf(server) >= 0);
+  }
+  /* cfg.delays (smoke): {servers: {name: [minMs, maxMs]}, sample: [minMs, maxMs], consentMs}: a realistic answer time,
+     and the first call on each server waits consentMs longer (the consent prompt). */
+  var delays = cfg.delays || null, consentUntil = {};
+  function delayFor(server) {
+    if (!delays) return 0;
+    var r = server === "sample" ? delays.sample : (delays.servers || {})[server];
+    var d = r ? r[0] + Math.random() * (r[1] - r[0]) : 0;
+    /* Every call on a server waits for its consent, which the first call asks. */
+    var t = performance.now();
+    if (consentUntil[server] == null) consentUntil[server] = t + (delays.consentMs || 0);
+    return d + Math.max(0, consentUntil[server] - t);
+  }
+  function delayed(server, p) {
+    var d = delayFor(server);
+    return d ? new Promise(function (r) { setTimeout(r, d); }).then(function () { return p(); }) : p();
+  }
   function err(code, message, resultText) {
     var e = { code: code, message: message || code, retryable: code === "server_unavailable" || undefined };
     /* Like the runtime: a tool failure rejects with tool_error and the tool's own envelope on .result. */
@@ -245,6 +276,7 @@ function installDropletStub(cfg) {
   var issues = atl.issues || {}, pages = atl.pages || {}, jqlKeys = (atl.jql || []).slice();
   var atlLog = { comments: [], updates: [] };
   window.__stub.atl = atlLog;
+  window.__stub.setHang = function (h) { hang = h || {}; };
   window.__stub.setPage = function (id, html) { pages[id].html = html; pages[id].version = (pages[id].version || 1) + 1; };
   window.__stub.addIssueComment = function (key, c) { issues[key].comments = (issues[key].comments || []).concat([c]); };
   function needCloud(input) { if (input.cloudId !== CLOUD) throw err("tool_error", "Unknown cloudId"); }
@@ -312,6 +344,11 @@ function installDropletStub(cfg) {
   var mcp = {
     callTool: function (server, tool, input, options) {
       calls.push({ kind: "mcp", server: server, tool: tool, input: JSON.parse(JSON.stringify(input || {})), t: performance.now() });
+      if (hangs(server, tool)) return never(options && options.signal);
+      if (delays) return delayed(server, function () { return mcp.callNow(server, tool, input, options); });
+      return mcp.callNow(server, tool, input, options);
+    },
+    callNow: function (server, tool, input) {
       if (server === ATL) {
         if (cfg.noAtlassian || !atlTools[tool]) return Promise.reject(err(cfg.noAtlassian || "not_in_manifest"));
         var fa = fault(tool);
@@ -362,7 +399,12 @@ function installDropletStub(cfg) {
     return { draft: "Hi " + (from ? from[1] : "there") + ",\n\nThanks, noted. I will come back to you on this.\n\nKR\nSam" };
   }
   function answer(input, options, asJson) {
-    calls.push({ kind: "sample", json: asJson, input: JSON.parse(JSON.stringify(input)), options: options ? JSON.parse(JSON.stringify(options)) : null });
+    calls.push({ kind: "sample", json: asJson, input: JSON.parse(JSON.stringify(input)), options: options ? JSON.parse(JSON.stringify(Object.assign({}, options, { signal: undefined }))) : null });
+    if (hang.sample) return never(options && options.signal);
+    if (delays) return delayed("sample", function () { return answerNow(input, options, asJson); });
+    return answerNow(input, options, asJson);
+  }
+  function answerNow(input, options, asJson) {
     var prompt = typeof input === "string" ? input : input.map(function (t) { return t.content; }).join("\n");
     var isDraft = /You draft one (email|Teams chat) reply|You draft one Teams chat chase for|You draft one Jira comment/.test(prompt) && !/<<<ACTION>>>/.test(prompt);
     var extra = isDraft ? cfg.draftDelay || 0 : /You rank unread email/.test(prompt) ? cfg.rankDelay || 0 : 0;
@@ -459,6 +501,13 @@ function installDropletStub(cfg) {
       path: path,
       doc: function (id) { return docRef(path + "/" + (id || ("auto" + Math.random().toString(36).slice(2)))); },
       get: function () {
+        calls.push({ kind: "db", op: "list", path: path });
+        if (hang.dbGet === true || (Array.isArray(hang.dbGet) && hang.dbGet.indexOf(path) >= 0)) return never();
+        var self = this;
+        if (hang.dbDelayMs) return new Promise(function (r) { setTimeout(r, hang.dbDelayMs); }).then(function () { return self.getNow(); });
+        return this.getNow();
+      },
+      getNow: function () {
         var docs = Object.keys(data).filter(function (k) { return k.indexOf(path + "/") === 0 && k.split("/").length === path.split("/").length + 1; })
           .sort().map(function (k) { return snap(k.split("/").pop(), data[k]); });
         return Promise.resolve({ docs: docs, size: docs.length, empty: !docs.length, docChanges: function () { return []; }, metadata: {} });
@@ -467,9 +516,29 @@ function installDropletStub(cfg) {
   }
   var db = { doc: docRef, collection: colRef };
 
-  var caps = { mcp: cfg.noMcp ? null : mcp, sample: cfg.noSample ? null : sample, db: cfg.noDb ? null : db };
+  /* ---------- permissions (built in): cfg.permissions is the state() map; absent → no capability ---------- */
+  var permMap = cfg.permissions ? JSON.parse(JSON.stringify(cfg.permissions)) : null;
+  var permissions = permMap && {
+    state: function (name) {
+      calls.push({ kind: "perm", op: "state", name: name || null });
+      if (name) return Promise.resolve(permMap[name] || "unavailable");
+      return Promise.resolve(JSON.parse(JSON.stringify(permMap)));
+    },
+    request: function (names) {
+      calls.push({ kind: "perm", op: "request", names: names ? names.slice() : null });
+      var after = cfg.permAfterRequest || {};
+      (names || Object.keys(permMap)).forEach(function (n) { if (permMap[n] === "prompt") permMap[n] = after[n] || "granted"; });
+      Object.keys(permMap).forEach(function (k) { if (k.indexOf("mcp:") === 0 && permMap[k] === "prompt" && (!names || names.indexOf("mcp") >= 0)) permMap[k] = after[k] || "granted"; });
+      return Promise.resolve(JSON.parse(JSON.stringify(permMap)));
+    }
+  };
+
+  var caps = { mcp: cfg.noMcp ? null : mcp, sample: cfg.noSample ? null : sample, db: cfg.noDb ? null : db, permissions: permissions || null };
   window.claude = Object.freeze({
-    use: function (name) { return new Promise(function (res) { setTimeout(function () { res(caps[name] || null); }, 0); }); }
+    use: function (name) {
+      if (Array.isArray(hang.use) && hang.use.indexOf(name) >= 0) return never();
+      return new Promise(function (res) { setTimeout(function () { res(caps[name] || null); }, 0); });
+    }
   });
 }
 module.exports = { installDropletStub: installDropletStub };

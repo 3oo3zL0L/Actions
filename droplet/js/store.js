@@ -23,25 +23,42 @@
   }
   function readAll(name) {
     if (!db()) return Promise.resolve(mem[name]);
-    return db().collection(name).get().then(function (snap) {
+    return Promise.resolve().then(function () { return db().collection(name).get(); }).then(function (snap) {
       var out = {};
       (snap && snap.docs || []).forEach(function (d) { var v = d.data && d.data(); if (v) out[d.id] = v; });
       return out;
     });
   }
-
-  store.loadAll = function () {
+  var NAMES = ["rankings", "done", "feedback", "sent", "handoff", "actions", "waits", "asks", "meetings"];
+  function build(got) {
+    var r = got.map(function (g) { return g.v; }), failed = [], err = null, timedOut = false;
+    got.forEach(function (g, i) { if (!g.ok) { failed.push(NAMES[i]); err = err || g.e; if (g.e && g.e.code === "timeout") timedOut = true; } });
+    var fb = Object.keys(r[2]).map(function (k) { var v = Object.assign({}, r[2][k]); v.key = k; return v; })
+      .sort(function (a, b) { return String(b.at || "").localeCompare(String(a.at || "")); });
+    /* Prune only after a complete read. */
+    if (!failed.length) { prune(r[0], fb, r[3], r[4]); pruneScan(r[7], r[8]); }
+    else store.failed = true;
+    return { rankings: r[0], done: r[1], feedback: fb, sent: r[3], handoff: r[4], actions: r[5], waits: r[6], asks: r[7], meetings: r[8],
+      ok: !failed.length, failed: failed, timedOut: timedOut,
+      error: err ? { code: String(err.code || "unavailable"), message: String(err.message || "") } : null };
+  }
+  /* Everything Droplet remembers. Each collection on its own, each bounded
+     by cfg.storeMs: one that can't be read (or never answers) doesn't hide
+     the others, your own actions above all. Never rejects. When some read
+     timed out, .late resolves the complete result if they all do arrive. */
+  store.loadAll = function (ms) {
     store.persistent = !!db();
-    return Promise.all([readAll("rankings"), readAll("done"), readAll("feedback"), readAll("sent"), readAll("handoff"), readAll("actions"),
-      readAll("waits"), readAll("asks"), readAll("meetings")]).then(function (r) {
-      var fb = Object.keys(r[2]).map(function (k) { var v = Object.assign({}, r[2][k]); v.key = k; return v; })
-        .sort(function (a, b) { return String(b.at || "").localeCompare(String(a.at || "")); });
-      prune(r[0], fb, r[3], r[4]);
-      pruneScan(r[7], r[8]);
-      return { rankings: r[0], done: r[1], feedback: fb, sent: r[3], handoff: r[4], actions: r[5], waits: r[6], asks: r[7], meetings: r[8], ok: true };
-    }, function () {
-      store.failed = true;
-      return { rankings: {}, done: {}, feedback: [], sent: {}, handoff: {}, actions: {}, waits: {}, asks: {}, meetings: {}, ok: false };
+    ms = ms || rt.cfg.storeMs;
+    var raw = NAMES.map(function (n) { return readAll(n); });
+    return Promise.all(raw.map(function (p, i) {
+      return rt.timeout(p, ms, "Reading " + NAMES[i]).then(function (v) { return { ok: true, v: v || {} }; }, function (e) { return { ok: false, v: {}, e: e }; });
+    })).then(function (got) {
+      var out = build(got);
+      if (out.timedOut) {
+        out.late = Promise.all(raw).then(function (all) { return build(all.map(function (v) { return { ok: true, v: v || {} }; })); });
+        out.late.catch(function () { /* never arrived complete */ });
+      }
+      return out;
     });
   };
   function prune(rankings, fb, sent, handoff) {

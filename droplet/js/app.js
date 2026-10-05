@@ -161,16 +161,33 @@
   function renderStatus() {
     var m = S.mcpOk, cl = !!rt.sample;
     $('status').innerHTML =
+      '<button class="dots" id="diagBtn" data-diag aria-expanded="' + (S.diagOpen ? 'true' : 'false') + '" aria-controls="diag" title="Show connection details">' +
       '<span data-dot="m365"><i' + (m === false ? ' class="off"' : '') + '></i>M365 link</span>' +
       '<span data-dot="teams"><i' + (S.teamsOk === false || m === false && S.teamsOk !== true ? ' class="off"' : '') + '></i>Teams</span>' +
       '<span data-dot="atlassian"><i' + (S.atlOk === false ? ' class="off"' : '') + '></i>Atlassian</span>' +
-      '<span><i' + (cl ? '' : ' class="off"') + '></i>Claude</span>' +
+      '<span><i' + (cl ? '' : ' class="off"') + '></i>Claude</span></button>' +
       '<button class="sync" id="syncBtn" data-sync aria-label="Sync mail now">Sync ' + (S.syncAt ? U.hhmm(S.syncAt) : '··:··') + '</button>' +
       '<span>Nothing sends without you</span>';
     $('dateLine').textContent = U.dateLine(new Date());
   }
+  /* What is still on its way, for the empty list: "Loading mail and Teams…". */
+  function stillLoading() {
+    if (!rt.inited) return 'Starting…';
+    var names = { saved: 'saved items', mail: 'mail', teams: 'Teams', atl: 'Jira and Confluence' };
+    var w = Object.keys(names).filter(function (k) { return S.src && S.src[k] && S.src[k].state === 'loading'; }).map(function (k) { return names[k]; });
+    if (!w.length) return S.loaded || !S.loading ? '' : 'Loading…';
+    return 'Loading ' + (w.length > 1 ? w.slice(0, -1).join(', ') + ' and ' + w[w.length - 1] : w[0]) + '…';
+  }
   function renderNotes() {
     var h = '';
+    var pn = permNote();
+    if (pn) h += '<p class="note-line" data-note="perm">' + ico(pn.kind === 'denied' ? 'warn' : 'clock') + '<span>' + esc(pn.text) + '</span>' +
+      (pn.kind === 'prompt' ? '<button data-perm-allow>Allow</button>' : '') + '</p>';
+    /* A section still on its way says so on its own line; it becomes its
+       content or its own note when it settles (each source has a timeout). */
+    Object.keys(LOADING_TEXT).forEach(function (k) {
+      if (S.src && S.src[k] && S.src[k].state === 'loading' && (S.items.length || k !== 'saved')) h += '<p class="note-line is-loading" data-loading="' + k + '">' + ico('clock') + '<span>' + esc(LOADING_TEXT[k]) + '</span></p>';
+    });
     function line(key, text, retry) {
       h += '<p class="note-line" data-note="' + key + '">' + ico('clock') + '<span>' + esc(text) + '</span>' +
         (retry ? '<button data-retry="' + key + '">Try again</button>' : '') + '</p>';
@@ -183,7 +200,7 @@
     if (S.ranking) line('ranking', 'Claude is ranking ' + S.ranking + noun + (S.ranking === 1 ? '' : 's') + '…', false);
     else if (S.notes.rank) line('rank', S.notes.rank, true);
     if (S.notes.waits) line('waits', S.notes.waits, false);
-    if (S.notes.store) line('store', S.notes.store, false);
+    if (S.notes.store) line('store', S.notes.store, S.notes.store === 'Couldn’t load your saved items.');
     $('notes').innerHTML = h;
   }
   function renderHeader() {
@@ -236,7 +253,7 @@
         '<div class="fi-act">' + actHTML(it) + '</div>' +
       '</li>';
     });
-    if (!items.length) h = S.loading && !S.loaded ? '<li class="loading-line">Loading mail and chats…</li>' : '<li class="allclear">All clear. Nothing needs you right now.</li>';
+    if (!items.length) h = stillLoading() ? '<li class="loading-line">' + esc(stillLoading()) + '</li>' : '<li class="allclear">All clear. Nothing needs you right now.</li>';
     $('focus').innerHTML = h;
   }
   function renderRest() {
@@ -862,122 +879,360 @@
     S.toastTimer = setTimeout(function () { $('toastHost').innerHTML = ''; S.undo = null; }, 8000);
   }
 
-  /* ---------------- Loading and ranking ---------------- */
-  var loadSeq = 0;
-  /* Mail and Teams load side by side; a failing source keeps its last items
-     and shows one quiet line of its own. Today's calendar (R5) is read only
-     when there are open items, before ranking, so Claude sees the meetings. */
+  /* ---------------- Loading: saved state first, then each source on its own ----------------
+     What Droplet remembers (your own actions, waits, cached rankings) is
+     shown as soon as it is read. Mail, Teams, Atlassian, the calendar and
+     get_me each update the list when they arrive; each is bounded by a
+     timeout, so a consent prompt nobody answers or a stalled connector
+     turns into one quiet line of its own and never blocks the rest. */
+  var CORE = ['saved', 'me', 'mail', 'teams', 'atl', 'cal'];
+  var SRC_NAME = { saved: 'Saved items', me: 'Your profile', mail: 'Mail', teams: 'Teams', atl: 'Jira and Confluence', cal: 'Calendar',
+    waits: 'Waiting on others', tx: 'Meeting transcripts', rank: 'Claude ranking', perms: 'Permissions' };
+  var LOADING_TEXT = { saved: 'Loading your saved items…', mail: 'Loading mail…', teams: 'Loading Teams chats…', atl: 'Loading Jira and Confluence…' };
+  S.src = {}; S.srcMail = []; S.srcTeams = []; S.jiraRaw = null; S.jiraFirst = null; S.calWanted = false; S.savedOk = false;
+  function srcState(k) { return S.src[k] || (S.src[k] = { state: 'idle', code: '', at: null, err: '', errAt: null, seq: 0, note: '' }); }
+  function busy(k) { return srcState(k).state === 'loading'; }
+  function coreBusy() { return CORE.some(busy) || (S.calWanted && S.items.length > 0); }
+  function setSrc(k, state, e) {
+    var s = srcState(k);
+    s.state = state; s.at = new Date();
+    s.code = e ? String(e.code || 'error') : '';
+    if (e) { s.err = U.redact(e.message || e.code || ''); s.errAt = s.at; }
+    S.loading = CORE.some(busy);
+    if (S.diagOpen) renderDiag();
+  }
+  /* Runs one source, bounded by ms. Resolves {ok, r} | {ok: false, e} |
+     {stale: true} when a newer run of the same source started meanwhile. */
+  function run(k, make, ms) {
+    var s = srcState(k), seq = ++s.seq, p;
+    setSrc(k, 'loading');
+    try { p = Promise.resolve(make()); } catch (e) { p = Promise.reject(e); }
+    return rt.timeout(p, ms, SRC_NAME[k]).then(function (v) {
+      if (seq !== s.seq) return { stale: true };
+      setSrc(k, 'ok'); return { ok: true, r: v };
+    }, function (e) {
+      if (seq !== s.seq) return { stale: true };
+      e = e && typeof e === 'object' ? e : { code: 'upstream_error', message: String(e || '') };
+      setSrc(k, e.code === 'timeout' ? 'timeout' : 'error', e); return { ok: false, e: e };
+    });
+  }
+
   function load(opts) {
     opts = opts || {};
-    var seq = ++loadSeq, now = new Date();
-    S.loading = true; renderList();
-    var me = S.me ? Promise.resolve(S.me) : mail.getMe();
-    var saved = S.loaded && !opts.full ? Promise.resolve(null) : store.loadAll();
-    var inbox = mail.loadInbox(now).then(function (r) { return { ok: true, r: r }; }, function (e) { return { ok: false, e: e }; });
-    var chats = me.then(function (who) {
-      if (!who || !who.mail) return { ok: false, e: { code: 'no_me' } };
-      return teams.load(who, now, mail.meDomain ? [mail.meDomain] : []).then(function (r) { return { ok: true, r: r }; }, function (e) { return { ok: false, e: e }; });
+    var now = new Date();
+    if (opts.full || !S.savedOk) startSaved();
+    startMe();
+    startMail(now); startTeams(now); startAtl();
+    S.calWanted = true;
+    rebuild();
+  }
+  /* One source again (Try again on its line). */
+  function reloadSource(k) {
+    var now = new Date();
+    if (k === 'store') return startSaved();
+    if (k === 'mail') { startMail(now); S.calWanted = true; }
+    if (k === 'teams') { if (!S.me) startMe(); startTeams(now); }
+    if (k === 'atl') startAtl();
+    rebuild();
+  }
+
+  function startSaved() {
+    var late = null;
+    run('saved', function () {
+      return store.loadAll().then(function (r) {
+        applySaved(r);
+        late = r.late || null;
+        if (!r.ok) throw r.error || { code: 'unavailable', message: 'Some saved items could not be read.' };
+        return r;
+      });
+    }, rt.cfg.storeMs + 2000).then(function (x) {
+      if (x.stale) return;
+      if (late) late.then(function (full) {
+        /* The read that timed out arrived after all. */
+        applySaved(full); setSrc('saved', 'ok'); arrived();
+      }, function () { /* never arrived */ });
+      arrived();
     });
-    var cal = { ok: true, r: S.meetings };
-    var atlas = atl.load().then(function (r) { return { ok: true, r: r }; }, function (e) { return { ok: false, e: e }; });
-    return Promise.all([me, saved, inbox, chats, atlas]).then(function (res) {
-      if (seq !== loadSeq) return null;
-      S.me = res[0] || S.me;
-      if (res[1]) {
-        S.rankings = res[1].rankings; S.doneDb = res[1].done; S.feedback = res[1].feedback; S.sentDb = res[1].sent || {};
-        S.handoffDb = res[1].handoff || {};
-        /* Actions added while this was loading stay. */
-        S.actions = Object.assign({}, res[1].actions || {}, S.actions);
-        S.waits = Object.assign({}, res[1].waits || {}, S.waits);
-        S.asksDb = Object.assign({}, res[1].asks || {}, S.asksDb);
-        S.meetingsDb = Object.assign({}, res[1].meetings || {}, S.meetingsDb);
-        S.verdict = {};
-        S.feedback.forEach(function (f) { if (f.msgId && !S.verdict[f.msgId]) S.verdict[f.msgId] = f.verdict; });
-        if (!res[1].ok) S.notes.store = 'Couldn’t read what Droplet remembers; ranking and done marks start fresh.';
-        else if (!rt.db) S.notes.store = 'Droplet can’t save here, so done marks and ranking reset when you reload.';
-      }
-      var inb = res[2], ch = res[3], ar = res[4];
-      var mailItems = S.items.filter(function (m) { return m.src === 'mail'; });
-      var teamItems = S.items.filter(function (m) { return m.src === 'teams'; });
-      if (inb.ok) {
-        S.mcpOk = true; S.notes.mail = null; S.syncAt = new Date();
-        mailItems = inb.r.items;
-      } else {
-        S.mcpOk = false;
-        S.notes.mail = rt.mcpCopy(inb.e, 'your Outlook mail');
-      }
-      if (ch.ok) {
-        S.teamsOk = true; S.notes.teams = null;
-        teamItems = ch.r;
-        if (inb.ok) S.syncAt = new Date();
-      } else {
-        S.teamsOk = false;
-        /* The same failure as mail (no connector at all) needs no second line. */
-        var same = !inb.ok && inb.e && ch.e && (inb.e.code === ch.e.code || ch.e.code === 'no_me');
-        S.notes.teams = same ? null : ch.e && ch.e.code === 'no_me' ? 'Couldn’t tell which Teams messages are yours, so Teams is left out for now.' : teamsCopy(ch.e);
-      }
-      /* Jira: notification mails about a mention or a standstill (from Outlook), and
-         Jira and Confluence searches (from Atlassian). One item per issue key. */
-      if (inb.ok) {
-        var first = U.firstName((S.me || {}).displayName);
-        S.jiraMail = atl.fromMails((inb.r.jira || []).filter(function (m) { return !!atl.jiraKind(m, first); }), first);
-      }
-      if (ar.ok) { S.atlOk = true; S.notes.atl = null; S.atlItems = ar.r.jql.concat(ar.r.pages); }
-      else {
-        S.atlOk = false;
-        var sameA = !inb.ok && inb.e && ar.e && inb.e.code === ar.e.code;
-        S.notes.atl = sameA ? null : atlCopy(ar.e);
-      }
-      var byIssue = {}, atlList = [];
-      S.jiraMail.forEach(function (j) { byIssue[j.issueKey] = j; });
-      S.atlItems.forEach(function (x) {
-        var j = x.src === 'jira' && byIssue[x.issueKey];
-        if (j) { j.status = j.status || x.status; j.projectName = j.projectName || x.projectName; if (!j.project0) j.project0 = x.project0; return; }
-        atlList.push(x);
+  }
+  function applySaved(r) {
+    if (!r) return;
+    S.rankings = Object.assign({}, r.rankings || {}, S.rankings);
+    S.doneDb = Object.assign({}, r.done || {}, S.doneDb || {});
+    S.sentDb = Object.assign({}, r.sent || {}, S.sentDb || {});
+    S.handoffDb = Object.assign({}, r.handoff || {}, S.handoffDb || {});
+    /* Actions added while this was loading stay. */
+    S.actions = Object.assign({}, r.actions || {}, S.actions);
+    S.waits = Object.assign({}, r.waits || {}, S.waits);
+    S.asksDb = Object.assign({}, r.asks || {}, S.asksDb);
+    S.meetingsDb = Object.assign({}, r.meetings || {}, S.meetingsDb);
+    var have = {};
+    S.feedback.forEach(function (f) { have[f.key] = 1; });
+    S.feedback = S.feedback.concat((r.feedback || []).filter(function (f) { return !have[f.key]; }));
+    var v = {};
+    S.feedback.forEach(function (f) { if (f.msgId && !v[f.msgId]) v[f.msgId] = f.verdict; });
+    S.verdict = Object.assign(v, S.verdict);
+    if (r.ok) S.savedOk = true;
+  }
+
+  /* get_me. When it fails, the Atlassian account's email stands in (Teams
+     and waits need to know which messages are yours); without either,
+     Droplet runs with fewer features. */
+  function startMe() {
+    if (S.me && S.meFrom === 'm365' && !busy('me')) return;
+    S.meP = run('me', mail.getMe, rt.cfg.callMs).then(function (x) {
+      if (x.stale) return S.me;
+      if (x.ok && x.r) { setMe(x.r, 'm365'); return S.me; }
+      var am = atl.me ? Promise.resolve(atl.me) : atl.pending() ? rt.timeout(atl.pending(), Math.min(5000, rt.cfg.callMs)).then(null, function () { return null; }) : Promise.resolve(null);
+      return am.then(function (a) {
+        if (a && a.email && !(S.me && S.meFrom === 'm365')) setMe({ mail: a.email, displayName: a.name || '' }, 'atlassian');
+        return S.me;
       });
-      var all = mailItems.concat(teamItems, S.jiraMail, atlList), doneIds = {};
-      var items = all.filter(function (m) {
-        var done = S.doneDb && S.doneDb[m.key] && !S.doneNow[m.id];
-        /* A Jira item comes back when a newer notification arrives after your comment. */
-        if (done && m.src === 'jira' && Date.parse(m.received) > (Date.parse(S.doneDb[m.key].at || '') || 0)) done = false;
-        if (done) doneIds[m.id] = 1;
-        return !done;
+    });
+    S.meP.then(arrived);
+  }
+  function setMe(me, from) {
+    S.me = me; S.meFrom = from;
+    mail.meDomain = U.domainOf(me.mail);
+    mail.meFirst = U.firstName(me.displayName);
+  }
+  function meReady() { return S.me && S.meFrom === 'm365' || !S.meP ? Promise.resolve(S.me) : S.meP; }
+
+  function startMail(now) {
+    run('mail', function () { return mail.loadInbox(now); }, rt.cfg.pageMs).then(function (x) {
+      if (x.stale) return;
+      if (x.ok) { S.mcpOk = true; S.syncAt = new Date(); S.srcMail = x.r.items; S.jiraRaw = x.r.jira || []; S.jiraFirst = null; S.mailErr = null; }
+      else { S.mcpOk = false; S.mailErr = x.e; }
+      arrived();
+    });
+  }
+  function startTeams(now) {
+    run('teams', function () {
+      return teams.load(meReady(), now, function () { return mail.meDomain ? [mail.meDomain] : []; });
+    }, rt.cfg.pageMs).then(function (x) {
+      if (x.stale) return;
+      if (x.ok) { S.teamsOk = true; S.srcTeams = x.r; S.teamsErr = null; if (srcState('mail').state === 'ok') S.syncAt = new Date(); }
+      else { S.teamsOk = false; S.teamsErr = x.e; }
+      arrived();
+    });
+  }
+  function startAtl() {
+    run('atl', atl.load, rt.cfg.pageMs).then(function (x) {
+      if (x.stale) return;
+      if (x.ok) { S.atlOk = true; S.atlItems = x.r.jql.concat(x.r.pages); S.atlErr = null; }
+      else { S.atlOk = false; S.atlErr = x.e; }
+      arrived();
+    });
+  }
+  /* Today's calendar (R5): read once per sync, only when there are open
+     items. Your own address is left out once get_me is known. */
+  function maybeStartCal() {
+    if (!S.calWanted || !S.items.length) return;
+    S.calWanted = false;
+    var now = new Date();
+    run('cal', function () { return meet.load(function () { return S.me; }, now); }, rt.cfg.callMs + 1000).then(function (x) {
+      if (x.stale) return;
+      if (x.ok) { S.meetings = x.r || []; S.notes.cal = null; }
+      else S.notes.cal = 'Couldn’t read today’s calendar, so meetings aren’t weighed this time.';
+      arrived();
+    });
+  }
+
+  /* A source settled: show what we have; when nothing is pending any more,
+     rank and scan. */
+  function arrived() {
+    rebuild();
+    if (!coreBusy()) finish(); else scheduleRank();
+  }
+  function finish() {
+    var keep = {};
+    S.items.forEach(function (m) { keep[m.id] = 1; });
+    Object.keys(S.doneNow).forEach(function (id) { if (!keep[id]) delete S.doneNow[id]; });
+    /* R4 for Teams: once your own message is in the chat, the chat is no
+       longer an item. Only judged on a Teams read that worked. */
+    if (srcState('teams').state === 'ok') Object.keys(S.handoff).forEach(function (id) {
+      var it = S.byId[id];
+      if (!it || it.key !== S.handoff[id].key) {
+        if (S.handoff[id].key) { store.clearHandoff(S.handoff[id].key); if (S.handoffDb) delete S.handoffDb[S.handoff[id].key]; }
+        delete S.handoff[id];
+      }
+    });
+    S.loading = false; S.loaded = true;
+    clearTimeout(S.rankTimer); S.rankTimer = null;
+    renderAllKeepFocus();
+    rankNew(false);
+    scan();
+    checkPerms();
+  }
+  /* Ranking runs on what has arrived, once the saved rankings are in (so
+     cached items keep their place) and today's calendar is read. */
+  function rankReady() { return !busy('saved') && !busy('cal') && !(S.calWanted && S.items.length); }
+  function scheduleRank() {
+    clearTimeout(S.rankTimer);
+    S.rankTimer = setTimeout(function () { S.rankTimer = null; if (rankReady()) rankNew(false); }, rt.cfg.rankDebounceMs);
+  }
+
+  /* The list from every source's latest data. Items keep their objects
+     where they can (a draft, a re-rank flag, the open item). */
+  function rebuild() {
+    var now = new Date();
+    var first = U.firstName((S.me || {}).displayName);
+    if (S.jiraRaw && S.jiraFirst !== first) {
+      S.jiraFirst = first;
+      S.jiraMail = atl.fromMails(S.jiraRaw.filter(function (m) { return !!atl.jiraKind(m, first); }), first);
+    }
+    /* Jira: notification mails about a mention or a standstill (from Outlook), and
+       Jira and Confluence searches (from Atlassian). One item per issue key. */
+    var byIssue = {}, atlList = [];
+    S.jiraMail.forEach(function (j) { byIssue[j.issueKey] = j; });
+    S.atlItems.forEach(function (x) {
+      var j = x.src === 'jira' && byIssue[x.issueKey];
+      if (j) { j.status = j.status || x.status; j.projectName = j.projectName || x.projectName; if (!j.project0) j.project0 = x.project0; return; }
+      atlList.push(x);
+    });
+    var all = S.srcMail.concat(S.srcTeams, S.jiraMail, atlList), doneIds = {};
+    var items = all.filter(function (m) {
+      var done = S.doneDb && S.doneDb[m.key] && !S.doneNow[m.id];
+      /* A Jira item comes back when a newer notification arrives after your comment. */
+      if (done && m.src === 'jira' && Date.parse(m.received) > (Date.parse(S.doneDb[m.key].at || '') || 0)) done = false;
+      if (done) doneIds[m.id] = 1;
+      return !done;
+    });
+    Object.keys(S.actions).forEach(function (docId) {
+      var a = S.actions[docId], old = S.byId['mine:' + docId];
+      var it = syncAction(old && isMine(old) ? old : mine.toItem(docId, a));
+      if (a.done) doneIds[it.id] = 1; else items.push(it);
+    });
+    var wi = waitItemsNow(now);
+    items = items.concat(wi.due); S.waitPre = wi.pre;
+    items.forEach(attach);
+    /* R8: an item merged into one that is done is done too. */
+    items = items.filter(function (m) { return !(m.r && m.r.dupOf && doneIds[m.r.dupOf]); });
+    S.items = items;
+    S.byId = {}; S.items.forEach(function (m) { S.byId[m.id] = m; });
+    S.waitPre.forEach(function (m) { S.byId[m.id] = m; });
+    computeNotes();
+    maybeStartCal();
+    renderAllKeepFocus();
+  }
+  /* Each source's own quiet line. The same failure as mail (no connector at
+     all) needs no second line. */
+  function computeNotes() {
+    var ms = srcState('mail').state, mailBad = ms === 'error' || ms === 'timeout';
+    S.notes.mail = mailBad ? rt.mcpCopy(S.mailErr, 'your Outlook mail') : null;
+    var ts = srcState('teams').state, te = S.teamsErr;
+    if ((ts === 'error' || ts === 'timeout') && te) {
+      var same = mailBad && S.mailErr && (S.mailErr.code === te.code && te.code !== 'timeout' || te.code === 'no_me');
+      S.notes.teams = same ? null : te.code === 'no_me' ? 'Couldn’t tell which Teams messages are yours, so Teams is left out for now.' : teamsCopy(te);
+    } else S.notes.teams = null;
+    var as = srcState('atl').state, ae = S.atlErr;
+    if ((as === 'error' || as === 'timeout') && ae) {
+      var sameA = mailBad && S.mailErr && S.mailErr.code === ae.code && ae.code !== 'timeout';
+      S.notes.atl = sameA ? null : atlCopy(ae);
+    } else S.notes.atl = null;
+    var ss = srcState('saved').state;
+    if (ss === 'error' || ss === 'timeout') S.notes.store = 'Couldn’t load your saved items.';
+    else if (ss === 'ok' && !rt.db) S.notes.store = 'Droplet can’t save here, so done marks and ranking reset when you reload.';
+    else if (ss === 'ok' && S.notes.store === 'Couldn’t load your saved items.') S.notes.store = null;
+  }
+
+  /* ---------------- Permissions (read without prompting; ask once, on a click) ---------------- */
+  var PERM_WHAT = { mcp: 'Microsoft 365', sample: 'Claude', db: 'saving' };
+  function checkPerms() {
+    return rt.permState().then(function (p) {
+      S.perm = p;
+      if (!p) setSrc('perms', 'n/a');
+      if (p) { var bad = rt.PERM_NAMES.filter(function (n) { return p[n] === 'denied'; }); setSrc('perms', bad.length ? 'error' : 'ok', bad.length ? { code: 'denied', message: 'Denied: ' + bad.join(', ') } : null); }
+      renderNotes();
+      return p;
+    });
+  }
+  function permNote() {
+    var p = S.perm; if (!p) return null;
+    var denied = rt.PERM_NAMES.filter(function (n) { return p[n] === 'denied'; });
+    if (denied.length) {
+      var names = denied.map(function (n) {
+        if (n !== 'mcp') return PERM_WHAT[n];
+        var srv = Object.keys(p.servers || {}).filter(function (s) { return p.servers[s] === 'denied'; });
+        return srv.length ? srv.join(' and ') : 'Microsoft 365';
       });
-      Object.keys(S.actions).forEach(function (docId) {
-        var a = S.actions[docId], it = syncAction(mine.toItem(docId, a));
-        if (a.done) doneIds[it.id] = 1; else items.push(it);
-      });
-      var wi = waitItemsNow(now);
-      items = items.concat(wi.due); S.waitPre = wi.pre;
-      if (!items.length) return [items, cal, doneIds];
-      return meet.load(S.me, now).then(function (r) { S.notes.cal = null; return [items, { ok: true, r: r }, doneIds]; },
-        function () { S.notes.cal = 'Couldn’t read today’s calendar, so meetings aren’t weighed this time.'; return [items, { ok: false, r: S.meetings }, doneIds]; });
-    }).then(function (got) {
-      if (!got || seq !== loadSeq) return;
-      var items = got[0], doneIds = got[2] || {};
-      S.meetings = got[1].r || [];
-      var keep = {};
-      items.forEach(function (m) { keep[m.id] = 1; attach(m); });
-      /* R8: an item merged into one that is done is done too. */
-      items = items.filter(function (m) { return !(m.r && m.r.dupOf && doneIds[m.r.dupOf]); });
-      S.items = items;
-      Object.keys(S.doneNow).forEach(function (id) { if (!keep[id]) delete S.doneNow[id]; });
-      /* R4 for Teams: once your own message is in the chat, the chat is no longer an item. */
-      Object.keys(S.handoff).forEach(function (id) {
-        var it = null;
-        S.items.forEach(function (m) { if (m.id === id) it = m; });
-        if (!it || it.key !== S.handoff[id].key) {
-          if (S.handoff[id].key) { store.clearHandoff(S.handoff[id].key); if (S.handoffDb) delete S.handoffDb[S.handoff[id].key]; }
-          delete S.handoff[id];
+      var list = names.length > 1 ? names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1] : names[0];
+      return { kind: 'denied', text: 'Allow Droplet to use ' + list + ' in the artifact’s permissions, then reload.' };
+    }
+    var ask = rt.PERM_NAMES.filter(function (n) { return p[n] === 'prompt'; });
+    if (ask.length && !S.permAsked) return { kind: 'prompt', text: 'Droplet needs access to your connectors.', names: ask };
+    if (ask.length && S.permAsked === 'asking') return { kind: 'asking', text: 'Waiting for your answer in the permissions dialog…' };
+    return null;
+  }
+  function allowPerms() {
+    var n = permNote();
+    if (!n || n.kind !== 'prompt' || S.permAsked) return;
+    S.permAsked = 'asking'; renderNotes();
+    rt.permRequest(n.names).then(function () {
+      S.permAsked = 'done';
+      return checkPerms();
+    }).then(function (p) {
+      /* Sources that failed while consent was pending get one more go. */
+      if (p && rt.PERM_NAMES.every(function (k) { return p[k] !== 'prompt' && p[k] !== 'denied'; })) {
+        var redo = ['mail', 'teams', 'atl'].filter(function (k) { var st = srcState(k).state; return st === 'error' || st === 'timeout'; });
+        if (redo.length || srcState('saved').state !== 'ok') {
+          if (srcState('saved').state !== 'ok') startSaved();
+          if (srcState('me').state !== 'ok') startMe();
+          var now = new Date();
+          redo.forEach(function (k) { if (k === 'mail') startMail(now); else if (k === 'teams') startTeams(now); else startAtl(); });
+          S.calWanted = true;
+          rebuild();
         }
-      });
-      S.byId = {}; S.items.forEach(function (m) { S.byId[m.id] = m; });
-      S.waitPre.forEach(function (m) { S.byId[m.id] = m; });
-      S.loading = false; S.loaded = true;
-      renderAll();
-      var ranked = rankNew(false);
-      return Promise.all([ranked, scan()]);
+      }
     });
+  }
+
+  /* ---------------- Diagnostics (tap the status strip) ---------------- */
+  var DIAG_KEYS = ['saved', 'me', 'mail', 'teams', 'atl', 'cal', 'waits', 'tx', 'rank', 'perms'];
+  function hms(d) { return d ? U.hhmm(d) + ':' + pad(d.getSeconds()) : '··:··'; }
+  function diagState(s) { return s.state === 'idle' ? 'not started' : s.state === 'error' ? 'error · ' + s.code : s.state; }
+  function renderDiag() {
+    var el = $('diag'); if (!el) return;
+    el.hidden = !S.diagOpen;
+    if (!S.diagOpen) return;
+    var h = '<ul class="diag-list">';
+    DIAG_KEYS.forEach(function (k) {
+      var s = srcState(k), extra = k === 'me' && S.meFrom === 'atlassian' ? ' · using the Atlassian email' : '';
+      h += '<li data-diag-src="' + k + '"><span class="d-name">' + esc(SRC_NAME[k]) + '</span>' +
+        '<span class="d-state" data-state="' + esc(s.state) + '">' + esc(diagState(s) + extra) + '</span>' +
+        '<span class="d-time">' + esc(hms(s.at)) + '</span>' +
+        (s.err ? '<span class="d-msg">' + esc(U.clip(s.err, 120)) + (s.errAt ? ' · ' + esc(hms(s.errAt)) : '') + '</span>' : '') + '</li>';
+    });
+    h += '</ul><div class="diag-foot"><span>' + esc(capsLine()) + '</span><button data-diag-copy>Copy details</button></div>';
+    el.innerHTML = h;
+  }
+  function capsLine() {
+    var p = S.perm;
+    return 'mcp ' + (rt.mcp ? 'yes' : 'no') + ' · sample ' + (rt.sample ? 'yes' : 'no') + ' · db ' + (rt.db ? 'yes' : 'no') +
+      (p ? ' · permissions: ' + rt.PERM_NAMES.map(function (n) { return n + ' ' + p[n]; }).join(', ') : ' · permissions: n/a');
+  }
+  /* Plain text for a bug report: states, codes, times and counts. No mail
+     content, no subjects, no addresses or links. */
+  D.diagText = function () {
+    var lines = ['Droplet diagnostics · ' + new Date().toISOString(), 'Capabilities: ' + capsLine()];
+    DIAG_KEYS.forEach(function (k) {
+      var s = srcState(k);
+      lines.push(SRC_NAME[k] + ': ' + diagState(s) + (k === 'me' && S.meFrom ? ' (from ' + S.meFrom + ')' : '') + ' · ' + hms(s.at) +
+        (s.err ? ' · last error ' + hms(s.errAt) + ': ' + U.redact(s.err) : ''));
+    });
+    var n = {};
+    S.items.forEach(function (m) { n[m.src] = (n[m.src] || 0) + 1; });
+    lines.push('Items: ' + (Object.keys(n).map(function (k) { return k + ' ' + n[k]; }).join(', ') || 'none') + ' · waiting (not due) ' + S.waitPre.length);
+    lines.push('Timeouts: call ' + rt.cfg.callMs + ' ms, page ' + rt.cfg.pageMs + ' ms, store ' + rt.cfg.storeMs + ' ms');
+    return lines.join('\n');
+  };
+  function toggleDiag() {
+    S.diagOpen = !S.diagOpen;
+    renderDiag();
+    var b = $('diagBtn'); if (b) b.setAttribute('aria-expanded', S.diagOpen ? 'true' : 'false');
+  }
+  function copyDiag() {
+    Promise.resolve(copyText(D.diagText())).then(function () { toast('Copied the details. Paste them into your report.'); },
+      function () { toast('Couldn’t copy. Select the details and copy them.'); });
   }
   /* A saved ranking, a sent lock and a Teams hand-off, back on a fresh item. */
   function attach(m) {
@@ -988,9 +1243,14 @@
     };
     /* Drafts cached by an earlier version go through the same format safety net (idempotent).
        A ranking made without today's meeting (R5) is asked again. */
-    if (saved && saved.v === 1 && (saved.meet || '') === meetKey) { m.r = saved; if (saved.draft) saved.draft = fix(saved.draft); }
-    else if (saved && saved.v === 1 && saved.draft) m.lazyDraft = fix(saved.draft);
-    else if (saved && saved.draftOnly && typeof saved.draft === 'string') m.lazyDraft = fix(saved.draft);
+    /* Attach runs again whenever a source arrives: a ranking already on the
+       item stays, unless today's calendar now puts a meeting on it. */
+    if (m.r && saved && m.r === saved && saved.v === 1 && (saved.meet || '') !== meetKey) { delete m.r; if (saved.draft) m.lazyDraft = saved.draft; }
+    else if (m.r) saved = null;
+    if (!saved) { /* nothing (new) to attach */ }
+    else if (saved.v === 1 && (saved.meet || '') === meetKey) { m.r = saved; if (saved.draft) saved.draft = fix(saved.draft); }
+    else if (saved.v === 1 && saved.draft) m.lazyDraft = fix(saved.draft);
+    else if (saved.draftOnly && typeof saved.draft === 'string') m.lazyDraft = fix(saved.draft);
     var sent = S.sentDb && S.sentDb[m.key];
     if (sent && (!S.send[m.id] || S.send[m.id].phase === 'idle')) S.send[m.id] = { phase: 'sent', sentAt: new Date(sent.sentAt) };
     var ho = S.handoffDb && S.handoffDb[m.key];
@@ -1024,16 +1284,27 @@
   }
   function scan() {
     if (S.scanning || !S.me || !S.me.mail || !rt.mcp) return Promise.resolve();
-    var now = new Date();
+    var now = new Date(), before = {};
+    S.items.forEach(function (m) { before[m.id] = 1; });
     S.scanning = true;
-    return Promise.all([scanWaits(now).catch(function () {}), scanMeetings(now).catch(function () {})]).then(function () {
-      var before = {};
-      S.items.forEach(function (m) { before[m.id] = 1; });
+    /* Waits and transcripts each show up in the list as soon as they are read. */
+    function merge() {
       refreshWaits();
       Object.keys(S.actions).forEach(function (docId) {
         var a = S.actions[docId], id = 'mine:' + docId;
         if (a && !a.done && !S.byId[id]) { var it = syncAction(mine.toItem(docId, a)); attach(it); S.items.push(it); S.byId[id] = it; }
       });
+      renderAllKeepFocus();
+    }
+    function part(k, fn) {
+      setSrc(k, 'loading');
+      var p;
+      try { p = Promise.resolve(fn(now)); } catch (e) { p = Promise.reject(e); }
+      return p.then(function () { if (busy(k)) setSrc(k, 'ok'); }, function (e) {
+        e = e || {}; setSrc(k, e.code === 'timeout' ? 'timeout' : 'error', e);
+      }).then(merge);
+    }
+    return Promise.all([part('waits', scanWaits), part('tx', scanMeetings)]).then(function () {
       /* Only something new is ranked; earlier unranked items wait for Try again. */
       var added = S.items.some(function (m) { return !before[m.id] && !m.r; });
       S.scanning = false;
@@ -1047,6 +1318,7 @@
       var sent = got[0].ok ? got[0].r : [], chats = got[1].ok ? got[1].r : [];
       S.sentMsgs = sent; S.teams10 = chats;
       S.notes.waits = !got[0].ok && S.mcpOk ? 'Couldn’t read your sent mail, so “waiting on others” may miss some.' : null;
+      if (!got[0].ok) setSrc('waits', got[0].e && got[0].e.code === 'timeout' ? 'timeout' : 'error', got[0].e || {});
       var cutoff = now.getTime() - waits.DAYS * 864e5 - 36e5;
       var msgs = sent.concat(waits.ownTeams(chats, S.me)).filter(function (m) { return m.t >= cutoff && !S.asksDb[m.key]; })
         .sort(function (a, b) { return b.t - a.t; });
@@ -1144,7 +1416,7 @@
       renderAll();
       return Promise.resolve();
     }
-    S.ranking = fresh.length; S.rankingTeams = fresh.some(isTeams); renderList();
+    S.ranking = fresh.length; S.rankingTeams = fresh.some(isTeams); setSrc('rank', 'loading'); renderList();
     var ranked = visible().filter(function (m) { return m.r && !m.rerank; }).map(function (m) { return { id: m.id, src: m.src, subject: titleOf(m), senderName: m.senderName, group: groupOf(m) }; });
     var run = S.rankRun = rank.ask({ me: S.me, now: new Date(), items: fresh, ranked: ranked, feedback: S.feedback }, refresh).then(function (v) {
       var existing = S.items.filter(function (m) { return m.r && !m.rerank && isFinite(m.r.pos); }).map(function (m) { return { id: m.id, pos: m.r.pos }; });
@@ -1164,8 +1436,10 @@
       S.notes.rank = missing ? 'Claude skipped ' + missing + (fresh.some(isTeams) ? ' item' : ' mail') + (missing === 1 ? '' : 's') + '; those are newest first.' : null;
     }, function (e) {
       S.notes.rank = rt.sampleCopy(e) + ', so new mail is newest first.';
+      setSrc('rank', e && e.code === 'timeout' ? 'timeout' : 'error', e || {});
     }).then(function () {
       S.ranking = 0; S.rankingTeams = false; S.rankRun = null;
+      if (busy('rank')) setSrc('rank', 'ok');
       var placed = fresh.filter(function (m) { return S.fresh[m.id]; });
       placed.forEach(function (m) { delete S.fresh[m.id]; });
       renderAllKeepFocus();
@@ -1591,7 +1865,7 @@
     S.fresh[it.id] = true;
     S.items.push(it); S.byId[it.id] = it;
     renderAll();
-    if (S.loaded) rankNew(false); else S.rankAgain = true;
+    if (S.loaded && !coreBusy()) rankNew(false); else scheduleRank();
     return docId;
   }
   function curAction() { var it = S.byId[S.cur]; return isMine(it) ? it : null; }
@@ -1867,10 +2141,14 @@
   /* ---------------- Events ---------------- */
   document.addEventListener('click', function (e) {
     if (e.target.closest('[data-ask-close]')) { ask.close(); return; }
+    /* Tapping the status strip (not Sync) opens the diagnostics. */
+    if (e.target.closest('#status') && !e.target.closest('[data-sync]')) { toggleDiag(); return; }
     var t = e.target.closest('button, a');
     if (!t) return;
     if (t.tagName === 'A') return; /* only safe Outlook, Teams and Atlassian links are rendered as links */
     if (t.closest('#sheetHost')) return askClick(t);
+    if (t.hasAttribute('data-perm-allow')) return allowPerms();
+    if (t.hasAttribute('data-diag-copy')) return copyDiag();
     var id;
     if (t.hasAttribute('data-ask')) { if (ask.available()) ask.openSheet(null); return; }
     if ((id = t.getAttribute('data-open'))) return openItem(id, false);
@@ -1879,10 +2157,11 @@
     if (t.hasAttribute('data-back')) return back();
     if (t.hasAttribute('data-sync')) { if (!S.loading) load({ full: false }); return; }
     if ((id = t.getAttribute('data-retry'))) {
-      if (id === 'mail') { S.notes.mail = null; return (rt.mcp ? Promise.resolve() : rt.retryUse('mcp')).then(function () { load({ full: false }); }); }
-      if (id === 'teams') { S.notes.teams = null; renderNotes(); return (rt.mcp ? Promise.resolve() : rt.retryUse('mcp')).then(function () { if (!S.loading) load({ full: false }); }); }
+      if (id === 'mail') { S.notes.mail = null; return (rt.mcp ? Promise.resolve() : rt.retryUse('mcp')).then(function () { reloadSource('mail'); }); }
+      if (id === 'teams') { S.notes.teams = null; renderNotes(); return (rt.mcp ? Promise.resolve() : rt.retryUse('mcp')).then(function () { reloadSource('teams'); }); }
+      if (id === 'store') { S.notes.store = null; renderNotes(); return (rt.db ? Promise.resolve() : rt.retryUse('db')).then(function () { reloadSource('store'); }); }
       if (id === 'rank') { S.notes.rank = null; return (rt.sample ? Promise.resolve() : rt.retryUse('sample').then(rt.checkTools)).then(function () { renderAskbar(); rankNew(true); }); }
-      if (id === 'atl') { S.notes.atl = null; renderNotes(); return (rt.mcp ? Promise.resolve() : rt.retryUse('mcp')).then(function () { if (!S.loading) load({ full: false }); }); }
+      if (id === 'atl') { S.notes.atl = null; renderNotes(); return (rt.mcp ? Promise.resolve() : rt.retryUse('mcp')).then(function () { reloadSource('atl'); }); }
       return;
     }
     if (t.hasAttribute('data-reread') && S.cur) { delete S.detail[S.cur]; var ci0 = S.byId[S.cur]; if (ci0) readDetail(ci0); return; }
@@ -2025,5 +2304,16 @@
   /* ---------------- Boot ---------------- */
   store.onError = function () { S.notes.store = 'Couldn’t save a change; it may be gone after a reload.'; renderNotes(); };
   renderAll(); renderAskbar();
-  rt.init().then(function () { renderStatus(); renderAskbar(); return load({ full: true }); });
+  /* A capability that answers after use()'s timeout lights up late. */
+  rt.onLate = function (name) {
+    renderStatus(); renderAskbar();
+    if (name === 'db' && !S.savedOk) reloadSource('store');
+    else if (name === 'mcp') load({ full: false });
+    else if (name === 'permissions') checkPerms();
+  };
+  rt.init().then(function () {
+    renderStatus(); renderAskbar();
+    checkPerms();
+    load({ full: true });
+  });
 })(window.Droplet = window.Droplet || {});

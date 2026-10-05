@@ -143,7 +143,12 @@
   /* The last 2 days of chat messages, up to 3 pages of 25. Resolves the
      items; rejects with the connector error. */
   teams.load = function (me, now, extraDomains) {
-    return teams.search(DAYS, MAX_PAGES).then(function (all) { return teams.build(all, me, now, extraDomains); });
+    /* me may be a promise (get_me still on its way): the search starts at once. */
+    return Promise.all([teams.search(DAYS, MAX_PAGES), Promise.resolve(me)]).then(function (r) {
+      var who = r[1];
+      if (!who || !who.mail) throw { code: "no_me", message: "Your own address is unknown." };
+      return teams.build(r[0], who, now, typeof extraDomains === "function" ? extraDomains() : extraDomains);
+    });
   };
 
   /* The full text of the newest messages from others (read_resource), as

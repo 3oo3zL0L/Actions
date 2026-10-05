@@ -108,14 +108,20 @@
   };
 
   /* ---------- Atlassian loading ---------- */
+  /* One call at a time: get_me's fallback waits on the same answer. */
+  var infoP = null;
+  atl.pending = function () { return infoP; };
   atl.userInfo = function () {
     if (atl.me) return Promise.resolve(atl.me);
-    return atl.call("atlassianUserInfo", {}).then(function (res) {
+    if (infoP) return infoP;
+    var p = infoP = atl.call("atlassianUserInfo", {}).then(function (res) {
       var o = U.resultObjects(res).filter(function (x) { return x.account_id || x.accountId; })[0];
       if (!o) throw { code: "tool_error", message: "No Atlassian account" };
       atl.me = { accountId: String(o.account_id || o.accountId), name: String(o.name || o.displayName || ""), email: String(o.email || "").toLowerCase() };
       return atl.me;
     });
+    p.then(function () { if (infoP === p) infoP = null; }, function () { if (infoP === p) infoP = null; });
+    return p;
   };
   function nodesOf(o, path) {
     var v = o && o[path];

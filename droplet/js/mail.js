@@ -69,12 +69,12 @@
   mail.getMe = function () {
     return rt.call("get_me", {}).then(function (res) {
       var o = U.resultObjects(res).filter(function (x) { return x.mail || x.displayName || x.userPrincipalName; })[0];
-      if (!o) return null;
+      if (!o) throw { code: "tool_error", message: "No profile in the answer." };
       var me = { mail: String(o.mail || o.userPrincipalName || ""), displayName: String(o.displayName || "") };
       mail.meDomain = U.domainOf(me.mail);
       mail.meFirst = U.firstName(me.displayName);
       return me;
-    }, function () { return null; });
+    });
   };
 
   /* Unread inbox mail of the last 3 days, up to 4 pages of 25. Resolves
