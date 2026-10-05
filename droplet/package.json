@@ -1,0 +1,12 @@
+{
+  "name": "droplet",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Droplet: a claude.ai Artifact (plain HTML/CSS/JS). Browser tests only.",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.1"
+  }
+}

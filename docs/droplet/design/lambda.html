@@ -1,0 +1,935 @@
+<title>Droplet · Lambda</title>
+<style>
+/* ============================================================
+   Droplet · Lambda v3
+   Direction C (HEV-suit HUD), kept as it was: charcoal + faint grid,
+   λ mark, status strip, mono uppercase labels, corner brackets,
+   full-width orange command rows, notched orange Send.
+   v3 change: the list and the item are clearly separate places.
+   Laptop: raised panel with its own header bar, a vertical divider,
+   a marked selected row, the inactive side dimmed.
+   Phone: the item is its own screen (top bar, raised surface, Send bar).
+   ============================================================ */
+:root {
+  color-scheme: dark;
+  --bg: #0e1013;
+  --bg-2: #121519;
+  --surface: #15181c;      /* list cards, wells inside the panel */
+  --surface-2: #1a1e23;
+  --raised: #1d2127;       /* item panel / phone item screen / selected row */
+  --bar: #252a31;          /* panel header bar, action bar */
+  --ink: #e9e6df;
+  --muted: #9ba1a8;
+  --faint: #4c535b;
+  --line: #262b31;
+  --line-2: #343a42;
+  --line-3: #4a515a;       /* panel edge, divider */
+  --accent: #ff8a1f;
+  --accent-hi: #ff9d3f;
+  --accent-ink: #140a01;
+  --accent-soft: rgba(255, 138, 31, 0.10);
+  --accent-line: rgba(255, 138, 31, 0.6);
+  --focus: #ffb36b;
+  --ok: #9fd7a5;
+  --f-display: "Chakra Petch", "Bahnschrift", "DIN Alternate", "Segoe UI", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --f-meta: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+
+/* ---------- Base ---------- */
+*, *::before, *::after { box-sizing: border-box; }
+html { color-scheme: dark; -webkit-text-size-adjust: 100%; background: var(--bg); }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font-family: var(--f-body); font-size: 16px; line-height: 1.5;
+  overflow-x: hidden; -webkit-font-smoothing: antialiased;
+}
+button, input, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; background: none; border: 0; padding: 0; border-radius: 0; }
+svg { display: block; flex: none; }
+.ico { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.ico-sm { width: 15px; height: 15px; }
+.sr { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+:focus { outline: none; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+[hidden] { display: none !important; }
+.kbd {
+  display: none; font-family: var(--f-meta); font-size: 10.5px; line-height: 16px; min-width: 18px; padding: 0 4px;
+  text-align: center; color: var(--muted); border: 1px solid var(--line-2); text-transform: none; letter-spacing: 0;
+}
+
+/* ---------- Background grid ---------- */
+.sky {
+  position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.022) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.022) 1px, transparent 1px);
+  background-size: 32px 32px;
+  -webkit-mask-image: linear-gradient(to bottom, #000, transparent 85%);
+  mask-image: linear-gradient(to bottom, #000, transparent 85%);
+}
+
+/* ---------- App layout ---------- */
+.app { max-width: 1180px; margin: 0 auto; padding: 0 16px; }
+.list-col { display: flex; flex-direction: column; min-height: 100vh; min-height: 100dvh; }
+.list-main { flex: 1; }
+.item-col { position: relative; display: flex; flex-direction: column; background: var(--raised); }
+.divider { display: none; }
+@media (max-width: 959.98px) {
+  .app[data-view="item"] .list-col { display: none; }
+  .app[data-view="list"] .item-col { display: none; }
+  /* Phone: the item is its own screen, edge to edge on the raised surface. */
+  html[data-view="item"], html[data-view="item"] body { background: var(--raised); }
+  html[data-view="item"] .sky { display: none; }
+  .item-col { margin: 0 -16px; min-height: 100vh; min-height: 100dvh; }
+}
+@media (min-width: 960px) {
+  body { height: 100vh; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+  .app {
+    flex: 1; min-height: 0; width: 100%;
+    display: grid; grid-template-columns: minmax(400px, 450px) 1px minmax(0, 1fr); gap: 0 24px; align-items: stretch;
+  }
+  .list-col { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-right: 10px; margin-right: -10px; scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
+  /* Vertical divider between list and panel, with HUD ticks. */
+  .divider { display: block; position: relative; margin: 20px 0; background: var(--line-3); }
+  .divider::before, .divider::after { content: ""; position: absolute; left: -3px; width: 7px; height: 1px; background: var(--muted); }
+  .divider::before { top: 0; }
+  .divider::after { bottom: 0; }
+  /* The item panel: raised, solid edge, its own header bar, orange brackets. */
+  .item-col {
+    margin: 20px 0; min-height: 0;
+    border: 1px solid var(--line-3);
+    box-shadow: 0 30px 70px -30px rgba(0, 0, 0, 0.85);
+  }
+  .item-col::before, .item-col::after { content: ""; position: absolute; z-index: 7; width: 14px; height: 14px; pointer-events: none; }
+  .item-col::before { top: -2px; left: -2px; border-top: 2px solid var(--accent); border-left: 2px solid var(--accent); }
+  .item-col::after { bottom: -2px; right: -2px; border-bottom: 2px solid var(--accent); border-right: 2px solid var(--accent); }
+  .item-col.is-idle::before, .item-col.is-idle::after { border-color: var(--faint); }
+  .iv-scroll { min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--line-3) transparent; }
+  .kbd { display: inline-block; }
+}
+
+/* ---------- List header ---------- */
+.lh { position: relative; padding: 20px 0 12px; }
+.brand {
+  display: flex; align-items: center; gap: 8px;
+  font-family: var(--f-display); font-weight: 600; letter-spacing: 0.24em; text-transform: uppercase; color: var(--ink); font-size: 14px;
+}
+.lambda { display: grid; place-items: center; width: 28px; height: 28px; border: 1.5px solid var(--accent); border-radius: 50%; color: var(--accent); font-family: var(--f-display); font-size: 16px; letter-spacing: 0; }
+.status {
+  display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 14px; padding: 8px 10px;
+  border: 1px solid var(--line); background: var(--surface);
+  font-family: var(--f-meta); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted);
+}
+.status i { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--ok); margin-right: 6px; vertical-align: 1px; }
+.date { margin: 26px 0 4px; font-family: var(--f-meta); font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.h1 { margin: 0; font-family: var(--f-display); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; font-size: 34px; line-height: 1.1; }
+.sub { margin: 8px 0 0; color: var(--muted); font-family: var(--f-meta); font-size: 12.5px; letter-spacing: 0.06em; text-transform: uppercase; }
+
+/* ---------- Focus list ---------- */
+.focus { list-style: none; margin: 16px 0 0; padding: 0; }
+.fi { position: relative; margin-bottom: 12px; padding: 14px 14px 0 10px; background: var(--surface); border: 1px solid var(--line); }
+.fi::before, .fi::after { content: ""; position: absolute; width: 10px; height: 10px; pointer-events: none; }
+.fi::before { top: -1px; left: -1px; border-top: 2px solid var(--faint); border-left: 2px solid var(--faint); }
+.fi::after { bottom: -1px; right: -1px; border-bottom: 2px solid var(--faint); border-right: 2px solid var(--faint); }
+.fi.is-first::before { border-color: var(--accent); }
+.fi.is-first::after { display: none; }
+.fi-open { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 0 10px; width: 100%; text-align: left; padding: 0; }
+.fi-rank { display: flex; align-items: flex-start; font-family: var(--f-meta); font-size: 13px; color: var(--faint); font-weight: 500; letter-spacing: 0.04em; padding-top: 1px; }
+.fi.is-first .fi-rank { color: var(--accent); }
+.fi-body { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.fi-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; font-family: var(--f-meta); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.src { display: inline-flex; align-items: center; gap: 5px; color: var(--ink); opacity: 0.85; }
+.src .ico { width: 15px; height: 15px; }
+.sep { color: var(--faint); }
+.flag { color: var(--accent-hi); border: 1px solid var(--accent-line); padding: 0 5px; line-height: 16px; }
+.fi-title { font-size: 17px; line-height: 1.3; font-weight: 500; color: var(--ink); overflow-wrap: anywhere; }
+.fi-why { display: flex; gap: 7px; align-items: flex-start; font-size: 14.5px; color: var(--muted); line-height: 1.45; }
+.fi-why .ico { width: 14px; height: 14px; margin-top: 3px; color: var(--accent); opacity: 0.9; }
+.fi-act { margin: 12px -14px 0 -10px; display: flex; align-items: center; flex-wrap: wrap; border-top: 1px solid var(--line); }
+.btn-act {
+  width: 100%; min-height: 46px; padding: 0 14px 0 54px; display: inline-flex; align-items: center; justify-content: space-between; gap: 8px;
+  font-family: var(--f-meta); font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 500;
+  color: var(--accent-hi); text-align: left;
+}
+.btn-act::after { content: "\203A"; font-size: 18px; line-height: 1; }
+.btn-act:hover { background: var(--accent-soft); }
+.fi.is-first .btn-act { background: var(--accent); color: var(--accent-ink); }
+.fi.is-first .btn-act:hover { background: var(--accent-hi); }
+/* One primary per screen: while an item is open, Send is the primary, so the list command steps back to an outline. */
+.app[data-view="item"] .fi.is-first .btn-act { background: transparent; color: var(--accent-hi); box-shadow: inset 0 0 0 1px var(--accent-line); }
+.app[data-view="item"] .fi.is-first .btn-act:hover { background: var(--accent-soft); }
+.state-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 46px; padding-left: 54px; font-family: var(--f-meta); font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ok); }
+.state-chip .ico { color: var(--accent); }
+.fi.is-closed .fi-title, .fi.is-closed .fi-why { opacity: 0.5; }
+.allclear { padding: 28px 0; color: var(--muted); }
+
+/* Selected row: raised surface, orange left edge, a marker that points into the panel. */
+.fi.is-current { background: var(--raised); border-color: var(--line-3); box-shadow: inset 3px 0 0 var(--accent); }
+.fi.is-current .fi-rank { color: var(--accent); }
+.fi.is-current .fi-act { border-top-color: var(--line-2); }
+.cur-tag { display: none; }
+@media (min-width: 960px) {
+  .fi.is-current .cur-tag {
+    display: inline-flex; align-items: center; gap: 4px; margin-left: auto;
+    font-family: var(--f-meta); font-size: 10.5px; letter-spacing: 0.1em; color: var(--accent-hi);
+  }
+  .fi.is-current .fi-open::after {
+    content: ""; position: absolute; right: -8px; top: 18px; width: 0; height: 0;
+    border-top: 7px solid transparent; border-bottom: 7px solid transparent; border-left: 7px solid var(--accent);
+  }
+}
+
+/* ---------- Everything else ---------- */
+.rest { margin: 28px 0 8px; }
+.rest-toggle {
+  width: 100%; min-height: 52px; display: flex; align-items: center; gap: 12px;
+  padding: 0 4px; color: var(--ink); border-top: 1px solid var(--line);
+  font-family: var(--f-meta); text-transform: uppercase; letter-spacing: 0.08em; font-size: 13px;
+}
+.rest-toggle .count { color: var(--muted); font-size: 13px; margin-left: 8px; }
+.rest-toggle .kbd { margin-left: auto; }
+.rest-toggle .chev { margin-left: auto; }
+@media (min-width: 960px) { .rest-toggle .kbd + .chev { margin-left: 0; } }
+.rest-toggle .chev { color: var(--muted); }
+.rest-toggle[aria-expanded="true"] .chev { transform: rotate(180deg); }
+.search { position: relative; margin: 4px 0 8px; }
+.search .ico { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
+.search input {
+  width: 100%; min-height: 46px; padding: 0 14px 0 42px; border-radius: 0;
+  background: var(--surface); border: 1px solid var(--line); color: var(--ink); font-size: 16px;
+}
+.search input::placeholder { color: var(--faint); }
+.search input:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.rest-list { list-style: none; margin: 0; padding: 0; }
+.rr {
+  position: relative; width: 100%; min-height: 56px; display: grid; grid-template-columns: 26px 20px minmax(0, 1fr); align-items: center; gap: 10px;
+  padding: 8px 4px; text-align: left; border-bottom: 1px solid var(--line);
+}
+.rr:hover { background: var(--accent-soft); }
+.rr-n { font-family: var(--f-meta); font-size: 12px; color: var(--faint); text-align: right; }
+.rr-t { display: flex; flex-direction: column; min-width: 0; }
+.rr-title { font-size: 14.5px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rr-sub { font-size: 12.5px; color: var(--muted); font-family: var(--f-meta); }
+.rr .ico { color: var(--muted); }
+.rr.is-closed .rr-title { text-decoration: line-through; text-decoration-color: var(--faint); color: var(--muted); }
+.rr.is-current { background: var(--raised); box-shadow: inset 3px 0 0 var(--accent); }
+.rr.is-current .rr-n { color: var(--accent); }
+.rest-empty { padding: 16px 4px; color: var(--muted); font-size: 14px; }
+
+/* ---------- Ask Claude (global) ---------- */
+.askbar-wrap { position: sticky; bottom: 0; z-index: 5; padding: 10px 0 calc(12px + env(safe-area-inset-bottom)); background: var(--bg); }
+.askbar-wrap::before { content: ""; position: absolute; left: 0; right: 0; top: -28px; height: 28px; background: linear-gradient(to bottom, transparent, var(--bg)); pointer-events: none; }
+.askbar {
+  width: 100%; min-height: 54px; display: flex; align-items: center; gap: 12px; padding: 0 18px;
+  background: var(--surface); border: 1px solid var(--line-2); color: var(--muted); text-align: left; font-family: var(--f-meta);
+}
+.askbar .ico { color: var(--accent); }
+.askbar .lbl { color: var(--ink); font-weight: 500; white-space: nowrap; flex: none; text-transform: uppercase; letter-spacing: 0.08em; font-size: 13px; }
+.askbar .lbl::after { content: "_"; color: var(--accent); margin-left: 2px; }
+.askbar .hint { margin-left: auto; min-width: 0; font-size: 13px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.askbar:hover { border-color: var(--accent-line); }
+
+/* ---------- Dim the inactive side (laptop, while an item is open) ---------- */
+@media (min-width: 960px) {
+  .app[data-view="item"] .list-col:not(.is-active):not(:hover) .lh,
+  .app[data-view="item"] .list-col:not(.is-active):not(:hover) .fi:not(.is-current),
+  .app[data-view="item"] .list-col:not(.is-active):not(:hover) .rest-toggle,
+  .app[data-view="item"] .list-col:not(.is-active):not(:hover) .search,
+  .app[data-view="item"] .list-col:not(.is-active):not(:hover) .rr:not(.is-current),
+  .app[data-view="item"] .list-col:not(.is-active):not(:hover) .askbar { opacity: 0.55; }
+  .app[data-view="item"] .item-col:not(.is-active):not(:hover) .iv-scroll,
+  .app[data-view="item"] .item-col:not(.is-active):not(:hover) .iv-bar { opacity: 0.7; }
+}
+
+/* ---------- Item view: header bar ---------- */
+.iv-head {
+  position: sticky; top: 0; z-index: 6; display: flex; align-items: center; gap: 8px;
+  min-height: 54px; padding: 0 12px 0 4px; background: var(--bar); border-bottom: 1px solid var(--line-3);
+}
+.btn-back {
+  flex: none; min-height: 44px; min-width: 44px; padding: 0 12px 0 8px; display: inline-flex; align-items: center; gap: 6px;
+  color: var(--ink); font-family: var(--f-meta); font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em;
+}
+.btn-back:hover { background: var(--accent-soft); }
+.btn-back .ico { color: var(--accent); }
+.btn-back .lbl-desk { display: none; }
+.iv-crumb {
+  min-width: 0; flex: 1; display: flex; align-items: center; justify-content: flex-end; gap: 6px;
+  font-family: var(--f-meta); font-size: 11.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted);
+  white-space: nowrap; overflow: hidden;
+}
+.iv-crumb .c-sec { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.iv-crumb b { color: var(--ink); font-weight: 500; overflow: hidden; text-overflow: ellipsis; }
+.iv-crumb .c-n { color: var(--accent-hi); flex: none; }
+.iv-head .kbd { flex: none; }
+@media (min-width: 960px) {
+  .iv-head { position: static; flex: none; padding: 0 16px 0 6px; }
+  .iv-crumb { justify-content: flex-start; order: -1; padding-left: 14px; }
+  .btn-back { order: 2; }
+  .btn-back .lbl-phone { display: none; }
+  .btn-back .lbl-desk { display: inline; }
+  .iv-head .kbd { order: 3; }
+}
+.iv-head .tag {
+  flex: none; display: inline-flex; align-items: center; gap: 6px; color: var(--ink);
+}
+.iv-head .tag i { width: 7px; height: 7px; background: var(--accent); display: inline-block; }
+
+/* ---------- Item view: content ---------- */
+.iv-scroll { flex: 1; padding: 18px 16px 16px; }
+.iv-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; font-family: var(--f-meta); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.iv-title { margin: 8px 0 0; font-family: var(--f-display); font-weight: 600; font-size: 25px; line-height: 1.2; overflow-wrap: anywhere; }
+.iv-why { margin: 14px 0 0; display: flex; gap: 10px; align-items: flex-start; font-size: 15.5px; color: var(--ink); border: 1px solid var(--line-2); background: var(--surface); padding: 12px; }
+.iv-why .who { flex: none; width: 28px; height: 28px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); }
+.iv-why .who .ico { width: 15px; height: 15px; }
+.iv-why p { margin: 3px 0 0; }
+.sec-label { margin: 28px 0 10px; font-family: var(--f-meta); font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 8px; text-transform: uppercase; letter-spacing: 0.1em; }
+.sec-label .ico { width: 14px; height: 14px; }
+.sec-label::after { content: ""; flex: 1; height: 1px; background: var(--line-2); }
+.card { background: var(--surface); border: 1px solid var(--line-2); padding: 16px; }
+.mail-from { display: flex; justify-content: space-between; gap: 12px; font-size: 13.5px; color: var(--muted); }
+.mail-from b { color: var(--ink); font-weight: 500; }
+.mail-subj { margin: 6px 0 10px; font-weight: 500; font-size: 15.5px; overflow-wrap: anywhere; }
+.mail-body p { margin: 0 0 10px; font-size: 15px; color: var(--ink); opacity: 0.88; overflow-wrap: anywhere; }
+.mail-body p:last-child { margin-bottom: 0; }
+.thread { display: flex; flex-direction: column; gap: 12px; }
+.msg { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 10px; }
+.av { width: 30px; height: 30px; display: grid; place-items: center; font-size: 12px; font-weight: 600; background: var(--surface-2); color: var(--muted); border: 1px solid var(--line-2); }
+.msg.me .av { color: var(--accent); }
+.msg-h { font-size: 13px; color: var(--muted); }
+.msg-h b { color: var(--ink); font-weight: 500; margin-right: 6px; }
+.msg-t { font-size: 15px; overflow-wrap: anywhere; }
+.msg.hl .msg-t { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); padding: 4px 8px; margin-left: -8px; }
+.src-note { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--line-2); font-size: 13px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
+.draft { position: relative; border-color: var(--line-3); }
+.draft::before, .draft::after { content: ""; position: absolute; width: 12px; height: 12px; pointer-events: none; }
+.draft::before { top: -1px; left: -1px; border-top: 2px solid var(--accent); border-left: 2px solid var(--accent); }
+.draft::after { bottom: -1px; right: -1px; border-bottom: 2px solid var(--accent); border-right: 2px solid var(--accent); }
+.draft-row { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 8px; align-items: center; min-height: 34px; font-size: 14px; border-bottom: 1px solid var(--line); padding: 4px 0; }
+.draft-row .k { color: var(--muted); font-family: var(--f-meta); font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.08em; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { display: inline-flex; align-items: center; gap: 5px; min-height: 26px; padding: 0 10px; background: var(--surface-2); border: 1px solid var(--line-2); font-size: 13.5px; }
+.draft textarea {
+  display: block; width: 100%; margin-top: 12px; min-height: 150px; resize: vertical; padding: 12px;
+  background: var(--bg-2); border: 1px solid var(--line); border-radius: 0; color: var(--ink);
+  font-size: 15.5px; line-height: 1.55; font-family: var(--f-body);
+}
+.draft textarea:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.draft.is-editing textarea { border-color: var(--accent-line); }
+.draft.is-locked textarea { opacity: 0.6; resize: none; }
+.warn { margin-top: 10px; display: flex; gap: 8px; align-items: center; font-size: 13.5px; color: var(--accent-hi); }
+.draft-foot { margin-top: 10px; font-size: 12.5px; color: var(--muted); font-family: var(--f-meta); }
+
+/* chat about this */
+.chat { margin-top: 14px; }
+.chat-log { display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px; }
+.cm { max-width: 92%; font-size: 14.5px; padding: 10px 12px; background: var(--surface); border: 1px solid var(--line-2); }
+.cm.u { align-self: flex-end; background: var(--surface-2); }
+.cm.c { display: flex; gap: 8px; }
+.cm.c .ico { color: var(--accent); margin-top: 3px; width: 14px; height: 14px; }
+.chat-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.chat-chip { min-height: 44px; padding: 0 14px; border: 1px solid var(--line-2); color: var(--ink); font-size: 14px; }
+.chat-chip:hover { border-color: var(--accent-line); }
+.chat-form { display: flex; gap: 8px; }
+.chat-form input { flex: 1; min-width: 0; min-height: 46px; padding: 0 14px; background: var(--surface); border: 1px solid var(--line-2); border-radius: 0; font-size: 16px; }
+.icon-btn { min-width: 46px; min-height: 46px; display: grid; place-items: center; border: 1px solid var(--line-2); color: var(--accent); }
+
+/* ---------- Item view: action bar (sticky on phone) ---------- */
+.iv-bar {
+  position: sticky; bottom: 0; z-index: 5;
+  padding: 6px 12px calc(12px + env(safe-area-inset-bottom));
+  background: var(--bar); border-top: 1px solid var(--accent-line);
+}
+.quiet { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; margin-bottom: 8px; }
+.qbtn {
+  min-height: 52px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  font-family: var(--f-meta); text-transform: uppercase; letter-spacing: 0.04em; font-size: 10.5px;
+  color: var(--muted); padding: 4px 2px; text-align: center; line-height: 1.2;
+}
+.qbtn:hover { color: var(--ink); background: var(--accent-soft); }
+.qbtn[aria-pressed="true"] { color: var(--accent-hi); }
+.qbtn[aria-disabled="true"] { opacity: 0.35; cursor: default; }
+.btn-send {
+  width: 100%; min-height: 54px; display: flex; align-items: center; justify-content: center; gap: 10px;
+  background: var(--accent); color: var(--accent-ink); font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.1em; font-family: var(--f-display); font-size: 16px;
+  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%);
+}
+.btn-send:hover { background: var(--accent-hi); }
+.btn-send.is-sent { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 1px var(--line-3); cursor: default; font-weight: 500; clip-path: none; font-family: var(--f-meta); font-size: 14px; }
+.btn-send.is-sent .ico { color: var(--accent); }
+.sent-note { text-align: center; font-size: 12.5px; color: var(--muted); margin-top: 6px; font-family: var(--f-meta); }
+@media (min-width: 960px) {
+  .iv-scroll { padding: 22px 28px 24px; }
+  .iv-bar { position: static; flex: none; padding: 10px 16px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .quiet { display: flex; flex-wrap: wrap; gap: 2px; margin: 0; flex: 1; }
+  .qbtn { flex-direction: row; gap: 6px; padding: 0 6px; font-size: 12px; min-height: 46px; white-space: nowrap; flex: none; }
+  .qbtn .q-x { display: none; }
+  .btn-send { width: auto; min-width: 150px; padding: 0 24px; margin-left: auto; }
+  .sent-note { width: 100%; text-align: right; margin: 0; }
+}
+
+/* empty panel (laptop) */
+.empty { flex: 1; display: grid; place-items: center; text-align: center; padding: 40px; color: var(--muted); }
+.empty h2 { margin: 18px 0 6px; font-family: var(--f-display); font-weight: 600; font-size: 22px; color: var(--ink); text-transform: uppercase; letter-spacing: 0.06em; }
+.empty p { margin: 0; font-size: 14px; }
+.empty .keys { margin-top: 18px; font-family: var(--f-meta); font-size: 11.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); display: flex; gap: 6px 14px; justify-content: center; flex-wrap: wrap; }
+.empty .keys span { display: inline-flex; align-items: center; gap: 6px; }
+.empty-mark { width: 120px; height: 120px; margin: 0 auto; color: var(--faint); }
+
+/* ---------- Sheet + toast ---------- */
+.scrim { position: fixed; inset: 0; z-index: 40; background: rgba(0, 0, 0, 0.6); }
+.sheet {
+  position: fixed; z-index: 41; left: 0; right: 0; bottom: 0; margin: 0 auto; max-width: 560px;
+  background: var(--raised); border: 1px solid var(--line-3); border-bottom: 0;
+  padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
+  box-shadow: 0 -20px 60px rgba(0, 0, 0, 0.5);
+}
+@media (min-width: 960px) { .sheet { bottom: 32px; border-bottom: 1px solid var(--line-3); } }
+.sheet-h { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.sheet-h h2 { margin: 0; font-family: var(--f-display); font-weight: 600; font-size: 18px; text-transform: uppercase; letter-spacing: 0.08em; display: flex; align-items: center; gap: 8px; }
+.sheet-h h2 .ico { color: var(--accent); }
+.sheet textarea { width: 100%; min-height: 96px; padding: 12px; border-radius: 0; background: var(--surface); border: 1px solid var(--line-2); font-size: 16px; resize: vertical; }
+.sheet textarea::placeholder { color: var(--faint); }
+.sheet .chat-chips { margin: 10px 0; }
+.sheet-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 4px; }
+.sheet-foot small { color: var(--muted); font-size: 12.5px; }
+.btn-ask { min-height: 46px; padding: 0 22px; background: var(--accent); color: var(--accent-ink); font-weight: 600; font-family: var(--f-display); text-transform: uppercase; letter-spacing: 0.1em; clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%); }
+.ask-reply { margin-top: 12px; }
+.toast {
+  position: fixed; z-index: 30; left: 50%; bottom: 150px; transform: translateX(-50%);
+  width: max-content; max-width: calc(100% - 32px);
+  display: flex; align-items: center; gap: 14px; padding: 4px 6px 4px 16px; min-height: 48px;
+  background: var(--bar); border: 1px solid var(--line-3); color: var(--ink); font-size: 14px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45);
+}
+.toast button { min-height: 44px; padding: 0 12px; color: var(--accent-hi); font-weight: 600; font-family: var(--f-meta); text-transform: uppercase; letter-spacing: 0.06em; font-size: 13px; }
+@media (min-width: 960px) { .toast { bottom: 40px; } }
+
+/* ---------- Motion (only when allowed) ---------- */
+@media (prefers-reduced-motion: no-preference) {
+  .iv-scroll.enter { animation: rise 0.28s ease-out; }
+  .rest-toggle .chev { transition: transform 0.2s ease; }
+  .btn-act, .btn-send, .qbtn, .rr, .askbar { transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease; }
+  .lh, .fi, .rest-toggle, .search, .iv-bar { transition: opacity 0.15s ease, background-color 0.15s ease; }
+  .askbar .lbl::after { animation: blink 1.4s steps(1) infinite; }
+  .toast { animation: toastIn 0.2s ease-out; }
+}
+@keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes toastIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes blink { 50% { opacity: 0; } }
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+
+<div class="sky" aria-hidden="true"></div>
+
+<main class="app" id="app" data-view="list">
+  <section class="list-col is-active" id="listCol" aria-label="Focus list">
+    <div class="list-main">
+      <header class="lh">
+        <div class="brand">
+          <span class="lambda" aria-hidden="true">λ</span>
+          <span class="brand-name">Droplet</span>
+        </div>
+        <div class="status"><span><i></i>M365 link</span><span><i></i>Rovo link</span><span>Sync 08:47</span><span>Nothing sends without you</span></div>
+        <p class="date">Fri 02 Oct 2026 · 08:47</p>
+        <h1 class="h1">Do now</h1>
+        <p class="sub" id="sub"></p>
+      </header>
+      <ol class="focus" id="focus"></ol>
+      <section class="rest" aria-label="Everything else">
+        <button class="rest-toggle" id="restToggle" aria-expanded="false" aria-controls="restPanel" aria-keyshortcuts="/">
+          <span>Everything else<span class="count" id="restCount"></span></span>
+          <span class="kbd" aria-hidden="true">/</span>
+          <svg class="ico chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <div id="restPanel" hidden>
+          <div class="search">
+            <label class="sr" for="q">Search everything else</label>
+            <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg>
+            <input id="q" type="search" placeholder="Search people, projects, words" autocomplete="off">
+          </div>
+          <ul class="rest-list" id="restList"></ul>
+        </div>
+      </section>
+    </div>
+    <div class="askbar-wrap">
+      <button class="askbar" data-ask aria-haspopup="dialog">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v5M12 16v5M3 12h5M16 12h5M5.6 5.6l3.2 3.2M15.2 15.2l3.2 3.2M5.6 18.4l3.2-3.2M15.2 8.8l3.2-3.2"/></svg>
+        <span class="lbl">Ask Claude</span>
+        <span class="hint">Pages · supplier mail</span>
+      </button>
+    </div>
+  </section>
+
+  <div class="divider" aria-hidden="true"></div>
+
+  <section class="item-col is-idle" id="itemCol" aria-label="Item"></section>
+</main>
+
+<div id="toastHost" role="status" aria-live="polite"></div>
+<div id="sheetHost"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ---------------- Icons ---------------- */
+  var P = {
+    mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3.5 6.5 8.5 6 8.5-6"/>',
+    teams: '<path d="M4 5h16v11H10l-4.5 3.5V16H4z"/><path d="M8.5 9.5h7M8.5 12.5h4.5"/>',
+    jira: '<path d="M12 3 21 12 12 21 3 12z"/><path d="M12 8.5 15.5 12 12 15.5 8.5 12z"/>',
+    meeting: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4M7.5 14h2M11.5 14h5M7.5 17.5h7"/>',
+    confluence: '<path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4M9 12h7M9 16h5"/>',
+    spark: '<path d="M12 3v5M12 16v5M3 12h5M16 12h5M5.6 5.6l3.2 3.2M15.2 15.2l3.2 3.2M5.6 18.4l3.2-3.2M15.2 8.8l3.2-3.2"/>',
+    back: '<path d="M15 5 8 12l7 7"/>',
+    edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/>',
+    chat: '<path d="M4 5h16v11h-8l-4 4v-4H4z"/>',
+    down: '<path d="M12 4v15M6 13l6 6 6-6"/>',
+    check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
+    send: '<path d="M4 12 20 4l-5 16-3-7z"/><path d="m12 13 8-9"/>',
+    clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+    close: '<path d="M6 6l12 12M18 6 6 18"/>',
+    warn: '<path d="M12 4 21 20H3z"/><path d="M12 10v4M12 17v.5"/>',
+    arrowUp: '<path d="M12 20V5M6 11l6-6 6 6"/>'
+  };
+  function ico(name, cls) { return '<svg class="ico ' + (cls || '') + '" viewBox="0 0 24 24" aria-hidden="true">' + P[name] + '</svg>'; }
+  var SRC = { mail: 'Mail', teams: 'Teams', jira: 'Jira', meeting: 'Meeting', confluence: 'Confluence' };
+  function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+
+  /* ---------------- Sample data (in ranking order) ---------------- */
+  var ITEMS = [
+    { id: 'oidc', tag: 'OIDC-412', top: true, src: 'jira', project: 'OIDC', flag: 'Standstill', time: '08:12',
+      title: 'OIDC-412 is at a standstill',
+      why: 'Jira flagged a standstill on OIDC; standstills always go first. Rakesh is blocked until you pick a refresh-token lifetime.',
+      action: 'Comment on OIDC-412',
+      source: { type: 'mail', from: 'Jira', fromNote: 'notification · 08:12', subject: '[Standstill] OIDC-412 · Refresh-token rotation for SSO tenants',
+        body: ['No progress for 8 working days. Status changed: In progress → Standstill.',
+               'Latest comment, Rakesh (Mon): “Blocked until we pick a refresh-token lifetime, 8h or 24h. Security prefers 8h, Support worries about re-logins on kiosk devices. Need a decision to continue.”'] },
+      draft: { kind: 'Jira comment', to: ['OIDC-412'],
+        text: '@Rakesh Let’s go with 8h for standard tenants, and allow 24h only for kiosk devices behind a tenant setting.\n\nPlease split the kiosk part into its own sub-task so the main flow can move again today. I’ll confirm with Security at Thursday’s sync.' } },
+
+    { id: 'melissa', tag: 'Melissa', top: true, src: 'teams', project: 'Platform Stability › C4A', flag: 'Meeting 14:00', time: '09:33',
+      title: 'Melissa asks if C4A makes the 26.4 train',
+      why: 'You meet Melissa at 14:00; answer before then. She’s PM on C4A and has to give Sales a date today.',
+      action: 'Reply to Melissa in Teams',
+      source: { type: 'thread', title: 'Chat with Melissa',
+        msgs: [{ who: 'Melissa', time: '09:31', text: 'Quick one: can we still put the C4A tenant export in the 26.4 release train? Sales is asking for a date.' },
+               { who: 'Melissa', time: '09:33', text: 'If not, I need to tell them today.' }] },
+      draft: { kind: 'Teams message', to: ['Melissa'],
+        text: 'Yes, if the export API passes review by Wednesday. If it doesn’t, it moves to 26.5.\n\nLet’s confirm at 14:00. I’ll bring the review status.' } },
+
+    { id: 'joris', tag: 'Joris', top: true, src: 'teams', project: 'Platform Stability', flag: 'Architect', time: '08:54',
+      title: 'Joris needs your call on the session-store fix',
+      why: 'Architect on your top project; blocks Tuesday’s design review. He needs a yes or no on the read replica.',
+      action: 'Reply to Joris in Teams',
+      source: { type: 'thread', title: 'Chat with Joris',
+        msgs: [{ who: 'Joris', time: '08:51', text: 'For the 08:00 login spikes: I want to go with a read replica for session checks rather than a cache layer. Simpler, and ops already knows it.' },
+               { who: 'Joris', time: '08:54', text: 'Can you OK that today? Otherwise Tuesday’s design review has nothing to decide on.' }] },
+      draft: { kind: 'Teams message', to: ['Joris'],
+        text: 'OK from me: go with the read replica, and spread the 08:00 session checks over 10 minutes as well.\n\nPlease put the cost estimate in the design doc so we can close it on Tuesday.' } },
+
+    { id: 'followup', tag: 'DoD follow-up', top: true, src: 'meeting', project: 'Release management', flag: 'Your promise', time: 'Tue',
+      title: 'Plan the DoD follow-up with Melissa & Rakesh',
+      why: 'You promised this in Tuesday’s DoD sync. Nothing is booked yet; all three of you are free Thursday morning.',
+      action: 'Find a time with Melissa & Rakesh',
+      source: { type: 'transcript', title: 'DoD alignment · Tue 29 Sep · transcript',
+        msgs: [{ who: 'Rakesh', time: '10:41', text: 'So who turns this into the final DoD?' },
+               { who: 'You', me: true, hl: true, time: '10:42', text: 'I’ll plan a follow-up with Melissa and Rakesh next week to sign it off.' },
+               { who: 'Melissa', time: '10:42', text: 'Works for me. Mornings are best.' }] },
+      draft: { kind: 'Invite', to: ['Melissa', 'Rakesh'], subject: 'DoD sign-off', when: 'Thu 8 Oct · 10:30–11:00 · all free',
+        text: 'Follow-up from Tuesday. Let’s walk through the DoD draft, agree on the final version, and decide what goes to PST as Jira tasks.' } },
+
+    { id: 'pst', tag: 'PST', top: true, src: 'teams', project: 'Release management', flag: 'Waiting 3 days', time: 'Mon',
+      title: 'PST hasn’t replied about the DoD Jira tasks',
+      why: 'You asked PST 3 working days ago. No reply, and the DoD page hasn’t changed since.',
+      action: 'Chase PST in Teams',
+      source: { type: 'thread', title: 'Your message to PST',
+        msgs: [{ who: 'You', me: true, time: 'Mon 15:20', text: 'Could you turn the agreed DoD items into Jira tasks under REL, so the teams can pick them up next sprint? Page: Release management › DoD v3.' }],
+        note: 'No reply since Monday · DoD page last edited 24 Sep' },
+      draft: { kind: 'Teams message', to: ['PST'],
+        text: 'Hi PST, a gentle nudge on Monday’s question: the DoD items as Jira tasks under REL.\n\nCan you let me know by Tuesday which items are in, or what’s blocking? Happy to pair for 15 minutes on it.' } },
+
+    /* Everything else, already in priority order */
+    { id: 'incident', tag: 'Incident 29 Sep', src: 'confluence', project: 'Platform Stability', time: 'Thu',
+      title: 'Sign off the 29 Sep incident review', why: 'Lars wants to close the Platform Stability review today; only your sign-off is missing.',
+      action: 'Comment on the page',
+      source: { type: 'mail', from: 'Confluence', fromNote: 'page · edited by Lars yesterday 17:05', subject: 'Incident review · 29 Sep · Session store saturation',
+        body: ['Root cause: session checks at 08:00 hit one database node. Mitigation: spread checks over 10 minutes, add a read replica.', 'Status: waiting for sign-off.'] },
+      draft: { kind: 'Confluence comment', to: ['Incident review · 29 Sep'], text: 'Reviewed and agreed. One addition: let’s add an alert on session-check latency above 5 seconds, owned by the platform team. Signed off.' } },
+    { id: 'daan', tag: 'Daan', src: 'mail', project: 'Platform Stability › C4A', time: 'Thu',
+      title: 'Daan proposes moving the C4A demo to Thursday', why: 'A C4A team lead asking for a yes or no; it shifts the sprint review.',
+      action: 'Draft reply to Daan',
+      source: { type: 'mail', from: 'Daan', fromNote: 'Thu 16:40', subject: 'C4A demo: Thursday instead of Tuesday?', body: ['Hi, the export flow will be much more convincing on Thursday. OK to move the demo?', 'Daan'] },
+      draft: { kind: 'Reply · mail', to: ['Daan'], text: 'Hi Daan,\n\nFine by me. Please move it and update the invite.\n\nThanks' } },
+    { id: 'arjun', tag: 'Arjun', src: 'teams', project: 'SIEM', time: 'Thu',
+      title: 'Arjun asks which log sources go first', why: 'The SIEM architect needs this to size the first ingest.',
+      action: 'Reply to Arjun in Teams',
+      source: { type: 'thread', title: 'Chat with Arjun', msgs: [{ who: 'Arjun', time: 'Thu 11:05', text: 'For the SIEM pilot: auth logs and admin audit first, or also API gateway?' }] },
+      draft: { kind: 'Teams message', to: ['Arjun'], text: 'Auth logs and admin audit first. API gateway in the second wave, once we know the volume.' } },
+    { id: 'freeze', tag: 'Release 26.4', src: 'confluence', project: 'Release management', time: 'Wed',
+      title: '26.4 code freeze moved to 9 Oct', why: 'The release page changed; C4A’s export depends on this date.',
+      action: 'Acknowledge on the page',
+      source: { type: 'mail', from: 'Confluence', fromNote: 'Release management · edited Wed', subject: 'Release 26.4 · Plan', body: ['Code freeze moved from 7 Oct to 9 Oct. Release date unchanged.'] },
+      draft: { kind: 'Confluence comment', to: ['Release 26.4 · Plan'], text: 'Noted. C4A will plan the tenant export review before 9 Oct.' } },
+    { id: 'sanne', tag: 'Sanne', src: 'mail', project: 'Contracts', time: 'Wed',
+      title: 'Sanne sent the revised SLA annex', why: 'Contracts: she asks for comments by next Friday, no rush today.',
+      action: 'Draft reply to Sanne',
+      source: { type: 'mail', from: 'Sanne', fromNote: 'Wed 14:12', subject: 'SLA annex v4', body: ['Attached the revised annex with the new response times. Comments by next Friday please.', 'Sanne'] },
+      draft: { kind: 'Reply · mail', to: ['Sanne'], text: 'Thanks Sanne, I’ll review and send comments by Thursday.' } },
+    { id: 'ci88', tag: 'CI-88', src: 'jira', project: 'CI Acceleration', time: 'Tue',
+      title: 'CI-88 needs a reviewer for the build cache', why: 'A CI Acceleration mention; the PR is ready but unassigned.',
+      action: 'Comment on CI-88',
+      source: { type: 'mail', from: 'Jira', fromNote: 'mention · Tue', subject: 'CI-88 · Remote build cache for integration tests', body: ['Bas mentioned you: “Who can review this? Cuts the integration stage from 22 to 9 minutes.”'] },
+      draft: { kind: 'Jira comment', to: ['CI-88'], text: '@Bas Great result. Rakesh, can you review this before Wednesday?' } },
+    { id: 'yuki', tag: 'Yuki', src: 'teams', project: 'UI/UX', time: 'Mon',
+      title: 'Yuki shared new focus-state tokens', why: 'UI/UX, for information. A thumbs-up is enough.',
+      action: 'Reply to Yuki in Teams',
+      source: { type: 'thread', title: 'Chat with Yuki', msgs: [{ who: 'Yuki', time: 'Mon 10:20', text: 'New focus-state tokens are in the library. Feedback welcome before we roll them out.' }] },
+      draft: { kind: 'Teams message', to: ['Yuki'], text: 'Looks good, thanks Yuki. Go ahead.' } },
+    { id: 'supplier', tag: 'Licence quote', src: 'mail', project: 'Contracts', flag: 'Supplier', time: 'Wed',
+      title: 'Licence renewal quote from the monitoring supplier', why: 'Supplier on Contracts; can wait until next week.',
+      action: 'Draft reply to Peter', external: true,
+      source: { type: 'mail', from: 'Peter', fromNote: 'supplier · Wed 11:20', subject: 'Renewal quote 2027 · monitoring licences',
+        body: ['Hi,', 'Please find attached our renewal quote for 2027. The price holds until 30 October.', 'Kind regards,\nPeter'] },
+      draft: { kind: 'Reply · mail', to: ['Peter'], text: 'Hi Peter,\n\nThanks for the quote. We’ll review it with Contracts and come back to you before 30 October.\n\nKind regards' } }
+  ];
+  var BY = {}; ITEMS.forEach(function (it, i) { it.prio = i; BY[it.id] = it; });
+
+  /* ---------------- State ---------------- */
+  var S = { view: 'list', cur: null, pane: 'list', restOpen: false, q: '', st: {}, drafts: {}, editing: false, chatOpen: false, chat: {}, scrollY: 0, toastTimer: null };
+  ITEMS.forEach(function (it) { S.drafts[it.id] = it.draft.text; });
+  var $ = function (id) { return document.getElementById(id); };
+  var root = document.documentElement;
+  var desk = function () { return window.innerWidth >= 960; };
+
+  /* ---------------- Helpers ---------------- */
+  function status(id) { return S.st[id] || {}; }
+  function isClosed(id) { var s = status(id); return !!(s.sent || s.done); }
+  function topItems() { return ITEMS.filter(function (it) { return it.top && !status(it.id).ni; }); }
+  function restItems() {
+    var a = ITEMS.filter(function (it) { return !it.top; });
+    var ni = ITEMS.filter(function (it) { return it.top && status(it.id).ni; });
+    return a.concat(ni);
+  }
+  function pad(n) { return ('0' + n).slice(-2); }
+  function srcHTML(it) { return '<span class="src">' + ico(it.src) + SRC[it.src] + '</span>'; }
+  function stateChip(id) {
+    var s = status(id);
+    if (s.sent) return '<span class="state-chip">' + ico('check') + 'Sent ' + s.sent + ' · done</span>';
+    if (s.done) return '<span class="state-chip">' + ico('check') + 'Done</span>';
+    return '';
+  }
+  function isCur(id) { return S.view === 'item' && S.cur === id; }
+
+  /* ---------------- Render: list ---------------- */
+  function renderHeader() {
+    var open = topItems().filter(function (it) { return !isClosed(it.id); }).length;
+    $('sub').textContent = open ? open + ' actions queued · ' + restItems().length + ' deferred' : 'All clear · ' + restItems().length + ' deferred';
+  }
+  function renderFocus() {
+    var items = topItems(), h = '';
+    /* The one primary action goes to the first item that is still open. */
+    var firstOpen = items.filter(function (it) { return !isClosed(it.id); })[0];
+    items.forEach(function (it, i) {
+      var cur = isCur(it.id);
+      var cls = 'fi' + (it === firstOpen ? ' is-first' : '') + (isClosed(it.id) ? ' is-closed' : '') + (cur ? ' is-current' : '');
+      h += '<li class="' + cls + '" data-id="' + it.id + '">' +
+        '<button class="fi-open" data-open="' + it.id + '"' + (cur ? ' aria-current="true"' : '') + ' aria-label="Open ' + (i + 1) + ': ' + esc(it.title) + '">' +
+          '<span class="fi-rank" aria-hidden="true">' + pad(i + 1) + '</span>' +
+          '<span class="fi-body">' +
+            '<span class="fi-meta">' + srcHTML(it) + '<span class="sep" aria-hidden="true">·</span><span>' + esc(it.project) + '</span>' +
+              (it.flag ? '<span class="flag">' + esc(it.flag) + '</span>' : '') +
+              '<span class="cur-tag" aria-hidden="true">In panel</span></span>' +
+            '<span class="fi-title">' + esc(it.title) + '</span>' +
+            '<span class="fi-why">' + ico('spark') + '<span>' + esc(it.why) + '</span></span>' +
+          '</span>' +
+        '</button>' +
+        '<div class="fi-act">' + (isClosed(it.id) ? stateChip(it.id) : '<button class="btn-act" data-act="' + it.id + '">' + esc(it.action) + '</button>') + '</div>' +
+      '</li>';
+    });
+    if (!items.length) h = '<li class="allclear">All clear. Nothing needs you right now.</li>';
+    $('focus').innerHTML = h;
+  }
+  function renderRest() {
+    var all = restItems(), q = S.q.trim().toLowerCase();
+    $('restCount').textContent = all.length;
+    var list = all.filter(function (it) {
+      if (!q) return true;
+      return (it.title + ' ' + it.project + ' ' + SRC[it.src] + ' ' + it.why).toLowerCase().indexOf(q) !== -1;
+    });
+    var h = '', base = topItems().length;
+    list.forEach(function (it) {
+      var n = all.indexOf(it) + base + 1, cur = isCur(it.id);
+      h += '<li><button class="rr' + (isClosed(it.id) ? ' is-closed' : '') + (cur ? ' is-current' : '') + '" data-open="' + it.id + '"' + (cur ? ' aria-current="true"' : '') + '>' +
+        '<span class="rr-n">' + pad(n) + '</span>' + ico(it.src) +
+        '<span class="rr-t"><span class="rr-title">' + esc(it.title) + '</span><span class="rr-sub">' + SRC[it.src] + ' · ' + esc(it.project) +
+        (status(it.id).ni ? ' · marked not important' : '') + '</span></span></button></li>';
+    });
+    if (!list.length) h = '<li class="rest-empty">Nothing matches “' + esc(S.q) + '”.</li>';
+    $('restList').innerHTML = h;
+    $('restToggle').setAttribute('aria-expanded', String(S.restOpen));
+    $('restPanel').hidden = !S.restOpen;
+  }
+
+  /* ---------------- Render: item view ---------------- */
+  function sourceHTML(it) {
+    var s = it.source, h = '';
+    if (s.type === 'mail') {
+      h += '<div class="mail-from"><span><b>' + esc(s.from) + '</b> · ' + esc(s.fromNote) + '</span></div>' +
+        '<div class="mail-subj">' + esc(s.subject) + '</div><div class="mail-body">' +
+        s.body.map(function (p) { return '<p>' + esc(p).replace(/\n/g, '<br>') + '</p>'; }).join('') + '</div>';
+    } else {
+      h += '<div class="mail-from" style="margin-bottom:12px"><span><b>' + esc(s.title) + '</b></span></div><div class="thread">';
+      s.msgs.forEach(function (m) {
+        h += '<div class="msg' + (m.me ? ' me' : '') + (m.hl ? ' hl' : '') + '"><span class="av" aria-hidden="true">' + esc(m.who === 'PST' ? 'PST' : m.who.charAt(0)) + '</span>' +
+          '<div><div class="msg-h"><b>' + esc(m.who) + '</b>' + esc(m.time) + '</div><div class="msg-t">' + esc(m.text) + '</div></div></div>';
+      });
+      h += '</div>';
+      if (s.note) h += '<div class="src-note">' + ico('clock', 'ico-sm') + esc(s.note) + '</div>';
+    }
+    return h;
+  }
+  function sourceLabel(it) {
+    if (it.source.type === 'transcript') return 'From the meeting transcript';
+    if (it.src === 'teams') return 'From Teams';
+    if (it.src === 'jira') return 'From Jira';
+    if (it.src === 'confluence') return 'From Confluence';
+    return 'From your inbox';
+  }
+  function chatHTML(it) {
+    var log = S.chat[it.id] || [];
+    var h = '<div class="chat" id="chat"><div class="chat-log">' +
+      '<div class="cm c">' + ico('spark') + '<span>What should change? I can make it shorter, firmer, or add a date.</span></div>';
+    log.forEach(function (m) {
+      h += m.u ? '<div class="cm u">' + esc(m.t) + '</div>' : '<div class="cm c">' + ico('spark') + '<span>' + esc(m.t) + '</span></div>';
+    });
+    h += '</div><div class="chat-chips">' +
+      ['Shorter', 'More direct', 'Add a deadline'].map(function (c) { return '<button class="chat-chip" data-chip="' + c + '">' + c + '</button>'; }).join('') +
+      '</div><form class="chat-form" data-chatform><label class="sr" for="chatIn">Message Claude about this item</label>' +
+      '<input id="chatIn" placeholder="Tell Claude what to change" autocomplete="off"><button class="icon-btn" type="submit" aria-label="Send to Claude">' + ico('arrowUp') + '</button></form></div>';
+    return h;
+  }
+  function emptyHTML() {
+    return '<div class="iv-head"><span class="iv-crumb"><span class="tag"><i style="background:var(--faint)"></i>Item</span><span class="sep" aria-hidden="true">//</span><span class="c-sec">Standby</span></span></div>' +
+      '<div class="empty"><div>' +
+      '<svg class="empty-mark" viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="44" fill="none" stroke="currentColor" stroke-width="2"/><path d="M44 88 60 52M54 32c6 0 8 4 10 10l14 46" fill="none" stroke="#ff8a1f" stroke-width="5" stroke-linecap="square"/></svg>' +
+      '<h2>Standing by.</h2><p>Select an item to load its next action.</p><p style="margin-top:6px">Nothing is sent without your click.</p>' +
+      '<div class="keys"><span><span class="kbd">↑</span><span class="kbd">↓</span>Move</span><span><span class="kbd">Enter</span>Open</span><span><span class="kbd">/</span>Search</span><span><span class="kbd">Esc</span>Close</span></div>' +
+      '</div></div>';
+  }
+  function renderItem() {
+    var col = $('itemCol');
+    col.classList.toggle('is-idle', S.view !== 'item' || !S.cur);
+    if (S.view !== 'item' || !S.cur) { col.innerHTML = emptyHTML(); return; }
+    var it = BY[S.cur], st = status(it.id), d = it.draft, locked = !!st.sent;
+    var rankIdx = topItems().indexOf(it), inFocus = rankIdx > -1;
+    var n = inFocus ? rankIdx + 1 : restItems().indexOf(it) + topItems().length + 1;
+    var draftRows = '<div class="draft-row"><span class="k">To</span><span class="chips">' + d.to.map(function (t) { return '<span class="chip">' + esc(t) + '</span>'; }).join('') + '</span></div>';
+    if (d.subject) draftRows += '<div class="draft-row"><span class="k">Subject</span><span>' + esc(d.subject) + '</span></div>';
+    if (d.when) draftRows += '<div class="draft-row"><span class="k">When</span><span>' + esc(d.when) + '</span></div>';
+
+    col.innerHTML =
+      '<div class="iv-head">' +
+        '<button class="btn-back" data-back aria-label="Back to the list">' + ico('back') + '<span class="lbl-phone">Back</span><span class="lbl-desk">Close</span></button>' +
+        '<span class="iv-crumb" aria-label="Location"><span class="c-sec">' + (inFocus ? 'Do now' : 'Everything else') + '</span><span class="sep" aria-hidden="true">›</span>' +
+          '<span class="c-n">#' + pad(n) + '</span><span class="sep" aria-hidden="true">›</span><b>' + esc(it.tag) + '</b></span>' +
+        '<span class="kbd" aria-hidden="true">Esc</span>' +
+      '</div>' +
+      '<div class="iv-scroll' + (S.anim ? ' enter' : '') + '">' +
+        '<div class="iv-meta">' + srcHTML(it) + '<span class="sep" aria-hidden="true">·</span><span>' + esc(it.project) + '</span>' +
+          (it.flag ? '<span class="flag">' + esc(it.flag) + '</span>' : '') + '<span class="sep" aria-hidden="true">·</span><span>' + esc(it.time) + '</span></div>' +
+        '<h2 class="iv-title" id="ivTitle" tabindex="-1">' + esc(it.title) + '</h2>' +
+        '<div class="iv-why"><span class="who" aria-hidden="true">' + ico('spark') + '</span><p><span class="sr">Claude: </span>' + esc(it.why) + '</p></div>' +
+        '<div class="sec-label">' + ico(it.source.type === 'transcript' ? 'meeting' : it.src) + sourceLabel(it) + '</div>' +
+        '<div class="card src-card">' + sourceHTML(it) + '</div>' +
+        '<div class="sec-label">' + ico('spark') + 'Prepared draft · ' + esc(d.kind) + '</div>' +
+        '<div class="card draft' + (S.editing && !locked ? ' is-editing' : '') + (locked ? ' is-locked' : '') + '">' + draftRows +
+          '<label class="sr" for="draftText">Draft text</label>' +
+          '<textarea id="draftText" ' + (locked ? 'readonly' : '') + '>' + esc(S.drafts[it.id]) + '</textarea>' +
+          (it.external ? '<div class="warn">' + ico('warn', 'ico-sm') + 'Goes outside Planon. Check before sending.</div>' : '') +
+          '<div class="draft-foot">' + (locked ? 'Sent once. This draft is locked.' : 'Edit freely. Nothing is sent until you press Send.') + '</div>' +
+        '</div>' +
+        (S.chatOpen && !locked ? chatHTML(it) : '') +
+      '</div>' +
+      '<div class="iv-bar">' + barHTML(it) + '</div>';
+    S.anim = false;
+  }
+  function barHTML(it) {
+    var st = status(it.id), locked = !!st.sent;
+    var q = function (key, icon, label, k, pressed) {
+      return '<button class="qbtn" data-' + key + (locked ? ' aria-disabled="true"' : '') + (pressed !== undefined ? ' aria-pressed="' + pressed + '"' : '') +
+        ' aria-keyshortcuts="' + k + '">' + ico(icon) + '<span>' + label + '</span><span class="kbd" aria-hidden="true">' + k + '</span></button>';
+    };
+    return '<div class="quiet">' + q('edit', 'edit', 'Edit', 'e', S.editing) + q('chat', 'chat', 'Chat<span class="q-x"> about this</span>', 'c', S.chatOpen) +
+        q('notimp', 'down', 'Not important', 'n') + q('done', 'check', 'Done', 'd') + '</div>' +
+      (locked
+        ? '<button class="btn-send is-sent" id="sendBtn" aria-disabled="true">' + ico('check') + 'Sent ' + st.sent + ' · locked</button>'
+        : '<button class="btn-send" id="sendBtn" data-send>' + ico('send') + 'Send</button>') +
+      (locked ? '<div class="sent-note">Marked done · sent once</div>' : '');
+  }
+  function renderPane() {
+    var p = S.view === 'item' ? S.pane : 'list';
+    $('listCol').classList.toggle('is-active', p === 'list');
+    $('itemCol').classList.toggle('is-active', p === 'item');
+  }
+  function renderAll() {
+    $('app').setAttribute('data-view', S.view);
+    root.setAttribute('data-view', S.view);
+    renderHeader(); renderFocus(); renderRest(); renderItem(); renderPane();
+  }
+
+  /* ---------------- Toast ---------------- */
+  function toast(msg, undo) {
+    clearTimeout(S.toastTimer);
+    $('toastHost').innerHTML = '<div class="toast"><span>' + esc(msg) + '</span>' + (undo ? '<button data-undo>Undo</button>' : '') + '</div>';
+    S.undo = undo || null;
+    S.toastTimer = setTimeout(function () { $('toastHost').innerHTML = ''; S.undo = null; }, 6000);
+  }
+
+  /* ---------------- Ask Claude sheet ---------------- */
+  var askReturn = null;
+  function openAsk() {
+    askReturn = document.activeElement;
+    $('sheetHost').innerHTML = '<div class="scrim" data-ask-close></div>' +
+      '<div class="sheet" role="dialog" aria-modal="true" aria-labelledby="askTitle">' +
+        '<div class="sheet-h"><h2 id="askTitle">' + ico('spark') + 'Ask Claude</h2><button class="icon-btn" data-ask-close aria-label="Close">' + ico('close') + '</button></div>' +
+        '<form data-askform><label class="sr" for="askIn">Your question</label><textarea id="askIn" placeholder="Update the DoD page with Tuesday’s decisions…"></textarea>' +
+        '<div class="chat-chips"><button type="button" class="chat-chip" data-askchip="Update a Confluence page: ">Update a Confluence page</button><button type="button" class="chat-chip" data-askchip="Supplier mail: ">Supplier mail</button></div>' +
+        '<div class="sheet-foot"><small>Nothing is sent or changed without your click.</small><button class="btn-ask" type="submit">Ask</button></div></form>' +
+        '<div class="ask-reply" id="askReply"></div>' +
+      '</div>';
+    $('askIn').focus();
+  }
+  function closeAsk() { $('sheetHost').innerHTML = ''; if (askReturn && askReturn.focus) askReturn.focus(); }
+
+  /* ---------------- Navigation ---------------- */
+  function openItem(id, focusDraft) {
+    if (S.view === 'list') S.scrollY = window.scrollY;
+    S.cur = id; S.view = 'item'; S.pane = 'item'; S.anim = true; S.editing = !!focusDraft; S.chatOpen = false;
+    renderAll();
+    if (!desk()) window.scrollTo(0, 0);
+    var t = focusDraft ? $('draftText') : $('ivTitle');
+    if (t) t.focus({ preventScroll: desk() });
+  }
+  function back() {
+    var prev = S.cur;
+    S.view = 'list'; S.pane = 'list'; S.cur = null; S.editing = false; S.chatOpen = false;
+    renderAll();
+    if (!desk()) window.scrollTo(0, S.scrollY || 0);
+    var el = document.querySelector('[data-open="' + prev + '"]');
+    if (el) el.focus({ preventScroll: true });
+  }
+
+  /* ---------------- Events ---------------- */
+  document.addEventListener('click', function (e) {
+    var t = e.target.closest('button, [data-ask-close]');
+    if (!t) return;
+    var id;
+    if ((id = t.getAttribute('data-open'))) return openItem(id, false);
+    if ((id = t.getAttribute('data-act'))) return openItem(id, true);
+    if (t.id === 'restToggle') { S.restOpen = !S.restOpen; renderRest(); if (S.restOpen) $('q').focus(); return; }
+    if (t.hasAttribute('data-back')) return back();
+    if (t.hasAttribute('data-ask')) return openAsk();
+    if (t.hasAttribute('data-ask-close')) return closeAsk();
+    if (t.hasAttribute('data-askchip')) { var a = $('askIn'); a.value = t.getAttribute('data-askchip'); a.focus(); return; }
+    if (t.hasAttribute('data-undo')) { if (S.undo) S.undo(); $('toastHost').innerHTML = ''; return; }
+    if (t.getAttribute('aria-disabled') === 'true') return;
+    var cur = S.cur;
+    if (t.hasAttribute('data-send') && cur && !status(cur).sent) {
+      S.st[cur] = { sent: '10:42' }; S.editing = false; S.chatOpen = false;
+      renderHeader(); renderFocus(); renderRest(); renderItem(); renderPane();
+      var b = $('sendBtn'); if (b) b.focus();
+      return;
+    }
+    if (t.hasAttribute('data-edit') && cur) return toggleEdit();
+    if (t.hasAttribute('data-chat') && cur) return toggleChat();
+    if (t.hasAttribute('data-chip') && cur) return chatSay(cur, t.getAttribute('data-chip'));
+    if (t.hasAttribute('data-notimp') && cur) return notImportant();
+    if (t.hasAttribute('data-done') && cur) return markDone();
+  });
+
+  function toggleEdit() {
+    S.editing = !S.editing; renderItem();
+    var ta = $('draftText');
+    if (S.editing && ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
+    else { var eb = document.querySelector('[data-edit]'); if (eb) eb.focus(); }
+  }
+  function toggleChat() {
+    S.chatOpen = !S.chatOpen; renderItem();
+    if (S.chatOpen) { var ci = $('chatIn'); if (ci) { ci.focus({ preventScroll: true }); ci.scrollIntoView({ block: 'center' }); } }
+  }
+  function notImportant() {
+    var cur = S.cur; S.st[cur] = { ni: true }; back();
+    toast('Moved to Everything else. I’ll rank it lower next time.', function () { delete S.st[cur]; renderHeader(); renderFocus(); renderRest(); });
+  }
+  function markDone() {
+    var cur = S.cur; S.st[cur] = { done: true }; back();
+    toast('Marked done.', function () { delete S.st[cur]; renderHeader(); renderFocus(); renderRest(); });
+  }
+
+  function chatSay(id, text) {
+    var log = S.chat[id] = S.chat[id] || [];
+    log.push({ u: true, t: text });
+    var d = S.drafts[id], reply = 'Updated the draft. Check it before you send.';
+    var lc = text.toLowerCase();
+    if (lc.indexOf('short') > -1) { var parts = d.split('\n\n'); S.drafts[id] = parts[0].length < 25 ? parts.slice(0, 2).join('\n\n') : parts[0]; reply = 'Shortened it to the essentials.'; }
+    else if (lc.indexOf('direct') > -1) { S.drafts[id] = d.replace(/a gentle nudge on/i, 'following up on').replace(/Happy to pair for 15 minutes on it\./, 'I need an answer by Tuesday.'); reply = 'Made it more direct and kept it polite.'; }
+    else if (lc.indexOf('deadline') > -1) { S.drafts[id] = d + '\n\nPlease reply by Tuesday 6 Oct.'; reply = 'Added a deadline: Tuesday 6 Oct.'; }
+    log.push({ u: false, t: reply });
+    renderItem();
+    var ci = $('chatIn'); if (ci) ci.focus({ preventScroll: true });
+  }
+
+  document.addEventListener('submit', function (e) {
+    e.preventDefault();
+    if (e.target.hasAttribute('data-chatform')) {
+      var v = $('chatIn').value.trim(); if (v && S.cur) chatSay(S.cur, v);
+    }
+    if (e.target.hasAttribute('data-askform')) {
+      var q = $('askIn').value.trim();
+      $('askReply').innerHTML = q ? '<div class="cm c">' + ico('spark') + '<span>In Droplet I’d prepare this as a draft card and show it to you first. Nothing changes until you press Send.</span></div>' : '';
+    }
+  });
+  document.addEventListener('input', function (e) {
+    if (e.target.id === 'q') { S.q = e.target.value; renderRest(); }
+    if (e.target.id === 'draftText' && S.cur) S.drafts[S.cur] = e.target.value;
+  });
+  /* The active side follows keyboard focus; the other side dims (laptop). */
+  document.addEventListener('focusin', function (e) {
+    if (S.view !== 'item') return;
+    var p = $('listCol').contains(e.target) ? 'list' : $('itemCol').contains(e.target) ? 'item' : null;
+    if (p && p !== S.pane) { S.pane = p; renderPane(); }
+  });
+  document.addEventListener('keydown', function (e) {
+    var tag = (e.target.tagName || '').toLowerCase(), typing = tag === 'input' || tag === 'textarea';
+    if (e.key === 'Escape') {
+      if ($('sheetHost').innerHTML) return closeAsk();
+      if (S.view === 'item') return back();
+      return;
+    }
+    if (typing || e.metaKey || e.ctrlKey || e.altKey || $('sheetHost').innerHTML) return;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      var rows = [].slice.call($('listCol').querySelectorAll('[data-open]'));
+      var i = rows.indexOf(document.activeElement);
+      if (i === -1 && !$('listCol').contains(document.activeElement) && document.activeElement !== document.body) return;
+      e.preventDefault();
+      var nx = rows[Math.max(0, Math.min(rows.length - 1, i === -1 ? 0 : i + (e.key === 'ArrowDown' ? 1 : -1)))];
+      if (nx) nx.focus();
+      return;
+    }
+    if (e.key === '/') { e.preventDefault(); if (!S.restOpen) { S.restOpen = true; renderRest(); } $('q').focus(); return; }
+    if (S.view !== 'item' || S.pane !== 'item' || !S.cur || status(S.cur).sent) return;
+    if (e.key === 'e') { e.preventDefault(); toggleEdit(); }
+    else if (e.key === 'c') { e.preventDefault(); toggleChat(); }
+    else if (e.key === 'n') { e.preventDefault(); notImportant(); }
+    else if (e.key === 'd') { e.preventDefault(); markDone(); }
+  });
+
+  /* ---------------- Boot ---------------- */
+  renderAll();
+})();
+</script>

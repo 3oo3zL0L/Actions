@@ -1,0 +1,87 @@
+<title>Droplet</title>
+<!-- Publish: declare the Microsoft 365 tools get_me, outlook_email_search, read_resource,
+     outlook_create_reply_draft, outlook_create_draft, outlook_send_draft,
+     outlook_create_event, chat_message_search and outlook_calendar_search, and the
+     Atlassian Rovo tools atlassianUserInfo, getAccessibleAtlassianResources,
+     searchJiraIssuesUsingJql, getJiraIssue, addCommentToJiraIssue,
+     searchConfluenceUsingCql, getConfluencePage and updateConfluencePage.
+     The create/send tools, addCommentToJiraIssue and updateConfluencePage write,
+     and only on a click. Droplet never posts in Teams.
+     The full capabilities JSON is in README.md. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="css/app.css">
+
+<div class="sky" aria-hidden="true"></div>
+
+<main class="app" id="app" data-view="list">
+  <section class="list-col is-active" id="listCol" aria-label="Focus list">
+    <div class="list-main">
+      <header class="lh">
+        <div class="brand">
+          <span class="brand-name">Droplet</span>
+        </div>
+        <div class="status" id="status"><span><i></i>M365 link</span><span><i></i>Teams</span><span><i></i>Atlassian</span><span><i></i>Claude</span><span>Sync ··:··</span><span>Nothing sends without you</span></div>
+        <p class="date" id="dateLine"></p>
+        <h1 class="h1">Do now</h1>
+        <p class="sub" id="sub"></p>
+        <div class="notes" id="notes" role="status" aria-live="polite"></div>
+      </header>
+      <form class="addline" id="addForm" data-addform autocomplete="off">
+        <label class="add-k" for="addIn"><span aria-hidden="true">+ </span>Add action<span class="kbd" aria-hidden="true">a</span></label>
+        <div class="add-row">
+          <input id="addIn" type="text" maxlength="300" enterkeyhint="done" aria-keyshortcuts="a" placeholder="What needs doing? e.g. Plan DoD follow-up meeting, Friday">
+          <button class="add-btn" type="submit">Add</button>
+        </div>
+      </form>
+      <ol class="focus" id="focus"></ol>
+      <section class="rest" aria-label="Everything else">
+        <button class="rest-toggle" id="restToggle" aria-expanded="false" aria-controls="restPanel" aria-keyshortcuts="/">
+          <span>Everything else<span class="count" id="restCount"></span></span>
+          <span class="kbd" aria-hidden="true">/</span>
+          <svg class="ico chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <div id="restPanel" hidden>
+          <div class="search">
+            <label class="sr" for="q">Search everything else</label>
+            <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg>
+            <input id="q" type="search" placeholder="Search people, projects, words" autocomplete="off">
+          </div>
+          <ul class="rest-list" id="restList"></ul>
+        </div>
+      </section>
+    </div>
+    <div class="askbar-wrap">
+      <button class="askbar" id="askBar" data-ask aria-haspopup="dialog" aria-disabled="true" aria-keyshortcuts="k">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v5M12 16v5M3 12h5M16 12h5M5.6 5.6l3.2 3.2M15.2 15.2l3.2 3.2M5.6 18.4l3.2-3.2M15.2 8.8l3.2-3.2"/></svg>
+        <span class="lbl"><span aria-hidden="true">› </span>Ask Claude</span>
+        <span class="hint">Starting…</span>
+      </button>
+    </div>
+  </section>
+
+  <div class="divider" aria-hidden="true"></div>
+
+  <section class="item-col is-idle" id="itemCol" aria-label="Item"></section>
+</main>
+
+<div id="toastHost" role="status" aria-live="polite"></div>
+<div id="sheetHost"></div>
+
+<script src="js/util.js"></script>
+<script src="js/runtime.js"></script>
+<script src="js/store.js"></script>
+<script src="js/mail.js"></script>
+<script src="js/teams.js"></script>
+<script src="js/meet.js"></script>
+<script src="js/mine.js"></script>
+<script src="js/waits.js"></script>
+<script src="js/transcript.js"></script>
+<script src="js/rank.js"></script>
+<script src="js/atlassian.js"></script>
+<script src="js/send.js"></script>
+<script src="js/nextstep.js"></script>
+<script src="js/chat.js"></script>
+<script src="js/ask.js"></script>
+<script src="js/app.js"></script>
