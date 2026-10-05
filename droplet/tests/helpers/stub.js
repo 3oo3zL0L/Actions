@@ -5,6 +5,11 @@
 function installDropletStub(cfg) {
   "use strict";
   var calls = window.__calls = [];
+  /* Like the real runtime (db.d.ts, mcp.d.ts): what it hands out is frozen, deep. */
+  function deepFreeze(v) {
+    if (v && typeof v === "object" && !Object.isFrozen(v)) { Object.freeze(v); Object.keys(v).forEach(function (k) { deepFreeze(v[k]); }); }
+    return v;
+  }
   var SERVER = "Microsoft 365";
   var faults = cfg.faults || {};
   /* Short app timeouts for tests (window.__dropletConfig, read by runtime.js). */
@@ -44,7 +49,7 @@ function installDropletStub(cfg) {
     if (code === "tool_error" && resultText != null) e.result = result(resultText);
     return e;
   }
-  function later(v) { return new Promise(function (res) { setTimeout(function () { res(v); }, cfg.latency || 0); }); }
+  function later(v) { return new Promise(function (res) { setTimeout(function () { res(deepFreeze(v)); }, cfg.latency || 0); }); }
   function fault(tool) {
     var f = faults[tool];
     if (!f) return null;
@@ -425,7 +430,7 @@ function installDropletStub(cfg) {
       if (cfg.sampleFault) throw { code: cfg.sampleFault, message: cfg.sampleFault };
       var a = /You rank unread email/.test(prompt) ? rankAnswer(prompt) : isDraft ? draftAnswer(prompt) : extraAnswer(prompt) ||
         (chatQueue.length > 1 ? chatQueue.shift() : chatQueue[0] || { reply: "OK.", draft: null });
-      return asJson ? a : { text: JSON.stringify(a), truncated: false, modelTierApplied: "default" };
+      return deepFreeze(asJson ? a : { text: JSON.stringify(a), truncated: false, modelTierApplied: "default" });
     });
   }
   /* Increment 3 prompts: asks in sent messages, commitments in a transcript,
@@ -509,7 +514,7 @@ function installDropletStub(cfg) {
   function save() { try { sessionStorage.setItem(KEY, JSON.stringify(data)); } catch (e) { /* ignore */ } }
   window.__db = function () { return JSON.parse(JSON.stringify(data)); };
   function snap(id, v) {
-    return { id: id, exists: v !== undefined, data: function () { return v === undefined ? undefined : JSON.parse(JSON.stringify(v)); }, metadata: { fromCache: false, hasPendingWrites: false } };
+    return deepFreeze({ id: id, exists: v !== undefined, data: function () { return v === undefined ? undefined : deepFreeze(JSON.parse(JSON.stringify(v))); }, metadata: { fromCache: false, hasPendingWrites: false } });
   }
   function docRef(path) {
     var id = path.split("/").pop();
