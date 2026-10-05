@@ -4,12 +4,13 @@
    actions/<docId> (your own actions; done ones stay stored with doneAt),
    waits/<docId> (R3: your asks to others: open, answered or dismissed),
    asks/<msgKey> (R3: a sent message Claude already checked for asks),
-   meetings/<eventKey> (R6: a meeting whose transcript was read, or "none"). */
+   meetings/<eventKey> (R6: a meeting whose transcript was read, or "none"),
+   matches/<key> (a sent mail or meeting checked for whether it finished an open own action). */
 (function (D) {
   "use strict";
   var rt = D.rt;
   var store = D.store = { persistent: false, failed: false };
-  var mem = { rankings: {}, done: {}, sent: {}, feedback: {}, handoff: {}, actions: {}, waits: {}, asks: {}, meetings: {} };
+  var mem = { rankings: {}, done: {}, sent: {}, feedback: {}, handoff: {}, actions: {}, waits: {}, asks: {}, meetings: {}, matches: {} };
   var chains = {};
   var KEEP_RANKINGS_DAYS = 14, KEEP_FEEDBACK = 200;
 
@@ -17,7 +18,8 @@
   /* One write at a time per document. */
   function queue(path, fn) {
     var prev = chains[path] || Promise.resolve();
-    var next = prev.then(fn, fn).catch(function () { store.failed = true; if (store.onError) store.onError(); });
+    /* Resolves true when written, false when the write failed (never rejects). */
+    var next = prev.then(fn, fn).then(function () { return true; }, function () { store.failed = true; if (store.onError) store.onError(path); return false; });
     chains[path] = next;
     return next;
   }
@@ -83,16 +85,16 @@
     }).then(take);
   }
   function U() { return D.util; }
-  var NAMES = ["rankings", "done", "feedback", "sent", "handoff", "actions", "waits", "asks", "meetings"];
+  var NAMES = ["rankings", "done", "feedback", "sent", "handoff", "actions", "waits", "asks", "meetings", "matches"];
   function build(got) {
     var r = got.map(function (g) { return g.v; }), failed = [], err = null, timedOut = false;
     got.forEach(function (g, i) { if (!g.ok) { failed.push(NAMES[i]); err = err || g.e; if (g.e && g.e.code === "timeout") timedOut = true; } });
     var fb = Object.keys(r[2]).map(function (k) { var v = Object.assign({}, r[2][k]); v.key = k; return v; })
       .sort(function (a, b) { return String(b.at || "").localeCompare(String(a.at || "")); });
     /* Prune only after a complete read. */
-    if (!failed.length) { prune(r[0], fb, r[3], r[4]); pruneScan(r[7], r[8]); }
+    if (!failed.length) { prune(r[0], fb, r[3], r[4]); pruneScan(r[7], r[8], r[9]); }
     else store.failed = true;
-    return { rankings: r[0], done: r[1], feedback: fb, sent: r[3], handoff: r[4], actions: r[5], waits: r[6], asks: r[7], meetings: r[8],
+    return { rankings: r[0], done: r[1], feedback: fb, sent: r[3], handoff: r[4], actions: r[5], waits: r[6], asks: r[7], meetings: r[8], matches: r[9],
       ok: !failed.length, failed: failed, timedOut: timedOut,
       error: err ? { code: String(err.code || "unavailable"), message: String(err.message || "") } : null };
   }
@@ -133,9 +135,9 @@
   }
   /* Scan caches older than 30 days can go: their messages and meetings are
      out of the scan window by then. */
-  function pruneScan(asks, meetings) {
+  function pruneScan(asks, meetings, matches) {
     var cutoff = Date.now() - 30 * 864e5, n = 0;
-    [["asks", asks], ["meetings", meetings]].forEach(function (p) {
+    [["asks", asks], ["meetings", meetings], ["matches", matches]].forEach(function (p) {
       Object.keys(p[1] || {}).forEach(function (k) {
         var t = Date.parse(p[1][k].at || "");
         if (n < 40 && (!t || t < cutoff)) { n++; del(p[0], k); }
@@ -143,11 +145,11 @@
     });
   }
   function set(name, key, data) {
-    if (!db()) { mem[name][key] = data; return Promise.resolve(); }
+    if (!db()) { mem[name][key] = data; return Promise.resolve(true); }
     return queue(name + "/" + key, function () { return db().collection(name).doc(key).set(data); });
   }
   function del(name, key) {
-    if (!db()) { delete mem[name][key]; return Promise.resolve(); }
+    if (!db()) { delete mem[name][key]; return Promise.resolve(true); }
     return queue(name + "/" + key, function () { return db().collection(name).doc(key).delete(); });
   }
   store.putRanking = function (key, r) { return set("rankings", key, r); };
@@ -163,6 +165,8 @@
   store.setWait = function (id, w) { return set("waits", id, w); };
   store.setAsk = function (key, d) { return set("asks", key, d); };
   store.setMeeting = function (key, d) { return set("meetings", key, d); };
+  /* matches/<key>: a sent mail or a meeting Claude already checked against your open actions. */
+  store.setMatch = function (key, d) { return set("matches", key, d); };
   store.setFeedback = function (key, f) { return set("feedback", key, f); };
   store.clearFeedback = function (key) { return del("feedback", key); };
 })(window.Droplet = window.Droplet || {});

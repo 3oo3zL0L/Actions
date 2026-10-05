@@ -85,11 +85,14 @@
     return String(b.received).localeCompare(String(a.received));
   }
   function actionDone(it) { var a = it.src === 'mine' && S.actions[it.docId]; return !!(a && a.done); }
+  /* Marked done with Done (or d): off every list at once, for this session
+     even when the db write failed. */
+  function gone(id) { var d = S.doneNow[id], it = S.byId[id]; return !!(d && d.hidden) || !!(it && actionDone(it)); }
   function visible() {
     return S.items.filter(function (it) {
-      if (actionDone(it)) return false;
+      if (actionDone(it) || gone(it.id)) return false;
       var d = rk(it).dupOf;
-      if (d && S.byId[d] && !it.standstill) return false;
+      if (d && (S.byId[d] || gone(d)) && !it.standstill) return false;
       return groupOf(it) !== 'hidden';
     }).sort(cmp);
   }
@@ -235,8 +238,8 @@
     return '';
   }
   function actHTML(it) {
-    if (isClosed(it.id)) return stateChip(it.id);
     if (waitingTeams(it.id)) return '<button class="btn-act is-wait" data-act="' + esc(it.id) + '" data-waiting>' + 'Waiting for you to send in Teams' + '</button>';
+    if (isClosed(it.id)) return stateChip(it.id);
     return '<button class="btn-act" data-act="' + esc(it.id) + '">' + esc(rk(it).label) + '</button>';
   }
   function renderFocus() {
