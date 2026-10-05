@@ -223,12 +223,20 @@ const REJECT_DIALOG = {
   confirmBtnInner: 'button[title="Reject Timecard"]',
 };
 
-// ── Run report (handed to Action Desk via background.js → bridge.js) ─────────
+// ── Run report (handed to Droplet via background.js → bridge.js) ─────────────
+// trigger: 'schedule' for the Monday 13:00 run (background.js sets __sfApproverTrigger and
+// __sfApproverPeriod = {week, start, end}: the previous ISO week), else 'manual'.
+// week: the ISO week the hours check covers (background.js fills it in when it is missing).
+
+const scheduled = window.__sfApproverTrigger === 'schedule';
+const period    = scheduled && window.__sfApproverPeriod && typeof window.__sfApproverPeriod === 'object' ? window.__sfApproverPeriod : null;
 
 const report = {
   id:        `sf-${Date.now()}`,
   startedAt: Date.now(),
   auto:      !!window.__sfApproverAuto,
+  trigger:   scheduled ? 'schedule' : 'manual',
+  week:      period?.week || '',
   approved:  0, rejected: 0, errors: 0,
   rows:      [],   // { label, assignment, outcome: 'approved' | 'rejected' | 'error', error? }
   fatal:     '',
@@ -265,6 +273,7 @@ async function runApproval() {
   createOverlay();
   if (report.auto && !(await countdown(10))) {
     report.cancelled = true;
+    if (scheduled) report.fatal = 'The scheduled run was cancelled on the page.';
     setTitle('⏱ Hours Approver — cancelled');
     log('Cancelled. Use the extension button to run it later.', '#888');
     setTimeout(() => overlay?.remove(), 5000);
@@ -452,7 +461,7 @@ async function runHoursCheck() {
   log('', '');
   log('📊 Checking the hours report…', '#90CAF9');
   try {
-    const resp = await chrome.runtime.sendMessage({ action: 'hoursCheck', apiVersion: apiVer() });
+    const resp = await chrome.runtime.sendMessage({ action: 'hoursCheck', apiVersion: apiVer(), period });
     if (!resp)      throw new Error('No response from background service worker.');
     if (resp.error) throw new Error(resp.error);
     const h = resp.result;
@@ -482,10 +491,11 @@ function finish() {
 }
 
 // Keep a report when something happened, went wrong, or someone is short on hours.
+// A scheduled run always reports (the weekly recap in Droplet, and its tab closes on it).
 function saveReport() {
-  if (report.cancelled) return;
+  if (report.cancelled && !scheduled) return;
   const hoursNews = report.hours && (report.hours.error || report.hours.missing?.length);
-  if (!report.rows.length && !report.fatal && !hoursNews) return;
+  if (!scheduled && !report.rows.length && !report.fatal && !hoursNews) return;
   report.finishedAt = Date.now();
   chrome.runtime.sendMessage({ action: 'saveReport', report }).catch(() => {});
 }
@@ -503,6 +513,8 @@ if (!window.__sfApproverRunning) {
       saveReport();
       delete window.__sfApproverRunning;
       delete window.__sfApproverAuto;
+      delete window.__sfApproverTrigger;
+      delete window.__sfApproverPeriod;
     });
 }
 

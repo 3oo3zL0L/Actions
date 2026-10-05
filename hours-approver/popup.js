@@ -6,12 +6,15 @@ const status = document.getElementById('status');
 const autoRun    = document.getElementById('autoRun');
 const deskStatus = document.getElementById('deskStatus');
 
-chrome.storage.local.get(['autoRun', 'pending', 'lastDelivered']).then(({ autoRun: on = true, pending = [], lastDelivered }) => {
+chrome.storage.local.get(['autoRun', 'pending', 'lastDelivered', 'lastRunWeek', 'lastRunAt']).then(async ({ autoRun: on = true, pending = [], lastDelivered, lastRunWeek, lastRunAt }) => {
   autoRun.checked = on;
   const when = lastDelivered ? new Date(lastDelivered).toLocaleString() : 'never';
-  deskStatus.textContent = pending.length
-    ? `${pending.length} report(s) waiting for Action Desk — it picks them up as soon as it is open in this browser. Last delivered: ${when}.`
-    : lastDelivered ? `✓ All reports are in Action Desk. Last one delivered ${when}.` : 'No reports yet.';
+  const weekly = await chrome.alarms.get('weekly');
+  const next = weekly ? new Date(weekly.scheduledTime).toLocaleString() : 'not set';
+  deskStatus.textContent = (pending.length
+    ? `${pending.length} report(s) waiting for Droplet: they go as soon as Droplet is open in this browser. Last delivered: ${when}.`
+    : lastDelivered ? `All reports are in Droplet. Last one delivered ${when}.` : 'No reports yet.') +
+    ` Weekly run: Monday 13:00, next ${next}.` + (lastRunAt ? ` Last scheduled run: ${new Date(lastRunAt).toLocaleString()} (${lastRunWeek}).` : '');
 });
 autoRun.addEventListener('change', () => chrome.storage.local.set({ autoRun: autoRun.checked }));
 

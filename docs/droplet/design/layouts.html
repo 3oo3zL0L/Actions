@@ -40,9 +40,10 @@
   --f-body: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
   --f-meta: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
   --tap: 40px;
+  --rowh: 34px;
 }
-@media (pointer: coarse) { :root { --tap: 44px; } }
-@media (max-width: 959.98px) { :root { --tap: 44px; } }
+@media (pointer: coarse) { :root { --tap: 44px; --rowh: 44px; } }
+@media (max-width: 959.98px) { :root { --tap: 44px; --rowh: 44px; } }
 
 /* ---------- Base ---------- */
 *, *::before, *::after { box-sizing: border-box; }
@@ -201,7 +202,7 @@ svg { display: block; flex: none; }
 .hrs { font-family: var(--f-meta); }
 .hrs-h { display: flex; align-items: baseline; gap: 10px; }
 .hrs-h .t { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
-.hrs-h .tot { margin-left: auto; font-family: var(--f-display); font-size: 18px; font-weight: 600; color: var(--ink); }
+.hrs-h .tot { white-space: nowrap; margin-left: auto; font-family: var(--f-display); font-size: 18px; font-weight: 600; color: var(--ink); }
 .hrs-h .tot small { font-family: var(--f-meta); font-size: 11px; color: var(--faint); font-weight: 400; margin-left: 4px; }
 .hbar { display: flex; height: 8px; margin: 6px 0 0; background: var(--bg-2); border: 1px solid var(--line); gap: 1px; }
 .hbar span { display: block; height: 100%; }
@@ -256,15 +257,18 @@ svg { display: block; flex: none; }
 .a-main { max-width: 1240px; margin: 0 auto; }
 .a-top { border-bottom: 1px solid var(--line); padding-bottom: 10px; }
 .a-title { display: flex; align-items: center; gap: 10px 18px; flex-wrap: wrap; }
-.a-title .add { flex: 1; min-width: 300px; max-width: 560px; margin-left: auto; }
+.a-title .add { flex: 1; min-width: 300px; max-width: 480px; margin-left: auto; }
 .a-list { container-type: inline-size; container-name: alist; padding-bottom: 12px; }
-.a-sec { margin-top: 12px; }
+.a-sec { margin-top: 6px; }
 .a-sec .secl { min-height: 26px; padding: 0 4px; }
+.ar .dn { width: var(--tap); min-height: var(--rowh); }
+.A .hd { padding: 8px 0 6px; }
+.a-title .sub { flex: 0 1 auto; }
 .a-sec .secl .srch { order: 3; flex: 0 1 240px; }
 .ar { display: flex; align-items: stretch; border-bottom: 1px solid var(--line); background: transparent; }
 .ar:hover { background: var(--surface); }
 .ar-open {
-  flex: 1; min-width: 0; min-height: var(--tap); display: grid; align-items: center; gap: 0 10px; padding: 3px 4px 3px 6px;
+  flex: 1; min-width: 0; min-height: var(--rowh); display: grid; align-items: center; gap: 0 10px; padding: 1px 4px 1px 6px;
   grid-template-columns: 24px 18px minmax(0, 1fr) 168px 236px;
 }
 .ar-n { font-family: var(--f-meta); font-size: 11.5px; color: var(--faint); text-align: right; }
@@ -273,11 +277,12 @@ svg { display: block; flex: none; }
 .ar-why { font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1 1 0; }
 .ar-why::before { content: "— "; color: var(--faint); }
 .ar-act { display: flex; align-items: center; justify-content: flex-end; gap: 6px; min-width: 0; }
-.cmd { display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding: 0 10px; font-family: var(--f-meta); font-size: 11.5px; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.cmd { display: inline-flex; align-items: center; gap: 6px; min-height: 24px; padding: 0 10px; font-family: var(--f-meta); font-size: 11.5px; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .cmd::after { content: "\203A"; font-size: 15px; line-height: 1; }
 .cmd.go { color: var(--accent-hi); }
 .cmd.go.first { background: var(--accent); color: var(--accent-ink); }
-.cmd.quiet { color: var(--muted); }
+.cmd.mute { color: var(--muted); }
+.is-open .cmd.go.first:not(.x) { background: transparent; color: var(--accent-hi); box-shadow: inset 0 0 0 1px var(--accent-line); }
 .ar-sub { display: none; }
 .ar.is-move .ar-title { color: var(--ink); }
 .ar.is-first .ar-n { color: var(--accent); }
@@ -368,10 +373,14 @@ svg { display: block; flex: none; }
 .b-grp + .b-grp { margin-top: 2px; }
 .b-grp-h { padding: 4px 8px 0; }
 .b-wk { padding: 10px; border: 1px solid var(--line); background: var(--surface); }
-.b-askk { margin-top: auto; }
+.b-keys { margin-top: auto; padding: 8px 4px 0; border-top: 1px dashed var(--line); }
+.b-keys .keys { flex-direction: column; gap: 6px; }
+.hrs-h .t { white-space: nowrap; }
+.lane .dt .hint { display: none; }
+.dt > span { white-space: nowrap; }
 .b-scrim { display: none; }
 @media (min-width: 960px) {
-  .B { display: flex; flex-direction: column; height: 100%; padding: 0 20px 14px; }
+  .B { display: flex; flex-direction: column; height: 100%; padding: 0 20px 14px; overflow: hidden; }
   .lanes { flex: 1; min-height: 0; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, .9fr); }
   .lane { min-height: 0; }
   .lane-b { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
@@ -456,6 +465,8 @@ svg { display: block; flex: none; }
   .C.is-open .c-item { display: flex; flex: 1; min-height: 0; }
   .c-item > .iv { flex: 1; min-width: 0; }
   .C .askbar-ph { display: none; }
+  .C .hd .status { order: 3; flex-basis: 100%; }
+  .C .askbtn .hint { display: none; }
 }
 
 /* ============================================================
@@ -521,7 +532,7 @@ svg { display: block; flex: none; }
 /* Phone: the item is its own screen. */
 @media (max-width: 959.98px) {
   .a-panel, .b-drawer, .c-item {
-    display: flex; position: fixed; inset: 0; z-index: 50; background: var(--raised);
+    display: flex; position: fixed; inset: 0; z-index: 90; background: var(--raised);
     transform: translateX(102%); transition: transform .28s cubic-bezier(.4,0,.2,1); visibility: hidden;
   }
   .is-open > .a-panel, .is-open > .b-drawer, .is-open .c-item { transform: none; visibility: visible; }
@@ -557,8 +568,8 @@ svg { display: block; flex: none; }
 }
 
 /* ---------- Sheet + toast ---------- */
-.scrim { position: fixed; inset: 0; z-index: 70; background: rgba(0,0,0,.6); }
-.sheet { position: fixed; z-index: 71; left: 0; right: 0; bottom: 0; margin: 0 auto; max-width: 560px; background: var(--raised); border: 1px solid var(--line-3); border-bottom: 0; padding: 14px 16px calc(16px + env(safe-area-inset-bottom)); box-shadow: 0 -20px 60px rgba(0,0,0,.5); }
+.scrim { position: fixed; inset: 0; z-index: 96; background: rgba(0,0,0,.6); }
+.sheet { position: fixed; z-index: 97; left: 0; right: 0; bottom: 0; margin: 0 auto; max-width: 560px; background: var(--raised); border: 1px solid var(--line-3); border-bottom: 0; padding: 14px 16px calc(16px + env(safe-area-inset-bottom)); box-shadow: 0 -20px 60px rgba(0,0,0,.5); }
 @media (min-width: 960px) { .sheet { bottom: 32px; border-bottom: 1px solid var(--line-3); } }
 .sheet-h { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
 .sheet-h h2 { margin: 0; font-family: var(--f-display); font-weight: 600; font-size: 18px; text-transform: uppercase; letter-spacing: .08em; display: flex; align-items: center; gap: 8px; }
@@ -572,7 +583,7 @@ svg { display: block; flex: none; }
 .btn-ask { min-height: 46px; padding: 0 22px; background: var(--accent); color: var(--accent-ink); font-weight: 600; font-family: var(--f-display); text-transform: uppercase; letter-spacing: .1em; clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%); }
 .ask-reply { margin-top: 10px; font-size: 14px; color: var(--muted); border-left: 2px solid var(--accent); padding-left: 10px; }
 .toast {
-  position: fixed; z-index: 80; left: 50%; bottom: 84px; transform: translateX(-50%); width: max-content; max-width: calc(100% - 32px);
+  position: fixed; z-index: 98; left: 50%; bottom: 84px; transform: translateX(-50%); width: max-content; max-width: calc(100% - 32px);
   display: flex; align-items: center; gap: 12px; padding: 4px 6px 4px 14px; min-height: 50px;
   background: var(--bar); border: 1px solid var(--line-3); border-left: 3px solid var(--ok); font-size: 14px; line-height: 1.35; box-shadow: 0 10px 40px rgba(0,0,0,.5);
 }
@@ -766,7 +777,7 @@ svg { display: block; flex: none; }
   }
   function cmd(it, first) {
     if (isGo(it)) return '<span class="cmd go' + (first ? ' first' : '') + '">' + esc(it.act) + '</span>';
-    if (it.st === 'rest') return '<span class="cmd quiet">' + esc(it.act) + '</span>';
+    if (it.st === 'rest') return '<span class="cmd mute">' + esc(it.act) + '</span>';
     return '';
   }
   function doneBtn(it) { return '<button class="dn" data-done="' + esc(it.id) + '" aria-label="Done: ' + esc(it.title) + '" title="Done">' + ico('check') + '</button>'; }
@@ -788,7 +799,7 @@ svg { display: block; flex: none; }
   function addForm(compact) {
     return '<form class="add" data-add autocomplete="off">' +
       (compact ? '' : '<label for="addIn-' + S.dir + '">+ Add</label>') +
-      '<input id="addIn-' + S.dir + '" name="t" maxlength="200" required aria-label="Add action to Today" placeholder="+ Add action to Today, e.g. Plan DoD follow-up" aria-keyshortcuts="a">' +
+      '<input id="addIn-' + S.dir + '" name="t" maxlength="200" required aria-label="Add action to Today" placeholder="' + (compact ? '+ Add action to Today' : '+ Add action to Today, e.g. Plan DoD follow-up') + '" aria-keyshortcuts="a">' +
       '<button class="add-btn" type="submit">Add</button><span class="kbd" aria-hidden="true">a</span></form>';
   }
   function hours(mode) {
@@ -846,8 +857,7 @@ svg { display: block; flex: none; }
     return '<div class="dir A' + (S.open ? ' is-open' : '') + '" id="dirRoot">' +
       '<div class="a-col">' +
         '<div class="a-main a-top">' + header() +
-          '<div class="a-title"><h1 class="h1">Today</h1><span class="date">Mon 05 Oct · 10:00</span>' + tally() + addForm() + '</div>' +
-          '<p class="sub" style="margin-top:4px">' + counts() + '</p></div>' +
+          '<div class="a-title"><h1 class="h1">Today</h1>' + tally() + '<p class="sub">' + counts() + '</p>' + addForm() + '</div></div>' +
         '<div class="scroll" data-scroll="a"><div class="a-main a-list">' +
           aSec('today', 'Today · your move', 'go') +
           aSec('waiting', 'Waiting on', 'hold') +
@@ -882,7 +892,7 @@ svg { display: block; flex: none; }
     rest.forEach(function (it) { var g = groups[groups.length - 1]; if (!g || g.p !== it.proj) groups.push(g = { p: it.proj, items: [] }); g.items.push(it); });
     return '<div class="dir B' + (S.open ? ' is-open' : '') + '" id="dirRoot">' +
       header() +
-      '<div class="b-top"><h1 class="h1">Today</h1><span class="date">Mon 05 Oct · 10:00</span>' + tally() + '<p class="sub">' + counts() + '</p><span class="hd-sp"></span>' + keys() + '</div>' +
+      '<div class="b-top"><h1 class="h1">Today</h1><span class="date">Mon 05 Oct · 10:00</span>' + tally() + '<p class="sub">' + counts() + '</p></div>' +
       '<nav class="b-jump" aria-label="Jump to lane"><a class="go" href="#lane-today">Today <b>' + D.today.length + '</b></a><a href="#lane-wait">Waiting <b>' + (D.waiting.length + D.elsewhere.length) + '</b></a><a href="#lane-later">Later <b>' + D.rest.length + '</b></a><a href="#lane-week">Week</a></nav>' +
       '<div class="lanes">' +
         '<section class="lane go" id="lane-today" aria-label="Today"><div class="lane-h"><b>Today</b><span class="n">' + D.today.length + '</span><span class="r">Your move</span></div>' +
@@ -895,7 +905,7 @@ svg { display: block; flex: none; }
           '<div class="lane-b" data-scroll="b3">' + search() +
           groups.map(function (g) { return '<div class="b-grp"><div class="b-grp-h proj">' + esc(g.p) + '</div><ul>' + g.items.map(bLine).join('') + '</ul></div>'; }).join('') + '</div></section>' +
         '<section class="lane" id="lane-week" aria-label="Week"><div class="lane-h"><b>Week</b><span class="r">Mon 05 Oct</span></div>' +
-          '<div class="lane-b" data-scroll="b4"><div class="b-wk">' + hours('full') + '</div><div>' + doneSec() + '</div></div></section>' +
+          '<div class="lane-b" data-scroll="b4"><div class="b-wk">' + hours('full') + '</div><div>' + doneSec() + '</div><div class="b-keys">' + keys() + '</div></div></section>' +
       '</div>' +
       '<div class="askbar-ph">' + askBtn() + '</div>' +
       '<div class="b-scrim" data-close aria-hidden="true"></div>' +

@@ -9,7 +9,12 @@
 //     Fetches made from an extension service worker with matching host_permissions
 //     bypass CORS entirely, so the request succeeds.
 
+importScripts('schedule.js'); // HoursSchedule: when the Monday 13:00 run is due
+
 const DEFAULT_API_VERSION = 'v59.0';
+const MASS_APPROVAL_URL = 'https://planonsoftware.lightning.force.com/lightning/n/Mass_Approval_Lightning_Component';
+// The Droplet artifact: opened in a background tab after a scheduled run when no claude.ai tab is open.
+const DROPLET_URL = 'https://claude.ai/artifact/L9GCP14h56wSDUWqubY61M';
 
 // myorg.lightning.force.com → myorg.my.salesforce.com
 function toInstanceHost(host) {
@@ -52,12 +57,16 @@ chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
   if (info.status !== 'complete' && !info.url) return;
   if (!MASS_APPROVAL.test(tab.url || '')) return;
 
+  const sched = await scheduledTab();
+  if (sched && sched.tabId === tabId) { if (info.status === 'complete') onScheduledTabLoaded(tabId, tab.url); return; }
+
   const { autoRun = true } = await chrome.storage.local.get('autoRun');
   if (!autoRun) return;
   if (Date.now() - (lastAutoRun.get(tabId) || 0) < 60000) return;
   lastAutoRun.set(tabId, Date.now());
 
   await new Promise(r => setTimeout(r, 4000)); // let Lightning and the LWC components boot
+  if ((await scheduledTab())?.tabId === tabId) return;
   try {
     await chrome.scripting.executeScript({ target: { tabId }, func: () => { window.__sfApproverAuto = true; } });
     await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] });
@@ -66,9 +75,134 @@ chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
 
 chrome.tabs.onRemoved.addListener(tabId => lastAutoRun.delete(tabId));
 
+// ── Weekly schedule: Monday 13:00 Europe/Amsterdam ────────────────────────────
+// A "weekly" alarm at the next Monday 13:00, plus a catch-up check on startup, on
+// install and every 30 minutes: past Monday 13:00 and this ISO week not run yet → run
+// now (covers a laptop that was off). lastRunWeek is stored BEFORE the run starts, so
+// a week never runs twice.
+
+const SCHED_LOAD_MIN   = 3;  // the Mass Approval page must be up within 3 minutes
+const SCHED_RUN_MIN    = 90; // a run that never reports is ended after 90 minutes
+const DELIVERY_MIN     = 10; // a Droplet tab we opened closes after 10 minutes at most
+
+async function scheduleAlarms() {
+  await chrome.alarms.create('weekly', { when: HoursSchedule.nextRun(Date.now()) });
+  const c = await chrome.alarms.get('catchup');
+  if (!c) await chrome.alarms.create('catchup', { periodInMinutes: 30 });
+}
+
+let checking = null;
+function checkDue() {
+  if (checking) return checking;
+  checking = (async () => {
+    const now = Date.now();
+    const { lastRunWeek = '' } = await chrome.storage.local.get('lastRunWeek');
+    if (!HoursSchedule.isDue(now, lastRunWeek)) return;
+    if (await scheduledTab()) return; // one is already running
+    await chrome.storage.local.set({ lastRunWeek: HoursSchedule.weekKey(now), lastRunAt: now });
+    await startScheduledRun(now);
+  })().catch(() => {}).finally(() => { checking = null; });
+  return checking;
+}
+
+async function scheduledTab() {
+  const { sched = null } = await chrome.storage.local.get('sched');
+  return sched;
+}
+
+// Open Mass Approval in a NEW background tab; the run starts when it has loaded.
+async function startScheduledRun(now) {
+  const period = HoursSchedule.previousWeek(now);
+  const tab = await chrome.tabs.create({ url: MASS_APPROVAL_URL, active: false });
+  await chrome.storage.local.set({ sched: { tabId: tab.id, period, startedAt: now, injected: false } });
+  await chrome.alarms.create('schedLoad', { delayInMinutes: SCHED_LOAD_MIN });
+  await chrome.alarms.create('schedEnd', { delayInMinutes: SCHED_RUN_MIN });
+}
+
+const LOGIN = /login\.salesforce\.com|[?&](ec=30[12]|startURL=)|\/secur\/|\/saml|login\.microsoftonline\.com/i;
+
+async function onScheduledTabLoaded(tabId, url) {
+  const sched = await scheduledTab();
+  if (!sched || sched.tabId !== tabId || sched.injected) return;
+  if (!MASS_APPROVAL.test(url || '')) return; // still redirecting (SSO); schedLoad decides
+  sched.injected = true;
+  await chrome.storage.local.set({ sched });
+  await new Promise(r => setTimeout(r, 4000)); // let Lightning and the LWC components boot
+  try {
+    await chrome.scripting.executeScript({ target: { tabId }, args: [sched.period], func: p => {
+      window.__sfApproverAuto = true; window.__sfApproverTrigger = 'schedule'; window.__sfApproverPeriod = p;
+    } });
+    await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] });
+  } catch (e) {
+    await endScheduledRun(`Could not start the run on the Mass Approval page: ${e.message}`);
+  }
+}
+
+// A scheduled run that can't report by itself: save a fatal report and close its tab.
+async function endScheduledRun(fatal) {
+  const sched = await scheduledTab();
+  if (!sched) return;
+  await chrome.storage.local.remove('sched');
+  chrome.alarms.clear('schedLoad'); chrome.alarms.clear('schedEnd');
+  chrome.tabs.remove(sched.tabId).catch(() => {});
+  const report = { id: `sf-${sched.startedAt}`, startedAt: sched.startedAt, finishedAt: Date.now(), auto: true, trigger: 'schedule',
+    week: sched.period.week, approved: 0, rejected: 0, errors: 0, rows: [], fatal };
+  await storeReport(report);
+  await deliverToDroplet(report.id);
+}
+
+chrome.alarms.onAlarm.addListener(async alarm => {
+  if (alarm.name === 'weekly') { await checkDue(); await scheduleAlarms(); }
+  if (alarm.name === 'catchup') { await checkDue(); }
+  if (alarm.name === 'schedLoad') {
+    const sched = await scheduledTab();
+    if (!sched || sched.injected) return;
+    const tab = await chrome.tabs.get(sched.tabId).catch(() => null);
+    const sid = await chrome.cookies.getAll({ name: 'sid' }).catch(() => []);
+    const signedOut = !tab || LOGIN.test(tab.url || '') || !sid.some(c => c.domain.includes('salesforce.com') || c.domain.includes('force.com'));
+    await endScheduledRun(signedOut ? 'Not signed in to Salesforce' : 'The Mass Approval page did not load within 3 minutes.');
+  }
+  if (alarm.name === 'schedEnd') await endScheduledRun('The scheduled run did not finish within 90 minutes.');
+  if (alarm.name === 'deliveryEnd') await closeDeliveryTab();
+});
+
+chrome.runtime.onStartup.addListener(async () => { await scheduleAlarms(); await checkDue(); });
+
+// ── Delivery to Droplet ───────────────────────────────────────────────────────
+// After a scheduled run: if no claude.ai tab is open, open Droplet in a background tab so
+// the report gets there (Droplet sends the reminders). That tab closes when Droplet has
+// acked the report AND said its reminder run is done, or after 10 minutes.
+
+async function deliverToDroplet(reportId) {
+  pushToActionDesk();
+  const pages = chrome.runtime.getManifest().content_scripts?.[0]?.matches || [];
+  const open = await chrome.tabs.query({ url: pages });
+  if (open.length) return;
+  const tab = await chrome.tabs.create({ url: DROPLET_URL, active: false });
+  await chrome.storage.local.set({ delivery: { tabId: tab.id, reportId, acked: false, done: false, openedAt: Date.now() } });
+  await chrome.alarms.create('deliveryEnd', { delayInMinutes: DELIVERY_MIN });
+}
+
+async function closeDeliveryTab() {
+  const { delivery = null } = await chrome.storage.local.get('delivery');
+  if (!delivery) return;
+  await chrome.storage.local.remove('delivery');
+  chrome.alarms.clear('deliveryEnd');
+  chrome.tabs.remove(delivery.tabId).catch(() => {});
+}
+
+async function noteDelivery(kind, ids) {
+  const { delivery = null } = await chrome.storage.local.get('delivery');
+  if (!delivery || !ids.includes(delivery.reportId)) return;
+  delivery[kind] = true;
+  await chrome.storage.local.set({ delivery });
+  if (delivery.acked && delivery.done) await closeDeliveryTab();
+}
+
 // Chrome only adds manifest content scripts to pages opened after an install or update:
 // put the bridge into claude.ai tabs that are already open, so Action Desk needs no reload.
 chrome.runtime.onInstalled.addListener(async () => {
+  scheduleAlarms().then(checkDue);
   const pages = chrome.runtime.getManifest().content_scripts?.[0]?.matches || [];
   for (const tab of await chrome.tabs.query({ url: pages })) {
     chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, files: ['bridge.js'] }).catch(() => {});
@@ -91,6 +225,23 @@ async function pushToActionDesk() {
 // handled must not be lost (both read the list, change it and write it back).
 let pendingChain = Promise.resolve();
 const withPending = fn => (pendingChain = pendingChain.then(fn, fn));
+
+// Keep a report until Droplet acks it. week: the ISO week the hours check covers
+// (from the run's period, else the report period's start, else the week of the run).
+function storeReport(report) {
+  return withPending(async () => {
+    report.trigger = report.trigger === 'schedule' ? 'schedule' : 'manual';
+    if (!report.week) report.week = report.hours?.week || HoursSchedule.weekKey(report.startedAt || Date.now());
+    // A run with nothing approved only carries the hours check: one per period, the latest wins.
+    if (!report.rows?.length && !report.fatal && report.hours) {
+      report.id = `hours-${report.week}-${report.hours.period || 'unknown'}`.replace(/[^\w-]+/g, '-').slice(0, 70);
+    }
+    const pending = (await pendingReports()).filter(r => r.id !== report.id);
+    pending.push(report);
+    await chrome.storage.local.set({ pending: pending.slice(-20) });
+    return report;
+  });
+}
 
 async function pendingReports() {
   const { pending = [] } = await chrome.storage.local.get('pending');
@@ -165,24 +316,49 @@ function reportPeriod(rep) {
   return (f?.durationValue || 'report period').replace(/_/g, ' ').toLowerCase();
 }
 
-async function hoursCheck(tabUrl, apiVersion) {
+// The hours report for a given period ({start, end}, "YYYY-MM-DD"): its standard date filter
+// is set to that period (the scheduled run checks the PREVIOUS week). Without a period the
+// report runs with its own filters, as before.
+async function runHoursReport(session, apiVersion, period) {
+  const base = `${session.instanceUrl}/services/data/${apiVersion || DEFAULT_API_VERSION}/analytics/reports/${HOURS_REPORT_ID}`;
+  const headers = { 'Authorization': `Bearer ${session.sid}`, 'Accept': 'application/json' };
+  if (!period) {
+    const res = await fetch(`${base}?includeDetails=true`, { headers });
+    if (!res.ok) throw new Error(`Report API ${res.status}: ${(await res.text()).slice(0, 200)}`);
+    return res.json();
+  }
+  const d = await fetch(`${base}/describe`, { headers });
+  if (!d.ok) throw new Error(`Report API ${d.status}: ${(await d.text()).slice(0, 200)}`);
+  const meta = (await d.json()).reportMetadata;
+  const column = meta?.standardDateFilter?.column;
+  if (!column) throw new Error('The hours report has no date filter that can be set to last week.');
+  meta.standardDateFilter = { column, durationValue: 'CUSTOM', startDate: period.start, endDate: period.end };
+  const res = await fetch(`${base}?includeDetails=true`, {
+    method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, headers), body: JSON.stringify({ reportMetadata: meta }),
+  });
+  if (!res.ok) throw new Error(`Report API ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  const rep = await res.json();
+  const f = rep.reportMetadata?.standardDateFilter;
+  if (f?.startDate !== period.start || f?.endDate !== period.end) throw new Error('Salesforce did not run the hours report for last week.');
+  return rep;
+}
+
+async function hoursCheck(tabUrl, apiVersion, period) {
   const expected = (await fetch(chrome.runtime.getURL('reports.txt')).then(r => r.text()))
     .split('\n').map(n => n.trim()).filter(Boolean);
 
   const session = await getApiSession(tabUrl);
   if (!session) throw new Error('No Salesforce API session cookie found.');
-  const url = `${session.instanceUrl}/services/data/${apiVersion || DEFAULT_API_VERSION}`
-            + `/analytics/reports/${HOURS_REPORT_ID}?includeDetails=true`;
-  const res = await fetch(url, { headers: { 'Authorization': `Bearer ${session.sid}`, 'Accept': 'application/json' } });
-  if (!res.ok) throw new Error(`Report API ${res.status}: ${(await res.text()).slice(0, 200)}`);
-  const rep = await res.json();
+  const rep = await runHoursReport(session, apiVersion, period);
 
   const hours   = hoursFromReport(rep);
   const missing = expected
     .map(name => ({ name, hours: Math.round((hours.get(nameKey(name))?.hours ?? 0) * 100) / 100, inReport: hours.has(nameKey(name)) }))
     .filter(p => p.hours < HOURS_REQUIRED);
 
+  const f = rep.reportMetadata?.standardDateFilter;
   return {
+    week:     period?.week || HoursSchedule.weekOfDate(f?.startDate) || '',
     period:   reportPeriod(rep),
     required: HOURS_REQUIRED,
     checked:  expected.length,
@@ -194,24 +370,30 @@ async function hoursCheck(tabUrl, apiVersion) {
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   if (msg.action === 'hoursCheck') {
-    hoursCheck(sender.tab?.url, msg.apiVersion)
+    hoursCheck(sender.tab?.url, msg.apiVersion, msg.period && typeof msg.period === 'object' ? msg.period : null)
       .then(result => sendResponse({ result }))
       .catch(err => sendResponse({ error: err.message }));
     return true;
   }
 
   if (msg.action === 'saveReport') {
-    withPending(async () => {
-      // A run with nothing approved only carries the hours check: one per period, the latest wins.
-      if (!msg.report.rows?.length && !msg.report.fatal && msg.report.hours) {
-        msg.report.id = `hours-${msg.report.hours.period || 'unknown'}`.replace(/[^\w-]+/g, '-').slice(0, 60);
-      }
-      const pending = (await pendingReports()).filter(r => r.id !== msg.report.id);
-      pending.push(msg.report);
-      await chrome.storage.local.set({ pending: pending.slice(-20) });
+    (async () => {
+      const report = await storeReport(msg.report);
       sendResponse({ ok: true });
-      pushToActionDesk();
-    });
+      const sched = await scheduledTab();
+      if (sched && sender.tab?.id === sched.tabId) {
+        // The scheduled run reported: close its tab and get the report to Droplet.
+        await chrome.storage.local.remove('sched');
+        chrome.alarms.clear('schedLoad'); chrome.alarms.clear('schedEnd');
+        chrome.tabs.remove(sched.tabId).catch(() => {});
+        await deliverToDroplet(report.id);
+      } else pushToActionDesk();
+    })();
+    return true;
+  }
+
+  if (msg.action === 'bridgeDone') {
+    noteDelivery('done', (msg.ids || []).map(String)).then(() => sendResponse({ ok: true }));
     return true;
   }
 
@@ -227,6 +409,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       await chrome.storage.local.set({ pending, lastDelivered: Date.now() });
       sendResponse({ ok: true });
     });
+    noteDelivery('acked', (msg.ids || []).map(String));
     return true;
   }
 
