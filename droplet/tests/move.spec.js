@@ -20,7 +20,7 @@ async function drag(page, from, to, opts = {}) {
 }
 
 test.describe('Layout B: move between Today and Later', () => {
-  test('three lanes next to Today; an open item covers them', async ({ app, page }) => {
+  test('three lanes next to Today; an open item is a drawer over them, Today stays', async ({ app, page }) => {
     await app.boot();
     await expect(page.locator('#over')).toBeVisible();
     const boxes = await Promise.all(['#listCol', '#laneWait', '#laterBox', '#laneWeek'].map((s) => page.locator(s).boundingBox()));
@@ -29,7 +29,16 @@ test.describe('Layout B: move between Today and Later', () => {
     await expect(page.locator('text=Standing by')).toHaveCount(0);
     const today = await app.focusIds();
     await app.openItem(today[0]);
-    await expect(page.locator('#over')).toBeHidden();
+    // As in the mockup: a drawer over the three right lanes, up to 660 px wide; Today stays in view.
+    const d = await page.locator('#itemCol').boundingBox(), w = await page.locator('#laneWait').boundingBox(), l = await page.locator('#listCol').boundingBox();
+    expect(d.width).toBeLessThanOrEqual(661);
+    expect(d.x).toBeGreaterThan(l.x + l.width);
+    expect(d.x).toBeGreaterThan(w.x);
+    await expect(page.locator('.b-scrim')).toBeVisible();
+    await expect(page.locator('#listCol')).toBeVisible();
+    await page.click('.b-scrim', { position: { x: 20, y: 300 } });
+    await expect(page.locator('#app')).toHaveAttribute('data-view', 'list');
+    await app.openItem(today[0]);
     await page.evaluate(() => document.activeElement && document.activeElement.blur());
     await page.keyboard.press('Escape');
     await expect(page.locator('#over')).toBeVisible();

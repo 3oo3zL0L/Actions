@@ -265,6 +265,7 @@
     $('sub').innerHTML = S.loading && !S.loaded ? 'Reading your inbox…' :
       (open || held ? '<b>' + open + '</b> open' + (held ? ' · <span class="h">' + held + ' elsewhere</span>' : '') + ' · ' + rest + ' deferred' : 'All clear · ' + rest + ' deferred') +
       (S.waitPre.length ? ' · ' + S.waitPre.length + ' waiting on others' : '');
+    var tc = $('todayCount'); if (tc) tc.textContent = top.length;
     var t = $('tally');
     if (t) {
       t.innerHTML = ico('check') + '<b>' + pad(doneToday()) + '</b><span>done today</span>';
@@ -3050,7 +3051,7 @@
     if ((id = t.getAttribute('data-held-done'))) return markDone(id);
     if ((id = t.getAttribute('data-held-sent'))) return markDone(id, 'teams');
     if ((id = t.getAttribute('data-held-copy'))) return copyAgain(id);
-    if (t.hasAttribute('data-back')) return back();
+    if (t.hasAttribute('data-back') || t.hasAttribute('data-scrim')) return back();
     if (t.hasAttribute('data-sync')) { if (!S.loading) load({ full: false }); return; }
     if ((id = t.getAttribute('data-retry'))) {
       if (id === 'mail') { S.notes.mail = null; return (rt.mcp ? Promise.resolve() : rt.retryUse('mcp')).then(function () { reloadSource('mail'); }); }
