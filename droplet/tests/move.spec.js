@@ -8,6 +8,7 @@ const restIds = (page) => page.$$eval('#restList .rr', (els) => els.map((e) => e
 const steerIds = (page) => page.$$eval('#steerList [data-steer]', (els) => els.map((e) => e.getAttribute('data-steer')));
 const places = async (app) => Object.entries(await app.db()).filter(([k]) => k.startsWith('places/'));
 
+const toLater = (page, id) => drag(page, `#focus [data-id="${id}"] .fi-open`, '#steerList');
 async function drag(page, from, to, opts = {}) {
   const a = await page.locator(from).boundingBox();
   const b = await page.locator(to).boundingBox();
@@ -121,14 +122,10 @@ test.describe('Layout B: move between Today and Later', () => {
     expect(await places(app)).toHaveLength(0);
   });
 
-  test('without a mouse: the Later button, the Today button, and m', async ({ app, page }) => {
+  test('no Later / Today buttons on cards; without a mouse, m moves', async ({ app, page }) => {
     await app.boot();
     const t = await app.focusIds();
-    await page.click(`#focus [data-move="${t[0]}"]`);
-    expect(await app.focusIds()).not.toContain(t[0]);
-    expect(await steerIds(page)).toContain(t[0]);
-    await page.click(`[data-move-today="${t[0]}"]`);
-    expect(await app.focusIds()).toContain(t[0]);
+    await expect(page.locator('[data-move], [data-move-today], [data-point-today]')).toHaveCount(0);
     // m on a focused Today card sends it to Later; m on the Later row brings it back.
     await page.locator(`#focus [data-id="${t[1]}"] .fi-open`).focus();
     await page.keyboard.press('m');
@@ -149,15 +146,10 @@ test.describe('Layout B on a phone (390 px)', () => {
     const f = await page.locator('#focus').boundingBox(), o = await page.locator('#over').boundingBox();
     expect(o.y).toBeGreaterThan(f.y + f.height - 1);
     const t = await app.focusIds();
-    const mv = await page.locator(`#focus [data-move="${t[0]}"]`).boundingBox();
-    expect(mv.height).toBeGreaterThanOrEqual(44);
-    expect(mv.width).toBeGreaterThanOrEqual(44);
-    await page.tap(`#focus [data-move="${t[0]}"]`);
-    expect(await app.focusIds()).not.toContain(t[0]);
+    const dn = await page.locator(`#focus [data-card-done="${t[0]}"]`).boundingBox();
+    expect(dn.height).toBeGreaterThanOrEqual(44);
+    expect(dn.width).toBeGreaterThanOrEqual(44);
     await page.tap('[data-jump="laterBox"]');
-    await expect(page.locator('#jump [data-jump="laterBox"]')).toContainText('1');
-    const today = await page.locator(`[data-move-today="${t[0]}"]`).boundingBox();
-    expect(today.height).toBeGreaterThanOrEqual(44);
     expect(await sw()).toBe(true);
   });
 });
@@ -167,14 +159,14 @@ test.describe('Later: for STEERCO', () => {
     await context.grantPermissions(['clipboard-read', 'clipboard-write']);
     await app.boot();
     const t = await app.focusIds();
-    await page.click(`#focus [data-move="${t[2]}"]`);
+    await toLater(page, t[2]);
     const note = page.locator(`[data-steer-note="${t[2]}"]`);
     await note.fill('Ask for a go/no-go.\nTwo extra devs.');
     await expect.poll(async () => (await places(app))[0][1].note).toBe('Ask for a go/no-go.\nTwo extra devs.');
     await expect(note).toBeFocused(); // a re-render while typing keeps the caret
     // To Today and back: the note comes along.
-    await page.click(`[data-move-today="${t[2]}"]`);
-    await page.click(`#focus [data-move="${t[2]}"]`);
+    await drag(page, `#steerList [data-steer="${t[2]}"] .sc-open`, '#focus');
+    await toLater(page, t[2]);
     await expect(page.locator(`[data-steer-note="${t[2]}"]`)).toHaveValue('Ask for a go/no-go.\nTwo extra devs.');
     await page.reload(); await app.ready();
     await expect(page.locator(`[data-steer-note="${t[2]}"]`)).toHaveValue('Ask for a go/no-go.\nTwo extra devs.');
@@ -208,7 +200,7 @@ test.describe('Later: for STEERCO', () => {
   test('take a card off the list: it stays out of Today, under Everything else', async ({ app, page }) => {
     await app.boot();
     const t = await app.focusIds();
-    await page.click(`#focus [data-move="${t[1]}"]`);
+    await toLater(page, t[1]);
     await page.click(`[data-steer-off="${t[1]}"]`);
     await expect(page.locator('.toast')).toContainText('Taken off the STEERCO list.');
     expect(await steerIds(page)).toEqual([]);
@@ -223,7 +215,7 @@ test.describe('Later: for STEERCO', () => {
   test('handle a collected card: Done takes it off every list; drag it to Recently done too', async ({ app, page }) => {
     await app.boot();
     const t = await app.focusIds();
-    await page.click(`#focus [data-move="${t[1]}"]`);
+    await toLater(page, t[1]);
     await page.click(`#steerList [data-card-done="${t[1]}"]`);
     expect(await steerIds(page)).toEqual([]);
     expect(await app.focusIds()).not.toContain(t[1]);
@@ -234,22 +226,22 @@ test.describe('Later: for STEERCO', () => {
     await expect(page.locator('#doneCount')).toHaveText('1');
   });
 
-  test('own points: Done, To Today (a new action in Today), and drag to Today at a spot', async ({ app, page }) => {
+  test('own points: Done, drag to Today (a new action), Undo, and drag to Today at a spot', async ({ app, page }) => {
     await app.boot();
     const add = async (v) => { await page.fill('#steerIn', v); await page.press('#steerIn', 'Enter'); };
     await add('Point one');
     await page.click('[data-point-done]');
     await expect(page.locator('#steerList .sc.is-note')).toHaveCount(0);
     await expect(page.locator('.toast')).toContainText('Point done.');
-    await add('Ask Martijn about SIEM owner\nBefore 16 Nov');
-    await page.click('[data-point-today]');
+    await add('Ask Martijn about SIEM owner');
+    await drag(page, '#steerList [data-drag^="point:"] .sc-top', '#focus');
     await expect(page.locator('#steerList .sc.is-note')).toHaveCount(0);
     await expect(page.locator('#focus')).toContainText('Ask Martijn about SIEM owner');
     await page.click('[data-undo]');
     await expect(page.locator('#focus')).not.toContainText('Ask Martijn about SIEM owner');
     await expect(page.locator('#steerList .sc.is-note')).toHaveCount(1);
     const first = (await app.focusIds())[0];
-    await drag(page, '#steerList [data-drag^="point:"]', `#focus [data-id="${first}"]`, { top: true });
+    await drag(page, '#steerList [data-drag^="point:"] .sc-top', `#focus [data-id="${first}"]`, { top: true });
     await expect(page.locator('#steerList .sc.is-note')).toHaveCount(0);
     await expect(page.locator('#focus .fi').first()).toContainText('Ask Martijn about SIEM owner');
   });
@@ -257,7 +249,7 @@ test.describe('Later: for STEERCO', () => {
   test('Ask Claude on a Later card (about the item) and on an own point (prefilled)', async ({ app, page }) => {
     await app.boot();
     const t = await app.focusIds();
-    await page.click(`#focus [data-move="${t[1]}"]`);
+    await toLater(page, t[1]);
     await page.click(`[data-steer-ask="${t[1]}"]`);
     await expect(page.locator('#askSheet [data-ask-about]')).toBeVisible();
     await expect(page.locator('#chatIn')).toHaveValue('For STEERCO: ');
@@ -266,5 +258,42 @@ test.describe('Later: for STEERCO', () => {
     await page.click('[data-point-ask]');
     await expect(page.locator('#chatIn')).toHaveValue('Help me prepare this STEERCO point: “Budget overrun Q4”. ');
     expect(await app.writeTools()).toEqual([]);
+  });
+
+  test('drag from Later to Waiting on and back, for cards and own points; the whole card is the handle', async ({ app, page }) => {
+    await app.boot();
+    const t = await app.focusIds();
+    await toLater(page, t[1]);
+    // Grab the card on its edge (not the title): it still drags.
+    await drag(page, `#steerList [data-steer="${t[1]}"] .sc-act`, '#laneWait', {
+      check: async () => {
+        await expect(page.locator('#laneWait')).toHaveClass(/drop-on/);
+        // The ghost floats under the pointer, over the Waiting lane, and the page keeps its height.
+        const g = await page.locator('.drag-ghost').boundingBox(), w = await page.locator('#laneWait').boundingBox();
+        expect(g.x + g.width / 2).toBeGreaterThan(w.x - 200);
+        expect(await page.evaluate(() => getComputedStyle(document.querySelector('.drag-ghost')).position)).toBe('fixed');
+      }
+    });
+    await expect(page.locator('.toast')).toContainText('Moved to Waiting on.');
+    expect(await steerIds(page)).toEqual([]);
+    await expect(page.locator(`#waitList [data-open="${t[1]}"]`)).toContainText('put in Waiting by you');
+    expect((await places(app))[0][1]).toMatchObject({ place: 'wait' });
+    // And from Waiting on to Today.
+    await drag(page, `#waitList [data-open="${t[1]}"]`, '#focus');
+    expect(await app.focusIds()).toContain(t[1]);
+    // An own point: Later → Waiting on → Later.
+    await page.fill('#steerIn', 'Hiring decision SIEM'); await page.press('#steerIn', 'Enter');
+    await drag(page, '#steerList [data-drag^="point:"] .sc-top', '#laneWait');
+    await expect(page.locator('#waitList .sc.is-note')).toContainText('Your point · waiting');
+    await expect(page.locator('#steerList .sc.is-note')).toHaveCount(0);
+    await drag(page, '#waitList [data-drag^="point:"] .sc-top', '#steerList');
+    await expect(page.locator('#steerList .sc.is-note')).toHaveCount(1);
+    await expect(page.locator('#steerList .sc-tag')).toHaveText('Your point');
+    // Typing in a note never starts a drag.
+    const ta = page.locator('#steerList [data-steer-free]');
+    const b = await ta.boundingBox();
+    await page.mouse.move(b.x + 10, b.y + 10); await page.mouse.down(); await page.mouse.move(b.x + 80, b.y + 12, { steps: 4 });
+    await expect(page.locator('.drag-ghost')).toHaveCount(0);
+    await page.mouse.up();
   });
 });

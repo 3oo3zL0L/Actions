@@ -1153,3 +1153,14 @@ html.is-dragging .lane-steer .drop-hint { display: block; }
 .sc-btn.ask .ico { color: var(--accent); }
 .sc-btn.ask:hover { color: var(--ink); background: var(--accent-soft); }
 .sc-btn[aria-disabled="true"] { opacity: 0.45; cursor: default; }
+
+/* Drag everywhere: the Later and Today buttons are gone; Done spans the card. */
+.fi .btn-done { grid-row: 1 / 3; }
+.sc[data-drag] { cursor: grab; }
+.sc[data-drag] textarea { cursor: text; }
+.lane.drop-on { border-color: var(--lc); box-shadow: inset 0 0 0 1px var(--lc), 0 0 0 4px rgba(255, 255, 255, 0.04); }
+.lane-wait.drop-on { background: var(--hold-soft); }
+html.is-dragging .lane-wait .rest-empty::after { content: " Drop here to wait on it."; color: var(--hold); }
+.rest-list.is-wait > li.sc { display: block; }
+/* The ghost always floats, whatever card it was cloned from. */
+.drag-ghost { position: fixed !important; margin: 0 !important; }

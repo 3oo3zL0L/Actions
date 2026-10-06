@@ -92,4 +92,4 @@ Thomas chose layout B after using C. It replaces C:
 - **Everything else** folds under the STEERCO list (`/` opens it and searches everything).
 - **Week** lane (green): hours reminders recap, Recently done.
 - Ask Claude sits top right on a laptop (as in the mockup), a bar at the bottom on a phone.
-- As in the mockup: one header across the top; Today is a lane with compact cards (command inline, Done and Later on the right); an open item is a drawer (max 660 px) over the right lanes with a scrim, Today stays in view. Laptop 960–1199 px: Week goes under Waiting and Later. Phone: lanes stack under Today with a sticky jump bar.
+- As in the mockup: one header across the top; Today is a lane with compact cards (command inline, Done on the right). Moving is by drag (whole card; touch: hold) or m; no Later/Today buttons. Drop targets: Today, Waiting on (db place "wait"; own points get lane "wait"), Later, Everything else, Recently done; an open item is a drawer (max 660 px) over the right lanes with a scrim, Today stays in view. Laptop 960–1199 px: Week goes under Waiting and Later. Phone: lanes stack under Today with a sticky jump bar.

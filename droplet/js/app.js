@@ -63,7 +63,9 @@
      "off" keeps it out of Today, under Everything else. Wins over Claude's
      ranking. */
   function placeRec(it) { return it && it.key && S.places[it.key] || null; }
-  function movedLater(it) { var p = placeRec(it); return !!(p && (p.place === 'later' || p.place === 'off')); }
+  function movedLater(it) { var p = placeRec(it); return !!(p && (p.place === 'later' || p.place === 'off' || p.place === 'wait')); }
+  function putWait(it) { var p = placeRec(it); return !!(p && p.place === 'wait'); }
+  function inWaitLane(it) { return isWait(it) || putWait(it); }
   function inSteer(it) { var p = placeRec(it); return !!(p && p.place === 'later'); }
   function movedToday(it) { var p = placeRec(it); return !!(p && p.place === 'today'); }
   function groupOf(it) {
@@ -375,7 +377,6 @@
         '</button>' +
         '<div class="fi-act">' + actHTML(it) +
           (isClosed(it.id) ? '' : '<button class="btn-done" data-card-done="' + esc(it.id) + '" aria-label="Mark done: ' + esc(titleOf(it)) + '">' + ico('check') + '<span>Done</span></button>') +
-          '<button class="btn-move" data-move="' + esc(it.id) + '" aria-label="Move to Later, for STEERCO: ' + esc(titleOf(it)) + '" title="Move to Later, for STEERCO (m)">' + ico('later') + '<span>Later</span></button>' +
         '</div>' +
       '</li>');
     });
@@ -397,8 +398,8 @@
       (isWait(it) && !n ? ' · asked ' + it.n + ' working day' + (it.n === 1 ? '' : 's') + ' ago' : '') +
       (it.meeting ? ' · meeting ' + esc(it.meeting.hhmm) : '') + (waitingTeams(it.id) ? ' · waiting for you to send in Teams' : '') +
       (isMine(it) && it.due ? ' · ' + esc(mine.dueLabel(it.due).toLowerCase()) : '') +
-      (S.verdict[it.id] === 'down' ? ' · marked not important' : '') + (movedLater(it) ? ' · moved out of Today by you' : '') + (isWait(it) ? ' ' + waitChip(it) : '') + '</span></span></button>' +
-      '<button class="btn-today" data-move-today="' + esc(it.id) + '" aria-label="Move to Today: ' + esc(titleOf(it)) + '" title="Move to Today (m)">' + ico('today') + '<span>Today</span></button></li>';
+      (S.verdict[it.id] === 'down' ? ' · marked not important' : '') + (putWait(it) ? ' · put in Waiting by you' : movedLater(it) ? ' · moved out of Today by you' : '') + (isWait(it) ? ' ' + waitChip(it) : '') + '</span></span></button>' +
+      '</li>';
   }
   /* Layout B: three lanes next to Today. Waiting on (R3) with Elsewhere
      (held in Teams or sent) under it; Later, which collects what Thomas
@@ -408,11 +409,13 @@
     var all = restItems(), q = S.q.trim().toLowerCase(), base = topItems().length;
     var num = function (it) { var i = all.indexOf(it); return i > -1 ? i + base + 1 : 0; };
     var steer = all.filter(inSteer), lane = all.filter(function (it) { return !inSteer(it); });
-    var waits = lane.filter(isWait), els = lane.filter(function (it) { return !isWait(it) && isHeld(it); });
+    var waits = lane.filter(inWaitLane), els = lane.filter(function (it) { return !inWaitLane(it) && isHeld(it); });
     var later = lane.filter(function (it) { return waits.indexOf(it) < 0 && els.indexOf(it) < 0; });
-    $('waitCount').textContent = waits.length;
+    var wpts = steerNotes().filter(function (x) { return x.rec.lane === 'wait'; });
+    $('waitCount').textContent = waits.length + wpts.length;
     $('waitR').textContent = els.length ? '+ elsewhere ' + els.length : '';
-    $('waitList').innerHTML = waits.length ? waits.map(function (it) { return restRow(it, num(it)); }).join('') :
+    $('waitList').innerHTML = waits.length || wpts.length ? waits.map(function (it) { return restRow(it, num(it)); }).join('') +
+      wpts.map(function (x, i) { return steerHTML({ k: x.k, rec: x.rec }, i, true); }).join('') :
       '<li class="rest-empty">Nobody owes you an answer right now.</li>';
     $('elseBox').hidden = !els.length;
     $('elseCount').textContent = els.length;
@@ -437,7 +440,7 @@
     $('restPanel').hidden = !S.restOpen;
     $('weekR').textContent = 'Week ' + isoWeek(new Date());
     renderHoursBox();
-    renderJump(waits.length + els.length, steer.length + steerNotes().length);
+    renderJump(waits.length + wpts.length + els.length, steer.length + steerNotes().length - wpts.length);
   }
   function isoWeek(d) {
     var t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())), day = t.getUTCDay() || 7;
@@ -464,36 +467,34 @@
   }
   function steerEntries(steer) {
     var out = steer.map(function (it) { return { it: it, at: placeRec(it).at || '' }; })
-      .concat(steerNotes().map(function (x) { return { k: x.k, rec: x.rec, at: x.rec.at || '' }; }));
+      .concat(steerNotes().filter(function (x) { return x.rec.lane !== 'wait'; }).map(function (x) { return { k: x.k, rec: x.rec, at: x.rec.at || '' }; }));
     return out.sort(function (a, b) { return String(a.at).localeCompare(String(b.at)); });
   }
   /* Each card: open it, drag it (to Today, Everything else or Recently
      done), and a row to handle it: Done, Today, Off the list. */
-  function steerHTML(e, i) {
+  function steerHTML(e, i, inWait) {
     var x = '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>';
     if (e.it) {
       var it = e.it, p = placeRec(it), cur = isCur(it.id), t = esc(titleOf(it));
-      return '<li class="sc" data-steer="' + esc(it.id) + '">' +
-        '<button class="sc-open' + (cur ? ' is-current' : '') + '" data-open="' + esc(it.id) + '" data-drag="' + esc(it.id) + '" aria-keyshortcuts="m">' +
+      return '<li class="sc" data-steer="' + esc(it.id) + '" data-drag="' + esc(it.id) + '">' +
+        '<button class="sc-open' + (cur ? ' is-current' : '') + '" data-open="' + esc(it.id) + '" aria-keyshortcuts="m">' +
           '<span class="sc-n">' + pad(i + 1) + '</span>' + ico(srcKind(it)) +
           '<span class="sc-t"><span class="sc-title">' + t + '</span><span class="sc-sub">' + esc(srcLabel(it)) + ' · ' + esc(project(it)) + '</span></span></button>' +
         '<label class="sr" for="sn-' + esc(it.key) + '">Your note for STEERCO</label>' +
         '<textarea class="sc-note" id="sn-' + esc(it.key) + '" data-steer-note="' + esc(it.id) + '" rows="1" maxlength="2000" placeholder="Your note for STEERCO">' + esc(p.note || '') + '</textarea>' +
         '<div class="sc-act">' +
           '<button class="sc-btn ok" data-card-done="' + esc(it.id) + '" aria-label="Mark done: ' + t + '">' + ico('check') + '<span>Done</span></button>' +
-          '<button class="sc-btn" data-move-today="' + esc(it.id) + '" aria-label="Move to Today: ' + t + '" title="Move to Today (m)">' + ico('today') + '<span>Today</span></button>' +
           '<button class="sc-btn" data-steer-off="' + esc(it.id) + '" aria-label="Take off the STEERCO list: ' + t + '" title="Off the list, out of Today">' + x + '<span>Off list</span></button>' +
           '<button class="sc-btn ask" data-steer-ask="' + esc(it.id) + '"' + (rt.sample ? '' : ' aria-disabled="true"') + ' aria-label="Ask Claude about: ' + t + '">' + ico('spark') + '<span>Ask</span></button>' +
         '</div></li>';
     }
-    return '<li class="sc is-note" data-steer-k="' + esc(e.k) + '">' +
-      '<div class="sc-top" data-drag="point:' + esc(e.k) + '" title="Drag to Today or Recently done"><span class="sc-n">' + pad(i + 1) + '</span><span class="sc-tag">Your point</span>' +
+    return '<li class="sc is-note" data-steer-k="' + esc(e.k) + '" data-drag="point:' + esc(e.k) + '">' +
+      '<div class="sc-top" title="Drag it to Today, Waiting on or Recently done"><span class="sc-n">' + (inWait ? '' : pad(i + 1)) + '</span><span class="sc-tag">' + (inWait ? 'Your point · waiting' : 'Your point') + '</span>' +
         '<span class="sc-grip" aria-hidden="true">⋮⋮</span></div>' +
       '<label class="sr" for="sp-' + esc(e.k) + '">Your point for STEERCO</label>' +
       '<textarea class="sc-note" id="sp-' + esc(e.k) + '" data-steer-free="' + esc(e.k) + '" rows="1" maxlength="2000">' + esc(e.rec.text) + '</textarea>' +
       '<div class="sc-act">' +
         '<button class="sc-btn ok" data-point-done="' + esc(e.k) + '" aria-label="Done: this point">' + ico('check') + '<span>Done</span></button>' +
-        '<button class="sc-btn" data-point-today="' + esc(e.k) + '" aria-label="Make this point an action in Today">' + ico('today') + '<span>To Today</span></button>' +
         '<button class="sc-btn" data-steer-del="' + esc(e.k) + '" aria-label="Remove this point">' + x + '<span>Remove</span></button>' +
         '<button class="sc-btn ask" data-point-ask="' + esc(e.k) + '"' + (ask.available() ? '' : ' aria-disabled="true"') + ' aria-label="Ask Claude about this point">' + ico('spark') + '<span>Ask</span></button>' +
       '</div></li>';
@@ -505,7 +506,7 @@
     /* While he types a note, the list stays as it is (focus and caret too). */
     if (el.contains(document.activeElement) && el.getAttribute('data-sig') === sig) return;
     el.setAttribute('data-sig', sig);
-    el.innerHTML = list.length ? list.map(steerHTML).join('') :
+    el.innerHTML = list.length ? list.map(function (e, i) { return steerHTML(e, i); }).join('') :
       '<li class="steer-empty">Collect here what to raise in STEERCO: drag a card in, or add your own point.</li>';
     [].forEach.call(el.querySelectorAll('textarea'), grow);
   }
@@ -548,6 +549,12 @@
     var prev = S.steer[k] ? U.clone(S.steer[k]) : null; if (!prev) return;
     setSteer(k, null); renderRest();
     toast('Point done.', function () { setSteer(k, prev); renderRest(); });
+  }
+  function pointLane(k, lane) {
+    var prev = S.steer[k] ? U.clone(S.steer[k]) : null; if (!prev || (prev.lane || 'later') === lane) return;
+    var rec = U.clone(prev); if (lane === 'later') delete rec.lane; else rec.lane = lane;
+    setSteer(k, rec); renderRest();
+    toast(lane === 'wait' ? 'Point moved to Waiting on.' : 'Point moved to Later, for STEERCO.', function () { setSteer(k, prev); renderRest(); });
   }
   function pointToToday(k, j) {
     var prev = S.steer[k] ? U.clone(S.steer[k]) : null; if (!prev) return;
@@ -2904,8 +2911,10 @@
     var it = S.byId[id]; if (!it || !it.key) return;
     if (where === 'done') return markDone(id);
     var inToday = topItems().indexOf(it) > -1, wasSteer = inSteer(it);
+    var pl = placeRec(it) && placeRec(it).place;
     if (where === 'later' && wasSteer) return;
-    if (where === 'off' && !inToday && !wasSteer) return;
+    if (where === 'off' && (pl === 'off' || !inToday && !pl)) return;
+    if (where === 'wait' && (pl === 'wait' || isWait(it))) return;
     var prev = S.places[it.key] ? U.clone(S.places[it.key]) : null;
     var rec = { place: where, at: new Date().toISOString(), title: U.clip(titleOf(it), 160) };
     if (prev && prev.note) rec.note = prev.note; /* his STEERCO note stays with the card */
@@ -2920,7 +2929,7 @@
     else renderAll();
     var drop = $('focus').querySelector('[data-id="' + cssEsc(id) + '"]') || $('over').querySelector('[data-steer="' + cssEsc(id) + '"]') || $('over').querySelector('[data-open="' + cssEsc(id) + '"]');
     if (drop) { drop.classList.add('just-moved'); setTimeout(function () { drop.classList.remove('just-moved'); }, 900); }
-    toast(where === 'later' ? 'Moved to Later, for STEERCO.' : where === 'off' ? (wasSteer ? 'Taken off the STEERCO list.' : 'Moved out of Today.') :
+    toast(where === 'later' ? 'Moved to Later, for STEERCO.' : where === 'wait' ? 'Moved to Waiting on.' : where === 'off' ? (wasSteer ? 'Taken off the STEERCO list.' : 'Moved out of Today.') :
       inToday ? 'Moved in Today.' : 'Moved to Today.', function () { setPlace(it, prev); renderAll(); });
   }
   function cssEsc(v) { return window.CSS && CSS.escape ? CSS.escape(v) : String(v).replace(/["\\]/g, '\\$&'); }
@@ -2930,7 +2939,9 @@
     if (!id && S.view === 'item' && S.cur) id = S.cur;
     var it = id && S.byId[id]; if (!it) return false;
     moveTo(id, topItems().indexOf(it) > -1 ? 'later' : 'today');
-    var back2 = document.querySelector('[data-drag="' + cssEsc(id) + '"]'); if (back2) back2.focus({ preventScroll: true });
+    var back2 = document.querySelector('[data-drag="' + cssEsc(id) + '"]');
+    if (back2 && !back2.matches('button')) back2 = back2.querySelector('[data-open]') || back2;
+    if (back2) back2.focus({ preventScroll: true });
     return true;
   }
 
@@ -2949,6 +2960,7 @@
     if (el.closest('.list-col')) return { where: 'today', j: Infinity, el: null };
     if (el.closest('[data-drop="done"]')) return { where: 'done' };
     if (el.closest('[data-drop="off"]')) return { where: 'off' };
+    if (el.closest('[data-drop="wait"]')) return { where: 'wait' };
     if (el.closest('[data-drop="later"]')) return { where: 'later' };
     return null;
   }
@@ -2963,7 +2975,8 @@
       if (d.from === 'today' && !t.el && !t.end) return;
       if (t.el) t.el.classList.add('drop-before'); else if (t.end) t.end.classList.add('drop-after'); else $('focus').classList.add('drop-on');
     } else if (t.where === 'later') { if (d.from !== 'steer' && d.from !== 'point') $('laterBox').classList.add('drop-on'); }
-    else if (t.where === 'off') { if (d.from !== 'rest' && d.from !== 'point') $('restBox').classList.add('drop-on'); }
+    else if (t.where === 'off') { if (d.from !== 'rest' && d.from !== 'point' && d.from !== 'wpoint') $('restBox').classList.add('drop-on'); }
+    else if (t.where === 'wait') { if (d.from !== 'wait' && d.from !== 'wpoint') $('laneWait').classList.add('drop-on'); }
     else if (t.where === 'done') document.querySelector('[data-drop="done"]').classList.add('drop-on');
   }
   function dragStart(e) {
@@ -3005,12 +3018,14 @@
     S.dragSwallow = true; setTimeout(function () { S.dragSwallow = false; }, 0);
     var t = drop && d.t;
     if (!t) return;
-    if (d.from === 'point') {
+    if (d.from === 'point' || d.from === 'wpoint') {
       var k = d.id.slice(6);
       if (t.where === 'done') return pointDone(k);
       if (t.where === 'today') return pointToToday(k, t.j === Infinity ? null : t.j);
+      if (t.where === 'wait' || t.where === 'later') return pointLane(k, t.where);
       return;
     }
+    if (t.where === 'wait') return moveTo(d.id, 'wait');
     if (t.where === 'later' && d.from !== 'steer') return moveTo(d.id, 'later');
     if (t.where === 'off' && d.from !== 'rest') return moveTo(d.id, 'off');
     if (t.where === 'done') return moveTo(d.id, 'done');
@@ -3023,10 +3038,11 @@
   document.addEventListener('pointerdown', function (e) {
     if (e.button !== 0 || S.drag) return;
     var el = e.target.closest('[data-drag]'); if (!el) return;
+    if (e.target.closest('textarea, input, select, [contenteditable]')) return; /* typing a note is never a drag */
     var id = el.getAttribute('data-drag'), it = S.byId[id], pt = /^point:/.test(id);
     if (!it && !pt) return;
     var top = topItems(), i = pt ? -1 : top.indexOf(it);
-    S.drag = { id: id, el: el, x0: e.clientX, y0: e.clientY, pid: e.pointerId, from: pt ? 'point' : i > -1 ? 'today' : inSteer(it) ? 'steer' : 'rest', i: i, touch: e.pointerType === 'touch', ready: e.pointerType !== 'touch' };
+    S.drag = { id: id, el: el, x0: e.clientX, y0: e.clientY, pid: e.pointerId, from: pt ? (S.steer[id.slice(6)] && S.steer[id.slice(6)].lane === 'wait' ? 'wpoint' : 'point') : i > -1 ? 'today' : inSteer(it) ? 'steer' : inWaitLane(it) ? 'wait' : 'rest', i: i, touch: e.pointerType === 'touch', ready: e.pointerType !== 'touch' };
     if (S.drag.touch) S.drag.hold = setTimeout(function () { if (S.drag && S.drag.id === id) { S.drag.ready = true; dragStart({ clientX: S.drag.x, clientY: S.drag.y }); } }, HOLD_MS);
     S.drag.x = e.clientX; S.drag.y = e.clientY;
   });
