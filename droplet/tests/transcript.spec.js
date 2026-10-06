@@ -164,7 +164,9 @@ test.describe('R6: commitments from meeting transcripts', () => {
     const acts = Object.values(await app.db()).filter((v) => v && v.owner);
     expect(acts).toHaveLength(1);
     expect(acts[0]).toMatchObject({ owner: 'Bas', text: 'Create the Datalake epics', due: '2026-10-09' });
-    // The point is a suggestion, not yet on the list.
+    // The point is a suggestion, not yet on the list; the tray shows +1.
+    await expect(page.locator('#steerSuggBadge')).toHaveText('+1');
+    await app.openSteer();
     await expect(page.locator('#steerSugg .sugg')).toHaveCount(1);
     await expect(page.locator('#steerList .sc')).toHaveCount(0);
     await page.click('[data-sugg-add]');

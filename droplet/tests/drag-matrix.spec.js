@@ -13,7 +13,7 @@ async function drag(page, from, to) {
   for (let i = 1; i <= 10; i++) await page.mouse.move(x0 + (x1 - x0) * i / 10, y0 + (y1 - y0) * i / 10);
   await page.mouse.up();
 }
-const TARGET = { today: '#focus', wait: '#laneWait', later: '#steerList', off: '#laterBox', done: '#laneWeek' };
+const TARGET = { today: '#focus', wait: '#laneWait', later: '#steerTray', off: '#laterBox', done: '#laneWeek' };
 async function where(page, id) {
   const has = async (sel) => (await page.locator(sel).count()) > 0;
   if (await has(`#focus [data-id="${id}"]`)) return 'today';
@@ -25,10 +25,15 @@ async function where(page, id) {
 function handle(lane, id) {
   return { today: `#focus [data-id="${id}"] .fi-open`, wait: `#waitList [data-open="${id}"]`, later: `#steerList [data-steer="${id}"] .sc-sub`, off: `#offList [data-open="${id}"], #restList [data-open="${id}"]` }[lane];
 }
+const steerOpen = async (page, on) => {
+  const open = (await page.getAttribute('#steerToggle', 'aria-expanded')) === 'true';
+  if (open !== on) await page.click('#steerToggle');
+};
 async function walk(page, id, path) {
   await page.evaluate(() => { const t = document.getElementById('restToggle'); if (t.getAttribute('aria-expanded') !== 'true') t.click(); });
   let at = await where(page, id);
   for (const to of path) {
+    await steerOpen(page, at === 'later');
     await drag(page, handle(at, id), TARGET[to]);
     await expect.poll(() => where(page, id), { message: `${id}: ${at} → ${to}` }).toBe(to === 'done' ? 'gone' : to);
     at = to;
@@ -70,24 +75,29 @@ test.describe('Drag matrix (laptop)', () => {
     await expect(page.locator('#app')).toHaveAttribute('data-view', 'item');
   });
 
-  test('own points: Later → Waiting → Later → Today (an action); Everything else says why not; Done', async ({ app, page }) => {
+  test('own points: STEERCO → Waiting → STEERCO → Today (an action); Later says why not; Done', async ({ app, page }) => {
     await app.boot();
     const add = async (v) => { await page.fill('#steerIn', v); await page.press('#steerIn', 'Enter'); };
     await add('Point A');
-    const pt = '#steerBox [data-drag^="point:"] .sc-top, #laneWait [data-drag^="point:"] .sc-top';
+    const inSteer = '#steerList [data-drag^="point:"] .sc-top', inWait = '#laneWait [data-drag^="point:"] .sc-top';
     await page.waitForTimeout(100);
-    await page.evaluate(() => { const u = document.querySelector('[data-undo]'); if (u) window.Droplet.state.undo = null; });
-    await drag(page, pt, '#restToggle');
+    await page.evaluate(() => { window.Droplet.state.undo = null; });
+    await steerOpen(page, true);
+    await drag(page, inSteer, '#laterBox');
     await expect(page.locator('.toast')).toContainText('Your own points live in STEERCO or Waiting on.');
     await expect(page.locator('#steerList .sc.is-note')).toHaveCount(1);
-    await drag(page, pt, '#laneWait');
+    await steerOpen(page, true);
+    await drag(page, inSteer, '#laneWait');
     await expect(page.locator('#waitList .sc.is-note')).toHaveCount(1);
-    await drag(page, pt, '#steerList');
+    await steerOpen(page, false);
+    await drag(page, inWait, '#steerTray');
     await expect(page.locator('#steerList .sc.is-note')).toHaveCount(1);
-    await drag(page, pt, '#laneWeek');
+    await steerOpen(page, true);
+    await drag(page, inSteer, '#laneWeek');
     await expect(page.locator('.sc.is-note')).toHaveCount(0);
     await add('Point B');
-    await drag(page, pt, '#focus');
+    await steerOpen(page, true);
+    await drag(page, inSteer, '#focus');
     await expect(page.locator('#focus')).toContainText('Point B');
   });
 });
@@ -108,8 +118,9 @@ test.describe('Drag by touch (hold, then move)', () => {
     const t = await app.focusIds();
     await touch(`#focus [data-id="${t[1]}"] .fi-open`, '#laneWait');
     await expect(page.locator(`#waitList [data-open="${t[1]}"]`)).toHaveCount(1);
-    await touch(`#focus [data-id="${t[2]}"] .fi-open`, '#steerList');
+    await touch(`#focus [data-id="${t[2]}"] .fi-open`, '#steerTray');
     await expect(page.locator(`#steerList [data-steer="${t[2]}"]`)).toHaveCount(1);
+    await page.tap('#steerToggle');
     await touch(`#steerList [data-steer="${t[2]}"] .sc-sub`, '#focus');
     expect(await app.focusIds()).toContain(t[2]);
     await expect(page.locator('#app')).toHaveAttribute('data-view', 'list'); // no card opened by the release

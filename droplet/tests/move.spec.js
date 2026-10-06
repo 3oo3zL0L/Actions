@@ -8,8 +8,11 @@ const restIds = (page) => page.$$eval('#restList .rr', (els) => els.map((e) => e
 const steerIds = (page) => page.$$eval('#steerList [data-steer]', (els) => els.map((e) => e.getAttribute('data-steer')));
 const places = async (app) => Object.entries(await app.db()).filter(([k]) => k.startsWith('places/'));
 
-const toLater = (page, id) => drag(page, `#focus [data-id="${id}"] .fi-open`, '#steerList');
+const toLater = (page, id) => drag(page, `#focus [data-id="${id}"] .fi-open`, '#steerTray');
 async function drag(page, from, to, opts = {}) {
+  const open = (await page.getAttribute('#steerToggle', 'aria-expanded')) === 'true';
+  if (/#steerList/.test(from) !== open) await page.click('#steerToggle');
+  if (to === '#steerList') to = '#steerTray';
   await page.locator(from).first().scrollIntoViewIfNeeded();
   const a = await page.locator(from).boundingBox();
   const b = await page.locator(to).boundingBox();
@@ -22,15 +25,17 @@ async function drag(page, from, to, opts = {}) {
 }
 
 test.describe('Layout B: move between Today and Later', () => {
-  test('lanes next to Today, STEERCO as a panel under Later and Week; an open item is a drawer over them, Today stays', async ({ app, page }) => {
+  test('three lanes next to Today, STEERCO a small tray in the header; an open item is a drawer over them, Today stays', async ({ app, page }) => {
     await app.boot();
     await expect(page.locator('#over')).toBeVisible();
     const boxes = await Promise.all(['#listCol', '#laneWait', '#laterBox', '#laneWeek'].map((s) => page.locator(s).boundingBox()));
     for (let i = 1; i < boxes.length; i++) expect(boxes[i].x).toBeGreaterThan(boxes[i - 1].x + boxes[i - 1].width - 1);
-    const st = await page.locator('#steerBox').boundingBox();
-    expect(st.y).toBeGreaterThan(boxes[2].y + boxes[2].height - 1);
-    expect(Math.abs(st.x - boxes[2].x)).toBeLessThan(2);
-    expect(st.x + st.width).toBeGreaterThan(boxes[3].x + boxes[3].width - 2);
+    // STEERCO is a small tray in the header (left of Ask Claude), above the lanes; its list is closed.
+    const st = await page.locator('#steerTray').boundingBox(), ask = await page.locator('#askBar').boundingBox();
+    expect(st.y + st.height).toBeLessThan(boxes[1].y);
+    expect(st.x + st.width).toBeLessThanOrEqual(ask.x);
+    expect(st.height).toBeLessThan(60);
+    await expect(page.locator('#steerBox')).toBeHidden();
     await expect(page.locator('#laneWeek #doneToggle')).toBeVisible();
     await expect(page.locator('text=Standing by')).toHaveCount(0);
     const today = await app.focusIds();
@@ -54,10 +59,10 @@ test.describe('Layout B: move between Today and Later', () => {
     await app.boot();
     const today = await app.focusIds();
     const id = today[1];
-    await drag(page, `#focus [data-id="${id}"] .fi-open`, '#steerBox', {
+    await drag(page, `#focus [data-id="${id}"] .fi-open`, '#steerTray', {
       check: async () => {
         await expect(page.locator('.drag-ghost')).toHaveCount(1);
-        await expect(page.locator('#steerBox')).toHaveClass(/drop-on/);
+        await expect(page.locator('#steerTray')).toHaveClass(/drop-on/);
       }
     });
     await expect(page.locator('.drag-ghost')).toHaveCount(0);
@@ -74,7 +79,7 @@ test.describe('Layout B: move between Today and Later', () => {
     expect(await app.focusIds()).toContain(id);
     expect(await places(app)).toHaveLength(0);
     // Again, then reload: it stays in Later, and Today is not refilled with it.
-    await drag(page, `#focus [data-id="${id}"] .fi-open`, '#steerBox');
+    await drag(page, `#focus [data-id="${id}"] .fi-open`, '#steerTray');
     await page.reload(); await app.ready();
     await expect(page.locator(`#steerList [data-steer="${id}"]`)).toHaveCount(1);
     expect(await app.focusIds()).not.toContain(id);
@@ -117,7 +122,7 @@ test.describe('Layout B: move between Today and Later', () => {
     await expect(page.locator('#ivTitle')).toBeVisible();
     await page.evaluate(() => document.activeElement && document.activeElement.blur());
     await page.keyboard.press('Escape');
-    const lb = await page.locator('#steerBox').boundingBox();
+    const lb = await page.locator('#steerTray').boundingBox();
     await page.mouse.move(box.x + 40, box.y + 20);
     await page.mouse.down();
     await page.mouse.move(lb.x + 50, lb.y + 30, { steps: 6 });
@@ -135,7 +140,9 @@ test.describe('Layout B: move between Today and Later', () => {
     await page.locator(`#focus [data-id="${t[1]}"] .fi-open`).focus();
     await page.keyboard.press('m');
     expect(await app.focusIds()).not.toContain(t[1]);
-    await expect(page.locator(`#steerList [data-open="${t[1]}"]`)).toBeFocused();
+    await expect(page.locator('#steerToggle')).toBeFocused();
+    await app.openSteer();
+    await page.locator(`#steerList [data-open="${t[1]}"]`).focus();
     await page.keyboard.press('m');
     expect(await app.focusIds()).toContain(t[1]);
   });
@@ -166,6 +173,7 @@ test.describe('Later: for STEERCO', () => {
     const t = await app.focusIds();
     await toLater(page, t[2]);
     const note = page.locator(`[data-steer-note="${t[2]}"]`);
+    await app.openSteer();
     await note.fill('Ask for a go/no-go.\nTwo extra devs.');
     await expect.poll(async () => (await places(app))[0][1].note).toBe('Ask for a go/no-go.\nTwo extra devs.');
     await expect(note).toBeFocused(); // a re-render while typing keeps the caret
@@ -176,6 +184,7 @@ test.describe('Later: for STEERCO', () => {
     await page.reload(); await app.ready();
     await expect(page.locator(`[data-steer-note="${t[2]}"]`)).toHaveValue('Ask for a go/no-go.\nTwo extra devs.');
     // Copy puts the list on the clipboard; nothing is sent.
+    await app.openSteer();
     await page.click('#steerCopy');
     await expect(page.locator('.toast')).toContainText('Copied 1 point');
     const clip = await page.evaluate(() => navigator.clipboard.readText());
@@ -192,10 +201,12 @@ test.describe('Later: for STEERCO', () => {
     await expect(page.locator('#steerCount')).toHaveText('1');
     const pts = async () => Object.entries(await app.db()).filter(([k]) => k.startsWith('steerco/'));
     await expect.poll(async () => (await pts()).length).toBe(1);
+    await app.openSteer();
     await page.locator('[data-steer-free]').fill('Budget overrun Q4: decision needed by 15 Oct');
     await expect.poll(async () => (await pts())[0][1].text).toBe('Budget overrun Q4: decision needed by 15 Oct');
     await page.reload(); await app.ready();
     await expect(page.locator('[data-steer-free]')).toHaveValue('Budget overrun Q4: decision needed by 15 Oct');
+    await app.openSteer();
     await page.click('[data-steer-del]');
     await expect(page.locator('#steerList .sc')).toHaveCount(0);
     await page.click('[data-undo]');
@@ -206,6 +217,7 @@ test.describe('Later: for STEERCO', () => {
     await app.boot();
     const t = await app.focusIds();
     await toLater(page, t[1]);
+    await app.openSteer();
     await page.click(`[data-steer-off="${t[1]}"]`);
     await expect(page.locator('.toast')).toContainText('Taken off the STEERCO list.');
     expect(await steerIds(page)).toEqual([]);
@@ -221,6 +233,7 @@ test.describe('Later: for STEERCO', () => {
     await app.boot();
     const t = await app.focusIds();
     await toLater(page, t[1]);
+    await app.openSteer();
     await page.click(`#steerList [data-card-done="${t[1]}"]`);
     expect(await steerIds(page)).toEqual([]);
     expect(await app.focusIds()).not.toContain(t[1]);
@@ -235,6 +248,7 @@ test.describe('Later: for STEERCO', () => {
     await app.boot();
     const add = async (v) => { await page.fill('#steerIn', v); await page.press('#steerIn', 'Enter'); };
     await add('Point one');
+    await app.openSteer();
     await page.click('[data-point-done]');
     await expect(page.locator('#steerList .sc.is-note')).toHaveCount(0);
     await expect(page.locator('.toast')).toContainText('Point done.');
@@ -255,11 +269,13 @@ test.describe('Later: for STEERCO', () => {
     await app.boot();
     const t = await app.focusIds();
     await toLater(page, t[1]);
+    await app.openSteer();
     await page.click(`[data-steer-ask="${t[1]}"]`);
     await expect(page.locator('#askSheet [data-ask-about]')).toBeVisible();
     await expect(page.locator('#chatIn')).toHaveValue('For STEERCO: ');
     await page.keyboard.press('Escape');
     await page.fill('#steerIn', 'Budget overrun Q4'); await page.press('#steerIn', 'Enter');
+    await app.openSteer();
     await page.click('[data-point-ask]');
     await expect(page.locator('#chatIn')).toHaveValue('Help me prepare this STEERCO point: “Budget overrun Q4”. ');
     expect(await app.writeTools()).toEqual([]);
@@ -295,6 +311,7 @@ test.describe('Later: for STEERCO', () => {
     await expect(page.locator('#steerList .sc.is-note')).toHaveCount(1);
     await expect(page.locator('#steerList .sc-tag')).toHaveText('Your point');
     // Typing in a note never starts a drag.
+    await app.openSteer();
     const ta = page.locator('#steerList [data-steer-free]');
     const b = await ta.boundingBox();
     await page.mouse.move(b.x + 10, b.y + 10); await page.mouse.down(); await page.mouse.move(b.x + 80, b.y + 12, { steps: 4 });
@@ -302,3 +319,67 @@ test.describe('Later: for STEERCO', () => {
     await page.mouse.up();
   });
 });
+
+test.describe('STEERCO tray (header)', () => {
+  test('small when closed: add with s + Enter; a pocket shows while dragging; Shift+S, Esc and a click outside open and close it', async ({ app, page }) => {
+    await app.boot();
+    await expect(page.locator('#steerBox')).toBeHidden();
+    await page.keyboard.press('s');
+    await expect(page.locator('#steerIn')).toBeFocused();
+    await page.keyboard.type('Budget overrun Q4');
+    await page.keyboard.press('Enter');
+    await expect(page.locator('#steerCount')).toHaveText('1');
+    await expect(page.locator('#steerBox')).toBeHidden(); // adding doesn't open it
+    // While a card is dragged, the closed tray shows its pocket and lights up over it.
+    const t = await app.focusIds();
+    await drag(page, `#focus [data-id="${t[1]}"] .fi-open`, '#steerTray', {
+      check: async () => {
+        await expect(page.locator('.st-pocket')).toBeVisible();
+        await expect(page.locator('#steerTray')).toHaveClass(/drop-on/);
+      }
+    });
+    await expect(page.locator('.st-pocket')).toBeHidden();
+    await expect(page.locator('#steerCount')).toHaveText('2');
+    // Shift+S opens, Esc closes and gives focus back to the tray.
+    await page.locator('body').click({ position: { x: 5, y: 400 } });
+    await page.keyboard.press('Shift+S');
+    await expect(page.locator('#steerBox')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#steerBox')).toBeHidden();
+    await expect(page.locator('#steerToggle')).toBeFocused();
+    // A click outside closes it.
+    await page.click('#steerToggle');
+    await expect(page.locator('#steerBox')).toBeVisible();
+    await page.click('#laneWeek .lane-h');
+    await expect(page.locator('#steerBox')).toBeHidden();
+  });
+
+  test('the open panel still takes a dragged card', async ({ app, page }) => {
+    await app.boot();
+    await app.openSteer();
+    const t = await app.focusIds();
+    await page.mouse.move(1, 1);
+    const a = await page.locator(`#focus [data-id="${t[2]}"] .fi-open`).boundingBox(), b = await page.locator('#steerBox').boundingBox();
+    await page.mouse.move(a.x + 40, a.y + 14); await page.mouse.down();
+    for (let i = 1; i <= 8; i++) await page.mouse.move(a.x + 40 + (b.x + b.width / 2 - a.x - 40) * i / 8, a.y + 14 + (b.y + 80 - a.y - 14) * i / 8);
+    await page.mouse.up();
+    expect(await steerIds(page)).toEqual([t[2]]);
+    await expect(page.locator('#steerBox')).toBeVisible();
+  });
+});
+
+test.describe('STEERCO tray on a phone', () => {
+  test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  test('a chip with + in the header, no horizontal scroll; open is a bottom sheet', async ({ app, page }) => {
+    await app.boot();
+    const tr = await page.locator('#steerTray').boundingBox();
+    expect(tr.x + tr.width).toBeLessThanOrEqual(390);
+    expect(tr.height).toBeGreaterThanOrEqual(44);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.tap('#steerToggle');
+    const sh = await page.locator('#steerBox').boundingBox();
+    expect(Math.round(sh.y + sh.height)).toBeGreaterThanOrEqual(843);
+    expect(sh.width).toBeGreaterThan(380);
+  });
+});
+

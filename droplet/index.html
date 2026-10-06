@@ -33,6 +33,33 @@
     </div>
     <div class="notes" id="notes" role="status" aria-live="polite"></div>
   </header>
+  <div class="steer-tray" id="steerTray" data-drop="later">
+    <button class="st-toggle" id="steerToggle" type="button" aria-expanded="false" aria-controls="steerBox" aria-keyshortcuts="Shift+S" title="Open the STEERCO list (Shift+S)">
+      <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 21V4h11l-2 4 2 4H6"/></svg>
+      <span class="st-l">STEERCO</span><span class="count" id="steerCount"></span><span class="st-sugg" id="steerSuggBadge" hidden></span>
+      <svg class="ico chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+    </button>
+    <form class="steer-add" id="steerForm" data-steerform autocomplete="off">
+      <label class="sr" for="steerIn">Add a point for STEERCO</label>
+      <input id="steerIn" type="text" maxlength="300" enterkeyhint="done" placeholder="+ Add a point…" aria-keyshortcuts="s">
+      <button class="steer-btn" type="submit" aria-label="Add point">Add</button>
+    </form>
+    <p class="st-pocket" aria-hidden="true"><span>Drop to raise in STEERCO</span><small>Your note goes with it</small></p>
+  <section class="lane lane-steer st-pop" id="steerBox" aria-label="STEERCO list" hidden>
+    <h2 class="lane-h"><b>STEERCO</b><span class="count" id="steerCountP"></span><span class="r" id="steerNext">To raise</span>
+      <button class="lane-btn" id="steerCopy" type="button" title="Copy the list, to paste in your STEERCO notes">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12"/><path d="M16 8V4H4v12h4"/></svg><span>Copy</span></button>
+      <button class="lane-btn" id="steerClose" type="button" aria-label="Close the STEERCO list"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg><span class="kbd">Esc</span></button></h2>
+    <div class="lane-b">
+      <p class="drop-hint" aria-hidden="true">Drop here for STEERCO</p>
+      <ol class="steer-list" id="steerList"></ol>
+      <div class="steer-sugg" id="steerSuggBox" hidden>
+        <h3 class="lane-sub"><b>From meetings</b><span class="count" id="steerSuggCount"></span><span class="r">Suggested by Claude</span></h3>
+        <ul class="sugg-list" id="steerSugg"></ul>
+      </div>
+    </div>
+  </section>
+  </div>
   <nav class="jump" id="jump" aria-label="Jump to lane"></nav>
   <section class="list-col is-active" id="listCol" aria-label="Today">
     <h2 class="lane-h lane-h-today"><b>Today</b><span class="count" id="todayCount"></span><span class="r">Your move</span></h2>
@@ -105,24 +132,6 @@
             </div>
           </section>
           <p class="ov-keys">Drag cards between Today, Waiting on, Later, STEERCO and the Week (done), or press <span class="kbd">m</span> on one. <span class="kbd">Enter</span> opens · <span class="kbd">Esc</span> closes.</p>
-        </div>
-      </section>
-      <section class="lane lane-steer" id="steerBox" aria-label="STEERCO" data-drop="later">
-        <h2 class="lane-h"><b>STEERCO</b><span class="count" id="steerCount"></span><span class="r" id="steerNext">To raise</span>
-          <button class="lane-btn" id="steerCopy" type="button" title="Copy the list, to paste in your STEERCO notes">
-            <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12"/><path d="M16 8V4H4v12h4"/></svg><span>Copy</span></button></h2>
-        <div class="lane-b">
-          <p class="drop-hint" aria-hidden="true">Drop here for STEERCO</p>
-          <form class="steer-add" id="steerForm" data-steerform autocomplete="off">
-            <label class="sr" for="steerIn">Add a point for STEERCO</label>
-            <input id="steerIn" type="text" maxlength="300" enterkeyhint="done" placeholder="Add a point for STEERCO">
-            <button class="steer-btn" type="submit">Add</button>
-          </form>
-          <ol class="steer-list" id="steerList"></ol>
-          <div class="steer-sugg" id="steerSuggBox" hidden>
-            <h3 class="lane-sub"><b>From meetings</b><span class="count" id="steerSuggCount"></span><span class="r">Suggested by Claude</span></h3>
-            <ul class="sugg-list" id="steerSugg"></ul>
-          </div>
         </div>
       </section>
     </div>

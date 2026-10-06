@@ -48,7 +48,7 @@
     notes: { mail: null, teams: null, cal: null, rank: null, store: null }, rankings: {}, feedback: [], verdict: {}, doneNow: {},
     drafts: {}, touched: {}, drafting: {}, send: {}, detail: {}, chat: {}, undo: null, handoff: {}, meetings: [], actions: {}, confirmDel: null, rankAgain: false, fresh: {}, actEdit: {},
     waits: {}, asksDb: {}, meetingsDb: {}, waitPre: [], scanning: false, teams10: [], sentMsgs: [], chaseMail: {}, ns: {},
-    atlOk: null, atlItems: [], jiraMail: [], aiUndo: {}, places: {}, placesTouched: {}, drag: null, steer: {}, steerTouched: {}
+    atlOk: null, atlItems: [], jiraMail: [], aiUndo: {}, places: {}, placesTouched: {}, drag: null, steer: {}, steerTouched: {}, steerOpen: false
   };
   D.state = S;
   var $ = function (id) { return document.getElementById(id); };
@@ -463,7 +463,6 @@
     el.innerHTML = '<button data-jump="listCol" class="go">Today <b>' + topItems().length + '</b></button>' +
       '<button data-jump="laneWait" class="j-wait">Waiting <b>' + nWait + '</b></button>' +
       '<button data-jump="laterBox">Later</button>' +
-      '<button data-jump="steerBox" class="j-steer">STEERCO <b>' + nSteer + '</b></button>' +
       '<button data-jump="laneWeek" class="j-week">Week</button>';
   }
 
@@ -510,6 +509,18 @@
         '<button class="sc-btn ask" data-point-ask="' + esc(e.k) + '"' + (ask.available() ? '' : ' aria-disabled="true"') + ' aria-label="Ask Claude about this point">' + ico('spark') + '<span>Ask</span></button>' +
       '</div></li>';
   }
+  /* The STEERCO tray in the header: small when closed (count, add a point,
+     a drop target); open, a panel under it with the list. Esc, the ✕, the
+     tray again or a click outside close it; focus returns to the tray. */
+  function setSteerOpen(on, focusBack) {
+    S.steerOpen = !!on;
+    var box = $('steerBox'), tg = $('steerToggle');
+    box.hidden = !S.steerOpen;
+    tg.setAttribute('aria-expanded', String(S.steerOpen));
+    $('steerTray').classList.toggle('is-open', S.steerOpen);
+    if (S.steerOpen) { renderRest(); var f = box.querySelector('textarea, button'); if (f && desk()) f.focus({ preventScroll: true }); }
+    else if (focusBack) tg.focus({ preventScroll: true });
+  }
   /* Claude's suggestions from meeting transcripts: one click adds a point. */
   function steerSuggestions() {
     var out = [];
@@ -524,6 +535,7 @@
     var sg = steerSuggestions();
     box.hidden = !sg.length;
     $('steerSuggCount').textContent = sg.length;
+    var bd = $('steerSuggBadge'); if (bd) { bd.hidden = !sg.length; bd.textContent = '+' + sg.length; bd.title = sg.length + ' suggested from meetings'; }
     $('steerSugg').innerHTML = sg.map(function (x) {
       var ref = esc(x.k + '#' + x.i), day = x.m.date ? U.when(x.m.date, new Date()) : '';
       return '<li class="sugg"><span class="sugg-t"><span class="sugg-title">' + esc(x.p.what) + '</span><span class="sugg-sub">' + esc(U.clip(x.m.subject || 'Meeting', 60)) + (day ? ' · ' + esc(day) : '') + '</span></span>' +
@@ -547,6 +559,7 @@
     renderSuggestions();
     var list = steerEntries(steer), el = $('steerList');
     $('steerCount').textContent = list.length;
+    $('steerCountP').textContent = list.length;
     var sig = list.map(function (e) { return e.it ? e.it.id + (isCur(e.it.id) ? '*' : '') : 'n:' + e.k; }).join('|');
     /* While he types a note, the list stays as it is (focus and caret too). */
     if (el.contains(document.activeElement) && el.getAttribute('data-sig') === sig) return;
@@ -2999,6 +3012,7 @@
     moveTo(id, topItems().indexOf(it) > -1 ? 'later' : 'today');
     var back2 = document.querySelector('[data-drag="' + cssEsc(id) + '"]');
     if (back2 && !back2.matches('button')) back2 = back2.querySelector('[data-open]') || back2;
+    if (back2 && !back2.offsetParent) back2 = $('steerToggle'); /* went into the closed STEERCO tray */
     if (back2) back2.focus({ preventScroll: true });
     return true;
   }
@@ -3043,7 +3057,7 @@
     }
     if (w === 'later') {
       if (d.from === 'steer' || d.from === 'point') return null;
-      return { go: pt ? function () { pointLane(k, 'later'); } : function () { moveTo(d.id, 'later'); }, el: $('steerBox') };
+      return { go: pt ? function () { pointLane(k, 'later'); } : function () { moveTo(d.id, 'later'); }, el: $('steerTray') };
     }
     if (w === 'off') {
       if (pt) return { no: 'Your own points live in STEERCO or Waiting on. Drop it on the Week when it’s handled.' };
@@ -3077,6 +3091,7 @@
     src.classList.add('is-dragsrc');
     root.classList.add('is-dragging');
     if (S.view === 'item' && desk()) root.classList.add('drag-over-item');
+    if (d.el.closest('#steerBox')) root.classList.add('drag-from-steer'); /* the panel steps aside so the lanes show */
     if (navigator.vibrate && d.touch) try { navigator.vibrate(10); } catch (x) { /* none */ }
     dragMove(e);
   }
@@ -3098,7 +3113,7 @@
     if (!d || !d.active) return;
     if (d.ghost) d.ghost.remove();
     if (d.src) d.src.classList.remove('is-dragsrc');
-    root.classList.remove('is-dragging', 'drag-over-item');
+    root.classList.remove('is-dragging', 'drag-over-item', 'drag-from-steer');
     clearPaint();
     /* The click the browser fires right after the release opens nothing. */
     S.dragSwallow = true; setTimeout(function () { S.dragSwallow = false; }, 0);
@@ -3146,6 +3161,7 @@
 
   /* ---------------- Events ---------------- */
   document.addEventListener('click', function (e) {
+    if (S.steerOpen && !e.target.closest('#steerTray, #toastHost, #sheetHost, [data-steer-open]')) setSteerOpen(false);
     if (e.target.closest('[data-ask-close]')) { ask.close(); return; }
     /* Tapping the status strip (not Sync) opens the diagnostics. */
     if (e.target.closest('#status') && !e.target.closest('[data-sync]')) { toggleDiag(); return; }
@@ -3182,6 +3198,8 @@
       return;
     }
     if (t.id === 'steerCopy') return copySteer();
+    if (t.id === 'steerToggle' || t.hasAttribute('data-steer-open')) return setSteerOpen(t.id === 'steerToggle' ? !S.steerOpen : true);
+    if (t.id === 'steerClose') return setSteerOpen(false, true);
     if ((id = t.getAttribute('data-jump'))) { var jt = $(id); if (jt) jt.scrollIntoView({ block: 'start', behavior: 'smooth' }); return; }
     if (t.id === 'restToggle') { S.restOpen = !S.restOpen; renderRest(); if (S.restOpen) $('q').focus(); return; }
     if (t.id === 'doneToggle') { S.doneOpen = !S.doneOpen; renderDone(); return; }
@@ -3327,6 +3345,7 @@
       }
       return;
     }
+    if (e.key === 'Escape' && S.steerOpen) { e.preventDefault(); setSteerOpen(false, true); return; }
     /* Esc in the draft only leaves the text field; a second Esc closes. */
     if (e.key === 'Escape') {
       if (e.target.id === 'draftText' || e.target.id === 'actText' || e.target.id === 'actNotes' || e.target.id === 'actDue') { e.target.blur(); return; }
@@ -3352,6 +3371,8 @@
     }
     if (e.key === '/') { e.preventDefault(); if (!S.restOpen) { S.restOpen = true; renderRest(); } $('q').focus(); return; }
     if (e.key === 'm' && moveFocused()) { e.preventDefault(); return; }
+    if (e.key === 's') { e.preventDefault(); $('steerIn').focus(); return; }
+    if (e.key === 'S') { e.preventDefault(); setSteerOpen(!S.steerOpen, !S.steerOpen ? false : true); return; }
     if (e.key === 'a' && (desk() || S.view === 'list')) { e.preventDefault(); $('addIn').focus(); return; }
     if (e.key === 'k' && ask.available()) { e.preventDefault(); ask.openSheet(null); return; }
     if (S.view !== 'item' || !S.cur) return;

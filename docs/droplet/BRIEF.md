@@ -100,3 +100,12 @@ Thomas chose layout B after using C. It replaces C:
 - **Transcripts** (R6, extended): window about a week (4 working days back). Besides Thomas's own commitments, Claude lists actions others took on (owner by name, quote checked against the transcript) → own actions with `owner`, shown in Waiting on; and up to 3 key points per meeting → STEERCO suggestions ("From meetings": Add / Skip, stored on `meetings/<key>.points`).
 - Droplet re-checks its sources every 30 minutes while open (visible tab).
 - **Push alerts**: an Artifact cannot send OS notifications. A Routine "Droplet new-task alerts" (weekdays 07:55–17:55 Amsterdam, push + email, read-only prompt) exists but is disabled: Routines created from this session carry no connectors. Thomas adds Microsoft 365 and Atlassian Rovo to it in claude.ai → Routines, then enables it.
+
+## STEERCO tray (6 okt 2026, UX direction A)
+
+Thomas rejected STEERCO as a column and as a big panel ("klein, ergens"). UX proposed three small collectors (`docs/droplet/design/steerco.html`); he chose **A, the header tray**:
+- Closed: a lilac bar left of Ask Claude: `STEERCO n [+suggestions] ⌄ | + Add a point… | Add`. Adding (`s`, type, Enter) never opens it.
+- While dragging: the tray lights up and a pocket opens under it ("Drop to raise in STEERCO"). Dragging out of the open panel fades the panel so the lanes show.
+- Open (click, `Shift+S`): a 480 px panel under the tray with the list (notes, Done / Off list / Remove / Ask), Copy and the "From meetings" suggestions; it still takes drops. Esc, ✕, the tray or a click outside close it; focus returns to the tray.
+- Phone: the tray is a full-width row under the header; open is a bottom sheet (80% height).
+- The lanes are again three full-height columns next to Today: Waiting on, Later, Week.
