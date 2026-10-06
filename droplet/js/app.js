@@ -3135,7 +3135,10 @@
   document.addEventListener('touchmove', function (e) { if (S.drag && S.drag.active) e.preventDefault(); }, { passive: false });
   document.addEventListener('contextmenu', function (e) { if (S.drag && S.drag.touch) e.preventDefault(); });
   document.addEventListener('click', function (e) {
-    if (S.dragSwallow) { S.dragSwallow = false; e.stopPropagation(); e.preventDefault(); }
+    /* Only the pointer's own click after a drop is swallowed; a click made by
+       the keyboard (Enter in a form, Space on a button: detail 0) never is.
+       Input can run before the timer that clears the flag. */
+    if (S.dragSwallow && e.detail > 0) { S.dragSwallow = false; e.stopPropagation(); e.preventDefault(); }
   }, true);
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape' && S.drag && S.drag.active) { e.stopPropagation(); e.preventDefault(); S.drag.t = null; dragEnd(false); }

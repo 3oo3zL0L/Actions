@@ -116,3 +116,19 @@ test.describe('Drag by touch (hold, then move)', () => {
   });
 });
 
+test.describe('After a drop', () => {
+  test('a keyboard click is never swallowed: Enter in a form right after a drag still submits', async ({ app, page }) => {
+    await app.boot();
+    await page.fill('#steerIn', 'Point B');
+    // The state right after a drop, before the timer clears it (input can run first on a slow machine).
+    await page.evaluate(() => { window.Droplet.state.dragSwallow = true; });
+    await page.press('#steerIn', 'Enter');
+    await expect(page.locator('#steerList .sc.is-note')).toHaveCount(1);
+    // A real pointer click in that moment is still swallowed (no card opens by the release).
+    await page.evaluate(() => { window.Droplet.state.dragSwallow = true; });
+    const id = (await app.focusIds())[0];
+    await page.click(`#focus [data-id="${id}"] .fi-open`);
+    await expect(page.locator('#app')).toHaveAttribute('data-view', 'list');
+  });
+});
+
