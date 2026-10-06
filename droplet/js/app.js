@@ -48,7 +48,7 @@
     notes: { mail: null, teams: null, cal: null, rank: null, store: null }, rankings: {}, feedback: [], verdict: {}, doneNow: {},
     drafts: {}, touched: {}, drafting: {}, send: {}, detail: {}, chat: {}, undo: null, handoff: {}, meetings: [], actions: {}, confirmDel: null, rankAgain: false, fresh: {}, actEdit: {},
     waits: {}, asksDb: {}, meetingsDb: {}, waitPre: [], scanning: false, teams10: [], sentMsgs: [], chaseMail: {}, ns: {},
-    atlOk: null, atlItems: [], jiraMail: [], aiUndo: {}, places: {}, placesTouched: {}, drag: null
+    atlOk: null, atlItems: [], jiraMail: [], aiUndo: {}, places: {}, placesTouched: {}, drag: null, steer: {}, steerTouched: {}
   };
   D.state = S;
   var $ = function (id) { return document.getElementById(id); };
@@ -57,11 +57,14 @@
 
   /* ---------------- Model ---------------- */
   function rk(it) { return it.r || rank.fallbackFor(it); }
-  /* Where Thomas put a card himself (dragged, Move to… or m): db places/<key>.
-     "today" pins it to Today (with an optional order), "later" keeps it out
-     of Today until he moves it back. Wins over Claude's ranking. */
+  /* Where Thomas put a card himself (dragged, the Later / Today buttons or m):
+     db places/<key>. "today" pins it to Today (with an optional order);
+     "later" collects it in the Later lane, for STEERCO, with his own note;
+     "off" keeps it out of Today, under Everything else. Wins over Claude's
+     ranking. */
   function placeRec(it) { return it && it.key && S.places[it.key] || null; }
-  function movedLater(it) { var p = placeRec(it); return !!(p && p.place === 'later'); }
+  function movedLater(it) { var p = placeRec(it); return !!(p && (p.place === 'later' || p.place === 'off')); }
+  function inSteer(it) { var p = placeRec(it); return !!(p && p.place === 'later'); }
   function movedToday(it) { var p = placeRec(it); return !!(p && p.place === 'today'); }
   function groupOf(it) {
     var g = rk(it).group;
@@ -371,7 +374,7 @@
         '</button>' +
         '<div class="fi-act">' + actHTML(it) +
           (isClosed(it.id) ? '' : '<button class="btn-done" data-card-done="' + esc(it.id) + '" aria-label="Mark done: ' + esc(titleOf(it)) + '">' + ico('check') + '<span>Done</span></button>') +
-          '<button class="btn-move" data-move="' + esc(it.id) + '" aria-haspopup="menu" aria-label="Move: ' + esc(titleOf(it)) + '" title="Move (m)">' + ico('later') + '<span>Later</span></button>' +
+          '<button class="btn-move" data-move="' + esc(it.id) + '" aria-label="Move to Later, for STEERCO: ' + esc(titleOf(it)) + '" title="Move to Later, for STEERCO (m)">' + ico('later') + '<span>Later</span></button>' +
         '</div>' +
       '</li>');
     });
@@ -393,22 +396,27 @@
       (isWait(it) && !n ? ' · asked ' + it.n + ' working day' + (it.n === 1 ? '' : 's') + ' ago' : '') +
       (it.meeting ? ' · meeting ' + esc(it.meeting.hhmm) : '') + (waitingTeams(it.id) ? ' · waiting for you to send in Teams' : '') +
       (isMine(it) && it.due ? ' · ' + esc(mine.dueLabel(it.due).toLowerCase()) : '') +
-      (S.verdict[it.id] === 'down' ? ' · marked not important' : '') + (movedLater(it) ? ' · moved by you' : '') + (isWait(it) ? ' ' + waitChip(it) : '') + '</span></span></button>' +
+      (S.verdict[it.id] === 'down' ? ' · marked not important' : '') + (movedLater(it) ? ' · moved out of Today by you' : '') + (isWait(it) ? ' ' + waitChip(it) : '') + '</span></span></button>' +
       '<button class="btn-today" data-move-today="' + esc(it.id) + '" aria-label="Move to Today: ' + esc(titleOf(it)) + '" title="Move to Today (m)">' + ico('today') + '<span>Today</span></button></li>';
   }
-  /* Layout C: the overview on the right. Waiting on (R3) and Elsewhere (held
-     in Teams or sent) get their own boxes; Later holds the rest, searchable. */
+  /* Layout B: three lanes next to Today. Waiting on (R3) with Elsewhere
+     (held in Teams or sent) under it; Later, which collects what Thomas
+     wants to raise in STEERCO, with his own notes, and Everything else
+     (searchable) under it; and the Week. */
   function renderRest() {
     var all = restItems(), q = S.q.trim().toLowerCase(), base = topItems().length;
     var num = function (it) { var i = all.indexOf(it); return i > -1 ? i + base + 1 : 0; };
-    var waits = all.filter(isWait), els = all.filter(function (it) { return !isWait(it) && isHeld(it); });
-    var later = all.filter(function (it) { return waits.indexOf(it) < 0 && els.indexOf(it) < 0; });
-    var box = function (id, arr) {
-      $(id + 'Box').hidden = !arr.length;
-      $(id + 'Count').textContent = arr.length;
-      $(id + 'List').innerHTML = arr.map(function (it) { return restRow(it, num(it)); }).join('');
-    };
-    box('wait', waits); box('else', els);
+    var steer = all.filter(inSteer), lane = all.filter(function (it) { return !inSteer(it); });
+    var waits = lane.filter(isWait), els = lane.filter(function (it) { return !isWait(it) && isHeld(it); });
+    var later = lane.filter(function (it) { return waits.indexOf(it) < 0 && els.indexOf(it) < 0; });
+    $('waitCount').textContent = waits.length;
+    $('waitR').textContent = els.length ? '+ elsewhere ' + els.length : '';
+    $('waitList').innerHTML = waits.length ? waits.map(function (it) { return restRow(it, num(it)); }).join('') :
+      '<li class="rest-empty">Nobody owes you an answer right now.</li>';
+    $('elseBox').hidden = !els.length;
+    $('elseCount').textContent = els.length;
+    $('elseList').innerHTML = els.map(function (it) { return restRow(it, num(it)); }).join('');
+    renderSteer(steer);
     $('restCount').textContent = later.length;
     /* Waits younger than 3 working days are not listed, only found by search. */
     var list = !q ? later : all.concat(S.waitPre).filter(function (it) {
@@ -417,15 +425,126 @@
         isWait(it) ? ' waiting on others ' + it.what + ' ' + it.summary :
         isJira(it) ? ' jira ' + it.issueKey + ' ' + (it.status || '') + ' ' + it.summary :
         isPage(it) ? ' confluence page ' + (it.spaceName || '') + ' ' + (it.spaceKey || '') + ' ' + it.summary : '';
+      var p = placeRec(it);
       return (titleOf(it) + ' ' + project(it) + ' ' + it.senderName + ' ' + it.sender + ' ' + rk(it).why + ' ' + srcLabel(it) + extra +
-        (it.meeting ? ' meeting ' + it.meeting.hhmm : '')).toLowerCase().indexOf(q) !== -1;
+        (inSteer(it) ? ' steerco ' + (p.note || '') : '') + (it.meeting ? ' meeting ' + it.meeting.hhmm : '')).toLowerCase().indexOf(q) !== -1;
     });
     var h = list.map(function (it) { return restRow(it, num(it)); }).join('');
-    if (!list.length) h = '<li class="rest-empty">' + (q ? 'Nothing matches “' + esc(S.q) + '”.' : 'Nothing for later. Drag a card here to move it out of Today.') + '</li>';
+    if (!list.length) h = '<li class="rest-empty">' + (q ? 'Nothing matches “' + esc(S.q) + '”.' : 'Nothing else waiting.') + '</li>';
     $('restList').innerHTML = h;
     $('restToggle').setAttribute('aria-expanded', String(S.restOpen));
     $('restPanel').hidden = !S.restOpen;
+    $('weekR').textContent = 'Week ' + isoWeek(new Date());
     renderHoursBox();
+    renderJump(waits.length + els.length, steer.length + steerNotes().length);
+  }
+  function isoWeek(d) {
+    var t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())), day = t.getUTCDay() || 7;
+    t.setUTCDate(t.getUTCDate() + 4 - day);
+    return Math.ceil(((t - Date.UTC(t.getUTCFullYear(), 0, 1)) / 864e5 + 1) / 7);
+  }
+  /* Phone: the lanes stack under Today; a bar jumps to each. */
+  function renderJump(nWait, nSteer) {
+    var el = $('jump'); if (!el) return;
+    el.innerHTML = '<button data-jump="listCol" class="go">Today <b>' + topItems().length + '</b></button>' +
+      '<button data-jump="laneWait" class="j-wait">Waiting <b>' + nWait + '</b></button>' +
+      '<button data-jump="laterBox" class="j-steer">Later <b>' + nSteer + '</b></button>' +
+      '<button data-jump="laneWeek" class="j-week">Week</button>';
+  }
+
+  /* ---------------- Later: for STEERCO ----------------
+     Cards moved to Later (db places/<key>, place "later", with Thomas's
+     note) and his own points (db steerco/<id>), in the order he collected
+     them. Only for him: nothing here is sent anywhere. Copy puts the list on
+     the clipboard for his STEERCO notes. */
+  function steerNotes() {
+    return Object.keys(S.steer).map(function (k) { return { k: k, rec: S.steer[k] }; })
+      .filter(function (x) { return x.rec && typeof x.rec.text === 'string'; });
+  }
+  function steerEntries(steer) {
+    var out = steer.map(function (it) { return { it: it, at: placeRec(it).at || '' }; })
+      .concat(steerNotes().map(function (x) { return { k: x.k, rec: x.rec, at: x.rec.at || '' }; }));
+    return out.sort(function (a, b) { return String(a.at).localeCompare(String(b.at)); });
+  }
+  function steerHTML(e, i) {
+    var x = '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>';
+    if (e.it) {
+      var it = e.it, p = placeRec(it), cur = isCur(it.id);
+      return '<li class="sc" data-steer="' + esc(it.id) + '">' +
+        '<div class="sc-top"><button class="sc-open' + (cur ? ' is-current' : '') + '" data-open="' + esc(it.id) + '" data-drag="' + esc(it.id) + '" aria-keyshortcuts="m">' +
+          '<span class="sc-n">' + pad(i + 1) + '</span>' + ico(srcKind(it)) +
+          '<span class="sc-t"><span class="sc-title">' + esc(titleOf(it)) + '</span><span class="sc-sub">' + esc(srcLabel(it)) + ' · ' + esc(project(it)) + '</span></span></button>' +
+          '<button class="btn-today" data-move-today="' + esc(it.id) + '" aria-label="Move to Today: ' + esc(titleOf(it)) + '" title="Move to Today (m)">' + ico('today') + '<span>Today</span></button>' +
+          '<button class="btn-x" data-steer-off="' + esc(it.id) + '" aria-label="Take off the STEERCO list: ' + esc(titleOf(it)) + '" title="Take off the list">' + x + '</button></div>' +
+        '<label class="sr" for="sn-' + esc(it.key) + '">Your note for STEERCO</label>' +
+        '<textarea class="sc-note" id="sn-' + esc(it.key) + '" data-steer-note="' + esc(it.id) + '" rows="1" maxlength="2000" placeholder="Your note for STEERCO">' + esc(p.note || '') + '</textarea></li>';
+    }
+    return '<li class="sc is-note" data-steer-k="' + esc(e.k) + '">' +
+      '<div class="sc-top"><span class="sc-n">' + pad(i + 1) + '</span><span class="sc-tag">Your point</span>' +
+        '<button class="btn-x" data-steer-del="' + esc(e.k) + '" aria-label="Remove this point" title="Remove">' + x + '</button></div>' +
+      '<label class="sr" for="sp-' + esc(e.k) + '">Your point for STEERCO</label>' +
+      '<textarea class="sc-note" id="sp-' + esc(e.k) + '" data-steer-free="' + esc(e.k) + '" rows="1" maxlength="2000">' + esc(e.rec.text) + '</textarea></li>';
+  }
+  function renderSteer(steer) {
+    var list = steerEntries(steer), el = $('steerList');
+    $('steerCount').textContent = list.length;
+    var sig = list.map(function (e) { return e.it ? e.it.id + (isCur(e.it.id) ? '*' : '') : 'n:' + e.k; }).join('|');
+    /* While he types a note, the list stays as it is (focus and caret too). */
+    if (el.contains(document.activeElement) && el.getAttribute('data-sig') === sig) return;
+    el.setAttribute('data-sig', sig);
+    el.innerHTML = list.length ? list.map(steerHTML).join('') :
+      '<li class="steer-empty">Collect here what to raise in STEERCO: drag a card in, or add your own point.</li>';
+    [].forEach.call(el.querySelectorAll('textarea'), grow);
+  }
+  function grow(ta) { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight + 2, 240) + 'px'; }
+  var steerTimers = {};
+  function saveLater(key, fn) { clearTimeout(steerTimers[key]); steerTimers[key] = setTimeout(fn, 500); }
+  function steerNoteInput(ta) {
+    grow(ta);
+    var it = S.byId[ta.getAttribute('data-steer-note')], p = it && placeRec(it); if (!p) return;
+    var v = ta.value;
+    saveLater('p:' + it.key, function () { var r = U.clone(placeRec(it) || p); r.note = v; setPlace(it, r); });
+  }
+  function steerFreeInput(ta) {
+    grow(ta);
+    var k = ta.getAttribute('data-steer-free'), rec = S.steer[k]; if (!rec) return;
+    var v = ta.value;
+    saveLater('n:' + k, function () { setSteer(k, { text: v, at: rec.at }); });
+  }
+  function setSteer(k, rec) {
+    S.steerTouched[k] = 1;
+    if (rec) { S.steer[k] = rec; saveDone('steerco/' + k, function () { return store.put('steerco', k, U.clone(rec)); }); }
+    else { delete S.steer[k]; saveDone('steerco/' + k, function () { return store.drop('steerco', k); }); }
+  }
+  function addSteerPoint() {
+    var inp = $('steerIn'), v = inp.value.trim(); if (!v) return;
+    var k = 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+    setSteer(k, { text: U.clip(v, 2000), at: new Date().toISOString() });
+    inp.value = '';
+    renderRest();
+    toast('Added to Later, for STEERCO.', function () { setSteer(k, null); renderRest(); });
+  }
+  function delSteerPoint(k) {
+    var prev = S.steer[k] ? U.clone(S.steer[k]) : null; if (!prev) return;
+    setSteer(k, null); renderRest();
+    toast('Point removed.', function () { setSteer(k, prev); renderRest(); });
+  }
+  function copySteer() {
+    var list = steerEntries(restItems().filter(inSteer));
+    if (!list.length) return toast('Nothing collected for STEERCO yet.');
+    var d = new Date(), lines = ['STEERCO points · ' + d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }), ''];
+    list.forEach(function (e) {
+      if (e.it) {
+        var n = (placeRec(e.it).note || '').trim();
+        lines.push('- ' + titleOf(e.it) + ' (' + project(e.it) + ')');
+        if (n) n.split('\n').forEach(function (l) { lines.push('  ' + l); });
+      } else {
+        var t = e.rec.text.trim().split('\n');
+        lines.push('- ' + t[0]); t.slice(1).forEach(function (l) { lines.push('  ' + l); });
+      }
+    });
+    copyText(lines.join('\n')).then(function () { toast('Copied ' + list.length + ' point' + (list.length === 1 ? '' : 's') + '. Paste them in your STEERCO notes.'); },
+      function () { toast('Couldn’t copy. Select the points and copy them by hand.'); });
   }
   /* The weekly hours reminders: what the last Monday run did, at a glance. */
   function renderHoursBox() {
@@ -2728,6 +2847,12 @@
       S.places = got;
       renderAllKeepFocus();
     }, function (e) { noteError('places', e); });
+    rt.timeout(Promise.resolve().then(function () { return store.readColl('steerco'); }), rt.cfg.storeMs, 'Reading STEERCO points').then(function (r) {
+      var got = U.clone(r || {});
+      Object.keys(S.steerTouched).forEach(function (k) { if (S.steer[k]) got[k] = S.steer[k]; else delete got[k]; });
+      S.steer = got;
+      renderAllKeepFocus();
+    }, function (e) { noteError('steerco', e); });
   }
   function setPlace(it, rec) {
     S.placesTouched[it.key] = 1;
@@ -2749,10 +2874,12 @@
   function moveTo(id, where, j) {
     var it = S.byId[id]; if (!it || !it.key) return;
     if (where === 'done') return markDone(id);
-    var inToday = topItems().indexOf(it) > -1;
-    if (where === 'later' && !inToday) return;
+    var inToday = topItems().indexOf(it) > -1, wasSteer = inSteer(it);
+    if (where === 'later' && wasSteer) return;
+    if (where === 'off' && !inToday && !wasSteer) return;
     var prev = S.places[it.key] ? U.clone(S.places[it.key]) : null;
     var rec = { place: where, at: new Date().toISOString(), title: U.clip(titleOf(it), 160) };
+    if (prev && prev.note) rec.note = prev.note; /* his STEERCO note stays with the card */
     if (where === 'today') {
       if (j != null) {
         var i0 = topItems().filter(function (o) { return o !== it; }).length;
@@ -2760,14 +2887,15 @@
       } else rec.order = orderAt(Infinity, it);
     }
     setPlace(it, rec);
-    if (where === 'later' && S.view === 'item' && S.cur === id && !desk()) back();
+    if (where !== 'today' && S.view === 'item' && S.cur === id && !desk()) back();
     else renderAll();
-    var drop = $('focus').querySelector('[data-id="' + cssEsc(id) + '"]') || $('over').querySelector('[data-open="' + cssEsc(id) + '"]');
+    var drop = $('focus').querySelector('[data-id="' + cssEsc(id) + '"]') || $('over').querySelector('[data-steer="' + cssEsc(id) + '"]') || $('over').querySelector('[data-open="' + cssEsc(id) + '"]');
     if (drop) { drop.classList.add('just-moved'); setTimeout(function () { drop.classList.remove('just-moved'); }, 900); }
-    toast(where === 'later' ? 'Moved to Later.' : inToday ? 'Moved in Today.' : 'Moved to Today.', function () { setPlace(it, prev); renderAll(); });
+    toast(where === 'later' ? 'Moved to Later, for STEERCO.' : where === 'off' ? (wasSteer ? 'Taken off the STEERCO list.' : 'Moved out of Today.') :
+      inToday ? 'Moved in Today.' : 'Moved to Today.', function () { setPlace(it, prev); renderAll(); });
   }
   function cssEsc(v) { return window.CSS && CSS.escape ? CSS.escape(v) : String(v).replace(/["\\]/g, '\\$&'); }
-  /* m on a focused card: Today goes to Later, Later comes to Today. */
+  /* m on a focused card: Today goes to Later (STEERCO), the lanes come to Today. */
   function moveFocused() {
     var a = document.activeElement, el = a && a.closest && a.closest('[data-drag]'), id = el && el.getAttribute('data-drag');
     if (!id && S.view === 'item' && S.cur) id = S.cur;
@@ -2791,7 +2919,8 @@
     }
     if (el.closest('.list-col')) return { where: 'today', j: Infinity, el: null };
     if (el.closest('[data-drop="done"]')) return { where: 'done' };
-    if (el.closest('#over')) return { where: 'later' };
+    if (el.closest('[data-drop="off"]')) return { where: 'off' };
+    if (el.closest('[data-drop="later"]')) return { where: 'later' };
     return null;
   }
   function clearPaint() {
@@ -2804,7 +2933,8 @@
     if (t.where === 'today') {
       if (d.from === 'today' && !t.el && !t.end) return;
       if (t.el) t.el.classList.add('drop-before'); else if (t.end) t.end.classList.add('drop-after'); else $('focus').classList.add('drop-on');
-    } else if (t.where === 'later') { if (d.from === 'today') $('laterBox').classList.add('drop-on'); }
+    } else if (t.where === 'later') { if (d.from !== 'steer') $('laterBox').classList.add('drop-on'); }
+    else if (t.where === 'off') { if (d.from !== 'rest') $('restBox').classList.add('drop-on'); }
     else if (t.where === 'done') document.querySelector('[data-drop="done"]').classList.add('drop-on');
   }
   function dragStart(e) {
@@ -2830,7 +2960,7 @@
     /* Near an edge: scroll the page (phone) or the column under the pointer. */
     var edge = 56, dy = e.clientY < edge ? -14 : e.clientY > window.innerHeight - edge ? 14 : 0;
     if (dy) {
-      var under = document.elementFromPoint(e.clientX, e.clientY), col = under && under.closest('.list-col, .over');
+      var under = document.elementFromPoint(e.clientX, e.clientY), col = under && under.closest('.list-col, .lane-b');
       if (col && col.scrollHeight > col.clientHeight) col.scrollTop += dy; else window.scrollBy(0, dy);
     }
   }
@@ -2846,7 +2976,8 @@
     S.dragSwallow = true; setTimeout(function () { S.dragSwallow = false; }, 0);
     var t = drop && d.t;
     if (!t) return;
-    if (t.where === 'later' && d.from === 'today') return moveTo(d.id, 'later');
+    if (t.where === 'later' && d.from !== 'steer') return moveTo(d.id, 'later');
+    if (t.where === 'off' && d.from !== 'rest') return moveTo(d.id, 'off');
     if (t.where === 'done') return moveTo(d.id, 'done');
     if (t.where === 'today') {
       var j = t.j === Infinity ? null : t.j;
@@ -2859,7 +2990,7 @@
     var el = e.target.closest('[data-drag]'); if (!el) return;
     var id = el.getAttribute('data-drag'), it = S.byId[id]; if (!it) return;
     var top = topItems(), i = top.indexOf(it);
-    S.drag = { id: id, el: el, x0: e.clientX, y0: e.clientY, pid: e.pointerId, from: i > -1 ? 'today' : 'later', i: i, touch: e.pointerType === 'touch', ready: e.pointerType !== 'touch' };
+    S.drag = { id: id, el: el, x0: e.clientX, y0: e.clientY, pid: e.pointerId, from: i > -1 ? 'today' : inSteer(it) ? 'steer' : 'rest', i: i, touch: e.pointerType === 'touch', ready: e.pointerType !== 'touch' };
     if (S.drag.touch) S.drag.hold = setTimeout(function () { if (S.drag && S.drag.id === id) { S.drag.ready = true; dragStart({ clientX: S.drag.x, clientY: S.drag.y }); } }, HOLD_MS);
     S.drag.x = e.clientX; S.drag.y = e.clientY;
   });
@@ -2908,6 +3039,10 @@
     if ((id = t.getAttribute('data-act'))) { var it = S.byId[id]; return openItem(id, !!(it && rk(it).kind === 'reply')); }
     if ((id = t.getAttribute('data-move'))) return moveTo(id, 'later');
     if ((id = t.getAttribute('data-move-today'))) return moveTo(id, 'today');
+    if ((id = t.getAttribute('data-steer-off'))) return moveTo(id, 'off');
+    if ((id = t.getAttribute('data-steer-del'))) return delSteerPoint(id);
+    if (t.id === 'steerCopy') return copySteer();
+    if ((id = t.getAttribute('data-jump'))) { var jt = $(id); if (jt) jt.scrollIntoView({ block: 'start', behavior: 'smooth' }); return; }
     if (t.id === 'restToggle') { S.restOpen = !S.restOpen; renderRest(); if (S.restOpen) $('q').focus(); return; }
     if (t.id === 'doneToggle') { S.doneOpen = !S.doneOpen; renderDone(); return; }
     if ((id = t.getAttribute('data-bring'))) return bringBack(id);
@@ -2976,6 +3111,7 @@
       return;
     }
     if (e.target.hasAttribute('data-ns-addform')) { nsAdd(); return; }
+    if (e.target.hasAttribute('data-steerform')) { e.preventDefault(); addSteerPoint(); return; }
     if (e.target.hasAttribute('data-chatform')) {
       var inp = $('chatIn'), v = inp ? inp.value.trim() : '';
       if (v && ask.open && !ask.conv(ask.scope).busy) { inp.value = ''; ask.say(v); }
@@ -2984,6 +3120,8 @@
   document.addEventListener('input', function (e) {
     if (e.target.hasAttribute('data-card-body') || e.target.hasAttribute('data-card-subject')) { ask.cardInput(e.target); return; }
     if (e.target.id === 'q') { S.q = e.target.value; renderRest(); }
+    if (e.target.hasAttribute('data-steer-note')) { steerNoteInput(e.target); return; }
+    if (e.target.hasAttribute('data-steer-free')) { steerFreeInput(e.target); return; }
     if ((e.target.id === 'actText' || e.target.id === 'actNotes') && curAction()) {
       var ed = S.actEdit[curAction().docId] = S.actEdit[curAction().docId] || {};
       ed[e.target.id === 'actText' ? 'text' : 'notes'] = e.target.value;
@@ -3087,7 +3225,7 @@
   });
 
   /* ---------------- Boot ---------------- */
-  S.restOpen = desk(); /* layout C: Later is open in the overview on a laptop */
+  S.restOpen = false; /* layout B: Everything else folds under the STEERCO list; / opens it */
   store.onError = function (path) { if (S.saveManaged && S.saveManaged[path]) return; S.notes.store = 'Couldn’t save a change; it may be gone after a reload.'; renderNotes(); };
   renderAll(); renderAskbar();
   /* A capability that answers after use()'s timeout lights up late. */

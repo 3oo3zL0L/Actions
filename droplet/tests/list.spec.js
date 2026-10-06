@@ -118,11 +118,12 @@ test.describe('Load and rank', () => {
     expect(await app.focusIds()).toEqual(before);
   });
 
-  test('Later is open in the overview (laptop), in rank order, and searchable', async ({ app, page }) => {
+  test('Everything else folds under Later; / opens it; in rank order, and searchable', async ({ app, page }) => {
     await app.boot();
-    await expect(page.locator('#restPanel')).toBeVisible();
+    await expect(page.locator('#restPanel')).toBeHidden();
     await expect(page.locator('#restCount')).toHaveText('5');
     await page.keyboard.press('/');
+    await expect(page.locator('#restPanel')).toBeVisible();
     await expect(page.locator('#q')).toBeFocused();
     await page.fill('#q', 'supplier');
     expect(await page.$$eval('#restList .rr', (els) => els.map((e) => e.getAttribute('data-open')))).toEqual(['a6-peter', 'a10-page2']);

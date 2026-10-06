@@ -81,3 +81,14 @@ Daaronder staat de rest, ingeklapt en doorzoekbaar. Daarnaast is er één global
 ### Layout C · Today-first split (5 okt 2026)
 Gekozen door Thomas: Today groot links; rechts een live overzicht (Waiting on, Elsewhere, Later, Hours reminders, Recently done) in plaats van Standing by. Een geopend item vervangt het overzicht.
 Kaarten verschuiven van Today naar Later (en terug) door te slepen; ook met de knop Later / Today en de toets m. Herschikken binnen Today kan door te slepen. Opgeslagen in db `places/<key>`, met Undo; overleeft reload en nieuwe ranking. Telefoon: Today eerst, daaronder het overzicht; slepen na lang indrukken.
+
+## Layout B · Board with STEERCO (6 okt 2026)
+
+Thomas chose layout B after using C. It replaces C:
+
+- **Today** on the left, as before (large cards, Done, Later, drag to reorder).
+- **Waiting on** lane: waits (R3) with a solid steel line; **Elsewhere** under it with the dashed steel line.
+- **Later** lane = what to raise in **STEERCO** (lilac). Cards dragged or moved here (db `places/<key>`, `place: "later"`) carry his own note (`note`, saved as he types). He can add his own points (db `steerco/<id>`, `{text, at}`). ✕ takes a card off the list (`place: "off"`: out of Today, under Everything else); a point is removed with Undo. **Copy** puts the list with notes on the clipboard; nothing is sent.
+- **Everything else** folds under the STEERCO list (`/` opens it and searches everything).
+- **Week** lane (green): hours reminders recap, Recently done.
+- An open item covers the lanes. Laptop 960–1199 px: Week goes under Waiting and Later. Phone: lanes stack under Today with a sticky jump bar.
