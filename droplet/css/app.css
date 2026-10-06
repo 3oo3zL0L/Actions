@@ -1160,7 +1160,13 @@ html.is-dragging .lane-steer .drop-hint { display: block; }
 .sc[data-drag] textarea { cursor: text; }
 .lane.drop-on { border-color: var(--lc); box-shadow: inset 0 0 0 1px var(--lc), 0 0 0 4px rgba(255, 255, 255, 0.04); }
 .lane-wait.drop-on { background: var(--hold-soft); }
-html.is-dragging .lane-wait .rest-empty::after { content: " Drop here to wait on it."; color: var(--hold); }
 .rest-list.is-wait > li.sc { display: block; }
 /* The ghost always floats, whatever card it was cloned from. */
 .drag-ghost { position: fixed !important; margin: 0 !important; }
+/* Dragging while an item is open: the drawer and scrim step aside, so every lane is a target. */
+html.drag-over-item .item-col, html.drag-over-item .b-scrim { opacity: 0; pointer-events: none; transition: opacity 0.15s ease; }
+.lane-week.drop-on { background: var(--ok-soft); }
+/* Drop hints never move anything: the STEERCO hint floats over the top of
+   the lane instead of pushing the list down mid-drag. */
+.lane-steer .lane-b { position: relative; }
+.lane-steer .drop-hint { position: absolute; z-index: 3; top: 6px; left: 8px; right: 8px; margin: 0; background: var(--bg-2); pointer-events: none; }

@@ -65,7 +65,7 @@
   function placeRec(it) { return it && it.key && S.places[it.key] || null; }
   function movedLater(it) { var p = placeRec(it); return !!(p && (p.place === 'later' || p.place === 'off' || p.place === 'wait')); }
   function putWait(it) { var p = placeRec(it); return !!(p && p.place === 'wait'); }
-  function inWaitLane(it) { return isWait(it) || putWait(it); }
+  function inWaitLane(it) { return putWait(it) || isWait(it) && !placeRec(it); }
   function inSteer(it) { var p = placeRec(it); return !!(p && p.place === 'later'); }
   function movedToday(it) { var p = placeRec(it); return !!(p && p.place === 'today'); }
   function groupOf(it) {
@@ -347,8 +347,8 @@
       note = 'It went out once and can’t be sent again. You took off the done mark.';
       btns = '<button class="btn-q ok" data-held-done="' + esc(it.id) + '">' + ico('check') + 'Mark done</button>';
     }
-    return '<li class="fi is-held' + (cur ? ' is-current' : '') + '" data-id="' + esc(it.id) + '" data-state="' + st + '">' +
-      '<button class="fi-open" data-open="' + esc(it.id) + '"' + (cur ? ' aria-current="true"' : '') + ' aria-label="Open ' + (i + 1) + ': ' + esc(titleOf(it)) + '">' +
+    return '<li class="fi is-held' + (cur ? ' is-current' : '') + '" data-id="' + esc(it.id) + '" data-drop-i="' + i + '" data-state="' + st + '">' +
+      '<button class="fi-open" data-open="' + esc(it.id) + '" data-drag="' + esc(it.id) + '"' + (cur ? ' aria-current="true"' : '') + ' aria-label="Open ' + (i + 1) + ': ' + esc(titleOf(it)) + '">' +
         '<span class="fi-rank" aria-hidden="true">' + pad(i + 1) + '</span>' +
         '<span class="fi-body"><span class="held-chip">' + chip + '</span>' +
           '<span class="fi-meta">' + srcHTML(it) + '<span class="sep" aria-hidden="true">·</span><span>' + esc(project(it)) + '</span><span class="cur-tag" aria-hidden="true">In panel</span></span>' +
@@ -2913,8 +2913,8 @@
     var inToday = topItems().indexOf(it) > -1, wasSteer = inSteer(it);
     var pl = placeRec(it) && placeRec(it).place;
     if (where === 'later' && wasSteer) return;
-    if (where === 'off' && (pl === 'off' || !inToday && !pl)) return;
-    if (where === 'wait' && (pl === 'wait' || isWait(it))) return;
+    if (where === 'off' && (pl === 'off' || !inToday && !pl && !isWait(it))) return;
+    if (where === 'wait' && (pl === 'wait' || isWait(it) && !pl && !inToday)) return;
     var prev = S.places[it.key] ? U.clone(S.places[it.key]) : null;
     var rec = { place: where, at: new Date().toISOString(), title: U.clip(titleOf(it), 160) };
     if (prev && prev.note) rec.note = prev.note; /* his STEERCO note stays with the card */
@@ -2967,17 +2967,44 @@
   function clearPaint() {
     [].forEach.call(document.querySelectorAll('.drop-before, .drop-after, .drop-on'), function (n) { n.classList.remove('drop-before', 'drop-after', 'drop-on'); });
   }
+  /* What dropping here does, for this card: { go, el } or { no: reason }.
+     Paint and drop read the same answer, so a lane lights up only where the
+     drop works, and a drop that can't work says why (never silently). */
+  function dropPlan(d, t) {
+    if (!t) return null;
+    var pt = d.from === 'point' || d.from === 'wpoint', k = pt ? d.id.slice(6) : null, w = t.where;
+    var j = t.j === Infinity ? null : t.j;
+    if (w === 'today') {
+      if (d.from === 'today' && j === d.i) return null; /* where it was */
+      return { go: pt ? function () { pointToToday(k, j); } : function () { moveTo(d.id, 'today', j); }, el: null };
+    }
+    if (w === 'done') return { go: pt ? function () { pointDone(k); } : function () { moveTo(d.id, 'done'); }, el: document.querySelector('[data-drop="done"]') };
+    if (w === 'wait') {
+      if (d.from === 'wait' || d.from === 'wpoint') return null;
+      return { go: pt ? function () { pointLane(k, 'wait'); } : function () { moveTo(d.id, 'wait'); }, el: $('laneWait') };
+    }
+    if (w === 'later') {
+      if (d.from === 'steer' || d.from === 'point') return null;
+      return { go: pt ? function () { pointLane(k, 'later'); } : function () { moveTo(d.id, 'later'); }, el: $('laterBox') };
+    }
+    if (w === 'off') {
+      if (pt) return { no: 'Your own points live in Later or Waiting on. Drop it on Recently done when it’s handled.' };
+      if (d.from === 'rest') return null;
+      return { go: function () { moveTo(d.id, 'off'); }, el: $('restBox') };
+    }
+    return null;
+  }
   function dragPaint(t) {
     clearPaint();
     var d = S.drag; d.t = t;
     if (!t) return;
+    var plan = dropPlan(d, t);
     if (t.where === 'today') {
-      if (d.from === 'today' && !t.el && !t.end) return;
+      if (!plan) return;
       if (t.el) t.el.classList.add('drop-before'); else if (t.end) t.end.classList.add('drop-after'); else $('focus').classList.add('drop-on');
-    } else if (t.where === 'later') { if (d.from !== 'steer' && d.from !== 'point') $('laterBox').classList.add('drop-on'); }
-    else if (t.where === 'off') { if (d.from !== 'rest' && d.from !== 'point' && d.from !== 'wpoint') $('restBox').classList.add('drop-on'); }
-    else if (t.where === 'wait') { if (d.from !== 'wait' && d.from !== 'wpoint') $('laneWait').classList.add('drop-on'); }
-    else if (t.where === 'done') document.querySelector('[data-drop="done"]').classList.add('drop-on');
+      return;
+    }
+    if (plan && plan.el) plan.el.classList.add('drop-on');
   }
   function dragStart(e) {
     var d = S.drag;
@@ -2991,6 +3018,7 @@
     document.body.appendChild(g); d.ghost = g; d.src = src;
     src.classList.add('is-dragsrc');
     root.classList.add('is-dragging');
+    if (S.view === 'item' && desk()) root.classList.add('drag-over-item');
     if (navigator.vibrate && d.touch) try { navigator.vibrate(10); } catch (x) { /* none */ }
     dragMove(e);
   }
@@ -3012,28 +3040,14 @@
     if (!d || !d.active) return;
     if (d.ghost) d.ghost.remove();
     if (d.src) d.src.classList.remove('is-dragsrc');
-    root.classList.remove('is-dragging');
+    root.classList.remove('is-dragging', 'drag-over-item');
     clearPaint();
     /* The click the browser fires right after the release opens nothing. */
     S.dragSwallow = true; setTimeout(function () { S.dragSwallow = false; }, 0);
-    var t = drop && d.t;
-    if (!t) return;
-    if (d.from === 'point' || d.from === 'wpoint') {
-      var k = d.id.slice(6);
-      if (t.where === 'done') return pointDone(k);
-      if (t.where === 'today') return pointToToday(k, t.j === Infinity ? null : t.j);
-      if (t.where === 'wait' || t.where === 'later') return pointLane(k, t.where);
-      return;
-    }
-    if (t.where === 'wait') return moveTo(d.id, 'wait');
-    if (t.where === 'later' && d.from !== 'steer') return moveTo(d.id, 'later');
-    if (t.where === 'off' && d.from !== 'rest') return moveTo(d.id, 'off');
-    if (t.where === 'done') return moveTo(d.id, 'done');
-    if (t.where === 'today') {
-      var j = t.j === Infinity ? null : t.j;
-      if (d.from === 'today' && j === d.i) return; /* dropped where it was */
-      return moveTo(d.id, 'today', j);
-    }
+    var plan = drop && dropPlan(d, d.t);
+    if (!plan) return;
+    if (plan.no) return toast(plan.no);
+    plan.go();
   }
   document.addEventListener('pointerdown', function (e) {
     if (e.button !== 0 || S.drag) return;
