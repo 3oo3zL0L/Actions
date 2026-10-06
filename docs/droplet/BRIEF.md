@@ -91,4 +91,5 @@ Thomas chose layout B after using C. It replaces C:
 - **Later** lane = what to raise in **STEERCO** (lilac). Cards dragged or moved here (db `places/<key>`, `place: "later"`) carry his own note (`note`, saved as he types). He can add his own points (db `steerco/<id>`, `{text, at}`). ✕ takes a card off the list (`place: "off"`: out of Today, under Everything else); a point is removed with Undo. **Copy** puts the list with notes on the clipboard; nothing is sent.
 - **Everything else** folds under the STEERCO list (`/` opens it and searches everything).
 - **Week** lane (green): hours reminders recap, Recently done.
+- Ask Claude sits top right on a laptop (as in the mockup), a bar at the bottom on a phone.
 - An open item covers the lanes. Laptop 960–1199 px: Week goes under Waiting and Later. Phone: lanes stack under Today with a sticky jump bar.

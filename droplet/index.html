@@ -50,13 +50,6 @@
       </form>
       <ol class="focus" id="focus" aria-label="Today"></ol>
     </div>
-    <div class="askbar-wrap">
-      <button class="askbar" id="askBar" data-ask aria-haspopup="dialog" aria-disabled="true" aria-keyshortcuts="k">
-        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v5M12 16v5M3 12h5M16 12h5M5.6 5.6l3.2 3.2M15.2 15.2l3.2 3.2M5.6 18.4l3.2-3.2M15.2 8.8l3.2-3.2"/></svg>
-        <span class="lbl"><span aria-hidden="true">› </span>Ask Claude</span>
-        <span class="hint">Starting…</span>
-      </button>
-    </div>
   </section>
 
   <div class="divider" aria-hidden="true"></div>
@@ -124,6 +117,14 @@
     </div>
     <section class="item-col is-idle" id="itemCol" aria-label="Item"></section>
   </section>
+  <div class="askbar-wrap">
+    <button class="askbar" id="askBar" data-ask aria-haspopup="dialog" aria-disabled="true" aria-keyshortcuts="k">
+      <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v5M12 16v5M3 12h5M16 12h5M5.6 5.6l3.2 3.2M15.2 15.2l3.2 3.2M5.6 18.4l3.2-3.2M15.2 8.8l3.2-3.2"/></svg>
+      <span class="lbl"><span aria-hidden="true">› </span>Ask Claude</span>
+      <span class="hint">Starting…</span>
+      <span class="kbd" aria-hidden="true">k</span>
+    </button>
+  </div>
 </main>
 
 <div id="toastHost" role="status" aria-live="polite"></div>
