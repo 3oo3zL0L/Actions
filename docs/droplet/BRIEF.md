@@ -66,3 +66,30 @@ Daaronder staat de rest, ingeklapt en doorzoekbaar. Daarnaast is er één global
 - **Teams versturen.** Volgens Action Desk was daarvoor een IT-permissie nodig. Krijgen we die niet, dan biedt de najaagkaart **Open in Teams** en **Copy**.
 - **Release management.** De Cowork-projecten zijn niet via een connector bereikbaar. Daarom geldt alleen de Confluence-pagina als signaal.
 - **Confluence schrijven.** De Rovo-scope `write:page:confluence` is aanwezig.
+
+## Wijzigingen na gebruik (5 okt 2026)
+- **"Do now" heet "Today".**
+- **Nieuwe actie:** een titel en een korte notitie. Een nieuwe actie komt altijd in Today en blijft daar tot hij Done is of tot "Not today" is gekozen.
+- **Vier toestanden** (ontwerp `design/states.html`, goedgekeurd):
+  - *Jouw zet*: oranje.
+  - *Ligt elders*: staalblauw, telt niet als open.
+  - *Wacht op iemand*: staalblauw label; na 3 werkdagen weer jouw zet.
+  - *Klaar*: verdwijnt uit de lijst.
+- **Recently done** staat standaard dichtgeklapt, toont 7 dagen en heeft Bring back.
+- **Automatisch afvinken:** een taak wordt afgevinkt zodra de vervolgactie is gedaan, in Droplet of daarbuiten. Daarbuiten alleen bij een duidelijke match. Undo kan altijd.
+
+### Layout C · Today-first split (5 okt 2026)
+Gekozen door Thomas: Today groot links; rechts een live overzicht (Waiting on, Elsewhere, Later, Hours reminders, Recently done) in plaats van Standing by. Een geopend item vervangt het overzicht.
+Kaarten verschuiven van Today naar Later (en terug) door te slepen; ook met de knop Later / Today en de toets m. Herschikken binnen Today kan door te slepen. Opgeslagen in db `places/<key>`, met Undo; overleeft reload en nieuwe ranking. Telefoon: Today eerst, daaronder het overzicht; slepen na lang indrukken.
+
+## Layout B · Board with STEERCO (6 okt 2026)
+
+Thomas chose layout B after using C. It replaces C:
+
+- **Today** on the left, as before (large cards, Done, Later, drag to reorder).
+- **Waiting on** lane: waits (R3) with a solid steel line; **Elsewhere** under it with the dashed steel line.
+- **Later** lane = what to raise in **STEERCO** (lilac). Cards dragged or moved here (db `places/<key>`, `place: "later"`) carry his own note (`note`, saved as he types). He can add his own points (db `steerco/<id>`, `{text, at}`). ✕ takes a card off the list (`place: "off"`: out of Today, under Everything else); a point is removed with Undo. **Copy** puts the list with notes on the clipboard; nothing is sent.
+- **Everything else** folds under the STEERCO list (`/` opens it and searches everything).
+- **Week** lane (green): hours reminders recap, Recently done.
+- Ask Claude sits top right on a laptop (as in the mockup), a bar at the bottom on a phone.
+- As in the mockup: one header across the top; Today is a lane with compact cards (command inline, Done on the right). Moving is by drag (whole card; touch: hold) or m; no Later/Today buttons. Drop targets: Today, Waiting on (db place "wait"; own points get lane "wait"), Later, Everything else, Recently done; an open item is a drawer (max 660 px) over the right lanes with a scrim, Today stays in view. Laptop 960–1199 px: Week goes under Waiting and Later. Phone: lanes stack under Today with a sticky jump bar.

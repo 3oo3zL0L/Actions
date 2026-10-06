@@ -3,7 +3,7 @@ const { m, T } = require('./helpers/fixtures');
 
 test.describe('Learn', () => {
   test('Not important moves the item down now, is stored, and goes into the next ranking prompt', async ({ app, page }) => {
-    await app.boot();
+    await app.boot({ dropletConfig: { rankBatch: 50 } });
     await app.openItem('a4-lena');
     await page.click('[data-notimp]');
     await expect(page.locator('#app')).toHaveAttribute('data-view', 'list');

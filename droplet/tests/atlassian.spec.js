@@ -11,7 +11,7 @@ async function allIds(app, page) {
 
 test.describe('Jira (backlog 11)', () => {
   test('a Jira mention notification mail becomes a Jira item keyed by issue key, not noise', async ({ app, page }) => {
-    await app.boot(atlConfig());
+    await app.boot(atlConfig({ dropletConfig: { rankBatch: 50 } }));
     const ids = await allIds(app, page);
     // Two notification mails about OIDC-412: one item. The status robot (n3-jira) stays noise.
     expect(ids.filter((id) => id === 'jira:OIDC-412')).toHaveLength(1);
@@ -70,7 +70,7 @@ test.describe('Jira (backlog 11)', () => {
     await page.fill('#draftText', 'Go with **three** retries.');
     expect(await tool(app, 'addCommentToJiraIssue')).toHaveLength(0);
     await page.dblclick('#sendBtn');
-    await expect(page.locator('#sendBtn')).toHaveText('Commented ✓ 10:00 · locked');
+    await expect(page.locator('#sendBtn')).toHaveText('Commented 10:00 · locked');
     await page.click('#sendBtn', { force: true });
     const adds = await tool(app, 'addCommentToJiraIssue');
     expect(adds).toHaveLength(1);
@@ -81,7 +81,7 @@ test.describe('Jira (backlog 11)', () => {
     const iAdd = reads.findIndex((c) => c.tool === 'addCommentToJiraIssue');
     expect(reads.slice(iAdd + 1).some((c) => c.tool === 'getJiraIssue')).toBe(true);
     await expect(page.locator('#draftText')).toHaveAttribute('readonly', '');
-    await expect(page.locator('[data-id="jira:OIDC-412"] .state-chip')).toHaveText('Commented 10:00 · done');
+    await expect(page.locator('[data-id="jira:OIDC-412"]')).toHaveCount(0); // done: off the list
     expect((await app.db())['done/jira:OIDC-412']).toMatchObject({ how: 'commented' });
     // After a reload the item is gone (done), until a newer notification comes in.
     await page.reload();
@@ -104,7 +104,7 @@ test.describe('Jira (backlog 11)', () => {
     await page.evaluate(() => window.__stub.setFault('addCommentToJiraIssue', null));
     await page.waitForTimeout(800);
     await page.click('#sendBtn');
-    await expect(page.locator('#sendBtn')).toHaveText('Commented ✓ 10:00 · locked');
+    await expect(page.locator('#sendBtn')).toHaveText('Commented 10:00 · locked');
     expect(await n()).toBe(2);
   });
 
@@ -123,7 +123,7 @@ test.describe('Jira (backlog 11)', () => {
     await app.boot(cfg);
     await app.openItem('jira:OIDC-412');
     await expect(page.locator('.toast')).toContainText('You already commented on OIDC-412. Marked done.');
-    await expect(page.locator('[data-id="jira:OIDC-412"] .state-chip')).toHaveText('Done');
+    await expect(page.locator('[data-id="jira:OIDC-412"]')).toHaveCount(0);
     expect((await app.db())['done/jira:OIDC-412']).toMatchObject({ how: 'commented' });
     expect(await tool(app, 'addCommentToJiraIssue')).toHaveLength(0);
   });
@@ -178,7 +178,7 @@ test.describe('Digests stay noise', () => {
 
 test.describe('Confluence (backlog 12)', () => {
   test('a mention page and a watched-page change appear as items, one per page, with their project by title', async ({ app, page }) => {
-    await app.boot(atlConfig());
+    await app.boot(atlConfig({ dropletConfig: { rankBatch: 50 } }));
     const cql = (await tool(app, 'searchConfluenceUsingCql')).map((c) => c.input);
     expect(cql).toEqual([
       { cloudId: CLOUD, cql: 'mention = currentUser() AND lastmodified >= now("-7d")', limit: 25 },

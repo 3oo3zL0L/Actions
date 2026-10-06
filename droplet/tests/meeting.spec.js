@@ -24,7 +24,7 @@ const meetingTag = (page, id) => page.locator(`[data-id="${id}"] [data-meeting],
 
 test.describe('R5: meeting today', () => {
   test('a meeting today with the sender or a chat participant adds a tag and goes into the prompt; cancelled, free, all-day and past meetings do not', async ({ app, page }) => {
-    await app.boot(teamsConfig({ events: EVENTS }));
+    await app.boot(teamsConfig({ events: EVENTS, dropletConfig: { rankBatch: 50 } }));
     const cal = (await app.calls('mcp')).filter((c) => c.tool === 'outlook_calendar_search' && c.input.afterDateTime === 'today'); // R5 only; R6 reads past meetings separately
     expect(cal.map((c) => c.input)).toEqual([{ query: '*', afterDateTime: 'today', beforeDateTime: 'tomorrow', limit: 25 }]);
 
@@ -53,7 +53,7 @@ test.describe('R5: meeting today', () => {
   });
 
   test('a meeting that appears later asks Claude again for that person only', async ({ app, page }) => {
-    await app.boot();
+    await app.boot({ dropletConfig: { rankBatch: 50 } });
     await page.evaluate((e) => window.__stub.setEvents(e), [EVENTS[1]]);
     await page.click('[data-sync]');
     await app.ready();

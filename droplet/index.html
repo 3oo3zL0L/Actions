@@ -1,12 +1,14 @@
 <title>Droplet</title>
 <!-- Publish: declare the Microsoft 365 tools get_me, outlook_email_search, read_resource,
      outlook_create_reply_draft, outlook_create_draft, outlook_send_draft,
-     outlook_create_event, chat_message_search and outlook_calendar_search, and the
+     outlook_create_event, chat_message_search, outlook_calendar_search and search_people, and the
      Atlassian Rovo tools atlassianUserInfo, getAccessibleAtlassianResources,
      searchJiraIssuesUsingJql, getJiraIssue, addCommentToJiraIssue,
      searchConfluenceUsingCql, getConfluencePage and updateConfluencePage.
      The create/send tools, addCommentToJiraIssue and updateConfluencePage write,
-     and only on a click. Droplet never posts in Teams.
+     and only on a click, with ONE exception asked for by Thomas: the weekly hours
+     reminder mails (js/hours.js) go out automatically. search_people finds their
+     addresses. Droplet never posts in Teams.
      The full capabilities JSON is in README.md. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -16,54 +18,115 @@
 <div class="sky" aria-hidden="true"></div>
 
 <main class="app" id="app" data-view="list">
-  <section class="list-col is-active" id="listCol" aria-label="Focus list">
+  <header class="lh">
+    <div class="brand">
+      <span class="mark" aria-hidden="true"><svg viewBox="0 0 24 24" width="17" height="17"><path d="M6.5 5.5h3l8.5 13.5M12.6 11.2 6.5 18.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="square" stroke-linejoin="miter"/></svg></span>
+      <span class="brand-name">Droplet</span>
+    </div>
+    <div class="status" id="status"><span><i></i>M365 link</span><span><i></i>Teams</span><span><i></i>Atlassian</span><span><i></i>Claude</span><span>Sync ··:··</span><span>Nothing sends without you</span></div>
+    <div class="diag" id="diag" hidden></div>
+    <div class="h1row">
+      <h1 class="h1">Today</h1>
+      <p class="date" id="dateLine"></p>
+      <span class="tally" id="tally" role="status" aria-live="polite"></span>
+      <p class="sub" id="sub"></p>
+    </div>
+    <div class="notes" id="notes" role="status" aria-live="polite"></div>
+  </header>
+  <nav class="jump" id="jump" aria-label="Jump to lane"></nav>
+  <section class="list-col is-active" id="listCol" aria-label="Today">
+    <h2 class="lane-h lane-h-today"><b>Today</b><span class="count" id="todayCount"></span><span class="r">Your move</span></h2>
     <div class="list-main">
-      <header class="lh">
-        <div class="brand">
-          <span class="brand-name">Droplet</span>
-        </div>
-        <div class="status" id="status"><span><i></i>M365 link</span><span><i></i>Teams</span><span><i></i>Atlassian</span><span><i></i>Claude</span><span>Sync ··:··</span><span>Nothing sends without you</span></div>
-        <p class="date" id="dateLine"></p>
-        <h1 class="h1">Do now</h1>
-        <p class="sub" id="sub"></p>
-        <div class="notes" id="notes" role="status" aria-live="polite"></div>
-      </header>
       <form class="addline" id="addForm" data-addform autocomplete="off">
-        <label class="add-k" for="addIn"><span aria-hidden="true">+ </span>Add action<span class="kbd" aria-hidden="true">a</span></label>
+        <label class="add-k" for="addIn"><span aria-hidden="true">+ </span>Add action to Today<span class="kbd" aria-hidden="true">a</span></label>
         <div class="add-row">
-          <input id="addIn" type="text" maxlength="300" enterkeyhint="done" aria-keyshortcuts="a" placeholder="What needs doing? e.g. Plan DoD follow-up meeting, Friday">
+          <input id="addIn" type="text" maxlength="300" required enterkeyhint="done" aria-keyshortcuts="a" aria-label="Title" placeholder="What needs doing? e.g. Plan DoD follow-up meeting, Friday">
           <button class="add-btn" type="submit">Add</button>
         </div>
-      </form>
-      <ol class="focus" id="focus"></ol>
-      <section class="rest" aria-label="Everything else">
-        <button class="rest-toggle" id="restToggle" aria-expanded="false" aria-controls="restPanel" aria-keyshortcuts="/">
-          <span>Everything else<span class="count" id="restCount"></span></span>
-          <span class="kbd" aria-hidden="true">/</span>
-          <svg class="ico chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
-        </button>
-        <div id="restPanel" hidden>
-          <div class="search">
-            <label class="sr" for="q">Search everything else</label>
-            <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg>
-            <input id="q" type="search" placeholder="Search people, projects, words" autocomplete="off">
-          </div>
-          <ul class="rest-list" id="restList"></ul>
+        <div class="add-more" id="addMore" hidden>
+          <label class="add-nk" for="addNotes">Notes <span>optional</span></label>
+          <textarea id="addNotes" rows="2" maxlength="4000" placeholder="Anything to remember, only for you"></textarea>
+          <p class="add-hint">Enter adds it · Shift+Enter or Tab for notes · Esc cancels</p>
         </div>
-      </section>
-    </div>
-    <div class="askbar-wrap">
-      <button class="askbar" id="askBar" data-ask aria-haspopup="dialog" aria-disabled="true" aria-keyshortcuts="k">
-        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v5M12 16v5M3 12h5M16 12h5M5.6 5.6l3.2 3.2M15.2 15.2l3.2 3.2M5.6 18.4l3.2-3.2M15.2 8.8l3.2-3.2"/></svg>
-        <span class="lbl"><span aria-hidden="true">› </span>Ask Claude</span>
-        <span class="hint">Starting…</span>
-      </button>
+      </form>
+      <ol class="focus" id="focus" aria-label="Today"></ol>
     </div>
   </section>
 
   <div class="divider" aria-hidden="true"></div>
 
-  <section class="item-col is-idle" id="itemCol" aria-label="Item"></section>
+  <section class="right-col" id="rightCol" aria-label="Lanes and item">
+    <div class="over lanes" id="over" aria-label="Lanes">
+      <section class="lane lane-wait" id="laneWait" aria-label="Waiting on and elsewhere" data-drop="wait">
+        <h2 class="lane-h"><b>Waiting on</b><span class="count" id="waitCount"></span><span class="r" id="waitR"></span></h2>
+        <div class="lane-b">
+          <ul class="rest-list is-wait" id="waitList"></ul>
+          <div id="elseBox" hidden>
+            <h3 class="lane-sub"><b>Elsewhere</b><span class="count" id="elseCount"></span></h3>
+            <ul class="rest-list is-else" id="elseList"></ul>
+          </div>
+        </div>
+      </section>
+      <section class="lane lane-steer" id="laterBox" aria-label="Later: for STEERCO" data-drop="later">
+        <h2 class="lane-h"><b>Later</b><span class="count" id="steerCount"></span><span class="r">For STEERCO</span>
+          <button class="lane-btn" id="steerCopy" type="button" title="Copy the list, to paste in your STEERCO notes">
+            <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12"/><path d="M16 8V4H4v12h4"/></svg><span>Copy</span></button></h2>
+        <div class="lane-b">
+          <p class="drop-hint" aria-hidden="true">Drop here for STEERCO</p>
+          <form class="steer-add" id="steerForm" data-steerform autocomplete="off">
+            <label class="sr" for="steerIn">Add a point for STEERCO</label>
+            <input id="steerIn" type="text" maxlength="300" enterkeyhint="done" placeholder="Add a point for STEERCO">
+            <button class="steer-btn" type="submit">Add</button>
+          </form>
+          <ol class="steer-list" id="steerList"></ol>
+          <div class="ov-rest rest" id="restBox" data-drop="off">
+            <button class="rest-toggle" id="restToggle" aria-expanded="false" aria-controls="restPanel" aria-keyshortcuts="/">
+              <span>Everything else<span class="count" id="restCount"></span></span>
+              <span class="kbd" aria-hidden="true">/</span>
+              <svg class="ico chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+            <div id="restPanel" hidden>
+              <div class="search">
+                <label class="sr" for="q">Search everything</label>
+                <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg>
+                <input id="q" type="search" placeholder="Search people, projects, words" autocomplete="off">
+              </div>
+              <ul class="rest-list" id="restList"></ul>
+            </div>
+          </div>
+        </div>
+      </section>
+      <section class="lane lane-week" id="laneWeek" aria-label="Week" data-drop="done">
+        <h2 class="lane-h"><b>Week</b><span class="r" id="weekR"></span></h2>
+        <div class="lane-b">
+          <section class="ov-hours" id="hoursBox" aria-label="Hours reminders" hidden></section>
+          <section class="ov-done rest" aria-label="Recently done">
+            <button class="rest-toggle is-done-t" id="doneToggle" aria-expanded="false" aria-controls="donePanel">
+              <svg class="ico ok-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>
+              <span>Recently done<span class="count" id="doneCount"></span></span>
+              <span class="hint">7 days</span>
+              <svg class="ico chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+            <div id="donePanel" hidden>
+              <ul class="done-list" id="doneList"></ul>
+              <p class="done-foot">Bring back puts it where it was. Nothing is unsent.</p>
+            </div>
+          </section>
+          <p class="ov-keys">Drag cards between Today, Later, Everything else and Recently done, or press <span class="kbd">m</span> on one. <span class="kbd">Enter</span> opens · <span class="kbd">Esc</span> closes.</p>
+        </div>
+      </section>
+    </div>
+    <button class="b-scrim" type="button" data-scrim tabindex="-1" aria-hidden="true"></button>
+    <section class="item-col is-idle" id="itemCol" aria-label="Item"></section>
+  </section>
+  <div class="askbar-wrap">
+    <button class="askbar" id="askBar" data-ask aria-haspopup="dialog" aria-disabled="true" aria-keyshortcuts="k">
+      <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v5M12 16v5M3 12h5M16 12h5M5.6 5.6l3.2 3.2M15.2 15.2l3.2 3.2M5.6 18.4l3.2-3.2M15.2 8.8l3.2-3.2"/></svg>
+      <span class="lbl"><span aria-hidden="true">› </span>Ask Claude</span>
+      <span class="hint">Starting…</span>
+      <span class="kbd" aria-hidden="true">k</span>
+    </button>
+  </div>
 </main>
 
 <div id="toastHost" role="status" aria-live="polite"></div>
@@ -77,10 +140,12 @@
 <script src="js/meet.js"></script>
 <script src="js/mine.js"></script>
 <script src="js/waits.js"></script>
+<script src="js/fulfil.js"></script>
 <script src="js/transcript.js"></script>
 <script src="js/rank.js"></script>
 <script src="js/atlassian.js"></script>
 <script src="js/send.js"></script>
+<script src="js/hours.js"></script>
 <script src="js/nextstep.js"></script>
 <script src="js/chat.js"></script>
 <script src="js/ask.js"></script>

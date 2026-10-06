@@ -12,7 +12,7 @@ async function add(page, text, how = 'enter') {
 
 test.describe('Your own actions', () => {
   test('Enter saves first and shows it at once; Claude then sets project, why and due, and places it', async ({ app, page }) => {
-    await app.boot({ actionPlan: { 'SIEM runbook': { group: 'later', rank: 7, project: 'SIEM Integration', why: 'SIEM go-live needs the runbook first.', due: '2026-10-08' } } });
+    await app.boot({ dropletConfig: { rankBatch: 50 }, actionPlan: { 'SIEM runbook': { group: 'later', rank: 7, project: 'SIEM Integration', why: 'SIEM go-live needs the runbook first.', due: '2026-10-08' } } });
     await page.evaluate(() => window.__stub.setRankDelay(600));
     await add(page, 'Review the SIEM runbook before go-live');
     // Saved and shown before Claude answers.
@@ -26,15 +26,20 @@ test.describe('Your own actions', () => {
     expect(await page.evaluate(() => window.Droplet.state.ranking)).toBe(1);
 
     await app.ready();
-    await expect(page.locator('.toast')).toHaveText('Added under Everything else (due thu 08 oct).');
-    await expect(page.locator('#focus [data-src="mine"]')).toHaveCount(0);
-    await app.openRest();
+    // Claude ranked it "later", but a new action is pinned to Today (and enriched).
+    await expect(page.locator('.toast')).toHaveText('Added to Today at #2.');
+    await expect(page.locator('#focus [data-src="mine"]')).toHaveCount(1);
     const id = await idOf(page, 'SIEM runbook');
-    await expect(page.locator(`[data-open="${id}"] .rr-sub`)).toHaveText('My action · SIEM Integration · You · due thu 08 oct');
-    expect((await app.db())['actions/' + id.slice(5)]).toMatchObject({ due: '2026-10-08', dueBy: 'claude' });
+    expect((await app.db())['actions/' + id.slice(5)]).toMatchObject({ due: '2026-10-08', dueBy: 'claude', pinnedToday: true });
     await app.openItem(id);
     await expect(page.locator('.iv-why')).toContainText('SIEM go-live needs the runbook first.');
     await expect(page.locator('#actDue')).toHaveValue('2026-10-08');
+    // Not today clears the pin; Claude's rank places it.
+    await page.click('[data-nottoday]');
+    await expect(page.locator('#focus [data-src="mine"]')).toHaveCount(0);
+    await app.openRest();
+    await expect(page.locator(`[data-open="${id}"] .rr-sub`)).toHaveText('My action · SIEM Integration · You · due thu 08 oct');
+    expect((await app.db())['actions/' + id.slice(5)].pinnedToday).toBe(false);
 
     const samples = await app.calls('sample');
     expect(samples).toHaveLength(2);
@@ -79,7 +84,7 @@ test.describe('Your own actions', () => {
     });
   });
 
-  test('due today or earlier goes to Do now, even when Claude says later', async ({ app, page }) => {
+  test('due today or earlier goes to Today, even when Claude says later', async ({ app, page }) => {
     await app.boot({ actionPlan: { 'SIEM test plan': { group: 'later', rank: 30, project: 'SIEM Integration', why: 'Plan for the pilot.', due: '2026-10-02' } } });
     await add(page, 'Send the SIEM test plan by end of day');
     await app.ready();
@@ -92,9 +97,11 @@ test.describe('Your own actions', () => {
     await app.boot({ actionPlan: { 'tidy': { group: 'later', rank: 40, project: null, why: 'Can wait.' } } });
     await add(page, 'tidy the shared drive');
     await app.ready();
+    const id = await idOf(page, 'tidy the shared drive');
+    await app.openItem(id);
+    await page.click('[data-nottoday]');
     await expect(page.locator('#focus [data-src="mine"]')).toHaveCount(0);
     await app.openRest();
-    const id = await idOf(page, 'tidy the shared drive');
     await page.click(`[data-open="${id}"]`);
     await page.click('[data-star]');
     await expect(page.locator('[data-star]')).toHaveAttribute('aria-pressed', 'true');
@@ -139,8 +146,8 @@ test.describe('Your own actions', () => {
     await expect(page.locator('#sendBtn')).toHaveText('Done');
     await expect(page.locator('#draftText')).toHaveCount(0); // no Send card
     await page.click('#sendBtn');
-    await expect(page.locator('#app')).toHaveAttribute('data-view', 'list');
     await expect(page.locator(`[data-open="${id}"]`)).toHaveCount(0);
+    await expect(page.locator('#app')).toHaveAttribute('data-view', 'item'); // laptop: the next item
     expect((await app.db())['actions/' + id.slice(5)]).toMatchObject({ done: true, doneAt: '2026-10-02T08:00:00.000Z' });
     await page.click('[data-undo]');
     await expect(page.locator(`#focus [data-open="${id}"]`)).toHaveCount(1);
@@ -178,15 +185,16 @@ test.describe('Your own actions', () => {
   test('without Claude: no project, due date from the local parser, placed by due date', async ({ app, page }) => {
     await app.boot({ noSample: true });
     await add(page, 'Draft the SIEM test plan Thursday');
-    await expect(page.locator('.toast')).toHaveText('Added under Everything else (due thu 08 oct).');
+    await expect(page.locator('.toast')).toHaveText('Added to Today at #2.');
     await add(page, 'Check the vendor addendum dinsdag');
     await add(page, 'Bel de leverancier vrijdag');
     await expect(page.locator('#focus .fi', { hasText: 'Bel de leverancier vrijdag' }).locator('[data-due]')).toHaveText('Due today');
-    await app.openRest();
-    const rest = await restIds(page);
-    const a = await idOf(page, 'vendor addendum'), b = await idOf(page, 'SIEM test plan');
-    expect(rest.indexOf(a)).toBeLessThan(rest.indexOf(b));
-    await expect(page.locator(`[data-open="${b}"] .rr-sub`)).toHaveText('My action · Own · You · due thu 08 oct');
+    // All three are pinned to Today, in due order.
+    const top = await app.focusIds();
+    const a = await idOf(page, 'vendor addendum'), b = await idOf(page, 'SIEM test plan'), c = await idOf(page, 'leverancier');
+    expect(top.indexOf(c)).toBeLessThan(top.indexOf(a));
+    expect(top.indexOf(a)).toBeLessThan(top.indexOf(b));
+    await expect(page.locator(`#focus [data-id="${b}"] [data-due]`)).toHaveText('Due Thu 08 Oct');
     await app.openItem(b);
     await expect(page.locator('.iv-why p')).toHaveText('Claude: Your own action. Due Thu 08 Oct.');
     await expect(page.locator('[data-due-by]')).toHaveText('read from your text');
@@ -200,8 +208,7 @@ test.describe('Your own actions', () => {
     await add(page, evil);
     await expect(page.locator('#focus [data-src="mine"]').locator('xpath=ancestor::li').locator('.fi-title')).toHaveText(evil);
     await app.ready();
-    await app.openRest();
-    await expect(page.locator('.rr-title', { hasText: 'bold' })).toHaveText(evil);
+    await expect(page.locator('#focus .fi-title', { hasText: 'bold' })).toHaveText(evil);
     expect(await page.locator('#focus img, #focus b, #restList img, #restList b').count()).toBe(0);
     const id = await idOf(page, '<b>bold</b>');
     await app.openItem(id);
@@ -228,6 +235,8 @@ test.describe('Your own actions', () => {
     await app.boot();
     await add(page, 'Renew the parking permit next week');
     await app.ready();
+    await app.openItem(await idOf(page, 'parking'));
+    await page.click('[data-nottoday]');
     await app.openRest();
     await page.fill('#q', 'parking');
     expect((await restIds(page))).toHaveLength(1);

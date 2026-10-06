@@ -5,15 +5,51 @@
 function installDropletStub(cfg) {
   "use strict";
   var calls = window.__calls = [];
+  /* Like the real runtime (db.d.ts, mcp.d.ts): what it hands out is frozen, deep. */
+  function deepFreeze(v) {
+    if (v && typeof v === "object" && !Object.isFrozen(v)) { Object.freeze(v); Object.keys(v).forEach(function (k) { deepFreeze(v[k]); }); }
+    return v;
+  }
   var SERVER = "Microsoft 365";
   var faults = cfg.faults || {};
+  /* Short app timeouts for tests (window.__dropletConfig, read by runtime.js). */
+  if (cfg.dropletConfig) window.__dropletConfig = cfg.dropletConfig;
+  /* cfg.hang: {tools: true | [tool names], servers: [server names], sample: bool, dbGet: bool | [collections], use: [capability names]}.
+     A hanging call never settles (an unanswered consent prompt, a stalled connector). */
+  var hang = cfg.hang || {};
+  /* A test can make the next load hang (after a reload) through sessionStorage. */
+  try { var hs = sessionStorage.getItem("__droplet_stub_hang"); if (hs) hang = JSON.parse(hs); } catch (e) { /* ignore */ }
+  function never(signal) {
+    return new Promise(function (res, rej) {
+      if (signal && typeof signal.addEventListener === "function") signal.addEventListener("abort", function () { rej({ code: "cancelled", message: "cancelled" }); });
+    });
+  }
+  function hangs(server, tool) {
+    return hang.tools === true || (Array.isArray(hang.tools) && hang.tools.indexOf(tool) >= 0) || (Array.isArray(hang.servers) && hang.servers.indexOf(server) >= 0);
+  }
+  /* cfg.delays (smoke): {servers: {name: [minMs, maxMs]}, sample: [minMs, maxMs], consentMs}: a realistic answer time,
+     and the first call on each server waits consentMs longer (the consent prompt). */
+  var delays = cfg.delays || null, consentUntil = {};
+  function delayFor(server) {
+    if (!delays) return 0;
+    var r = server === "sample" ? delays.sample : (delays.servers || {})[server];
+    var d = r ? r[0] + Math.random() * (r[1] - r[0]) : 0;
+    /* Every call on a server waits for its consent, which the first call asks. */
+    var t = performance.now();
+    if (consentUntil[server] == null) consentUntil[server] = t + (delays.consentMs || 0);
+    return d + Math.max(0, consentUntil[server] - t);
+  }
+  function delayed(server, p) {
+    var d = delayFor(server);
+    return d ? new Promise(function (r) { setTimeout(r, d); }).then(function () { return p(); }) : p();
+  }
   function err(code, message, resultText) {
     var e = { code: code, message: message || code, retryable: code === "server_unavailable" || undefined };
     /* Like the runtime: a tool failure rejects with tool_error and the tool's own envelope on .result. */
     if (code === "tool_error" && resultText != null) e.result = result(resultText);
     return e;
   }
-  function later(v) { return new Promise(function (res) { setTimeout(function () { res(v); }, cfg.latency || 0); }); }
+  function later(v) { return new Promise(function (res) { setTimeout(function () { res(deepFreeze(v)); }, cfg.latency || 0); }); }
   function fault(tool) {
     var f = faults[tool];
     if (!f) return null;
@@ -74,6 +110,8 @@ function installDropletStub(cfg) {
     setDraftAnswer: function (d) { cfg.draftAnswer = d; },
     setActionPlan: function (p) { cfg.actionPlan = p; },
     setRankDelay: function (ms) { cfg.rankDelay = ms; },
+    setDbFault: function (f) { cfg.dbFault = f || null; },
+    setFulfilPlan: function (p) { cfg.fulfilPlan = p; },
     drafts: drafts, sent: sent
   };
   function findMail(id) { return mailList.concat(sentList).filter(function (m) { return m.id === id; })[0]; }
@@ -120,11 +158,23 @@ function installDropletStub(cfg) {
   var tools = {
     get_me: function () { return result(JSON.stringify(cfg.me || { displayName: "Sam de Vries", mail: "sam.devries@planonsoftware.com", id: "u1" })); },
     outlook_email_search: function (input) {
+      /* A search by sender (the hours module's address fallback): cfg.senderSearch {"<sender>": [mail objects]}. */
+      if (input.sender && !input.folderName && !input.query) {
+        var bySender = (cfg.senderSearch || {})[input.sender] || [];
+        return result(bySender.map(function (o) { return JSON.stringify(o); }).join("") || "[]");
+      }
       var off = input.offset || 0, lim = input.limit || 10;
       var list = input.folderName === "Sent Items" ? sentList : mailList;
       var page = list.slice(off, off + lim).map(function (m, i) {
         var o = Object.assign({ uri: "mail:///messages/" + encodeURIComponent(m.id) }, m); o.offset = off + i; return o;
       });
+      /* cfg.search (inbox only): "noReadFlag" leaves isRead out, "wrapper" answers {value: [...], moreResults, nextOffset},
+         "prose" answers plain text Droplet can't read, "noneText" answers "No emails found." */
+      var inbox = input.folderName !== "Sent Items", sm = inbox && cfg.search;
+      if (sm === "noReadFlag") page.forEach(function (o) { delete o.isRead; });
+      if (sm === "prose") return result("Found " + page.length + " emails.\n" + page.map(function (o) { return "- " + o.subject + " from " + o.sender; }).join("\n"));
+      if (sm === "noneText" && !page.length) return result("No emails found.");
+      if (sm === "wrapper") return result(JSON.stringify({ value: page, moreResults: off + lim < list.length, nextOffset: off + lim }));
       var parts = page.map(function (o) { return JSON.stringify(o); });
       if (off + lim < list.length) parts.push(JSON.stringify({ moreResults: true, nextOffset: off + lim, totalResultCount: list.length }));
       /* Like the real connector: concatenated objects, split over two content blocks. */
@@ -232,6 +282,14 @@ function installDropletStub(cfg) {
       created.push(input);
       return result("Event created.\nid: AAMkADinventedEvent" + created.length + "\nwebLink: https://outlook.office365.com/calendar/item/new" + created.length);
     },
+    /* People search (hours reminders): cfg.people {"<query>": [person objects] | "FAIL"}; like the
+       real tool, one JSON object per person, concatenated. */
+    search_people: function (input) {
+      var q = input.query;
+      var list = (cfg.people || {})[q];
+      if (list === "FAIL") throw err("tool_error", "Search failed");
+      return result((list || []).map(function (o) { return JSON.stringify(o); }).join("") || "[]");
+    },
     outlook_send_draft: function (input) {
       if (!drafts[input.messageId]) throw err("tool_error", "Draft not found");
       sent.push(input.messageId);
@@ -245,6 +303,7 @@ function installDropletStub(cfg) {
   var issues = atl.issues || {}, pages = atl.pages || {}, jqlKeys = (atl.jql || []).slice();
   var atlLog = { comments: [], updates: [] };
   window.__stub.atl = atlLog;
+  window.__stub.setHang = function (h) { hang = h || {}; };
   window.__stub.setPage = function (id, html) { pages[id].html = html; pages[id].version = (pages[id].version || 1) + 1; };
   window.__stub.addIssueComment = function (key, c) { issues[key].comments = (issues[key].comments || []).concat([c]); };
   function needCloud(input) { if (input.cloudId !== CLOUD) throw err("tool_error", "Unknown cloudId"); }
@@ -312,6 +371,11 @@ function installDropletStub(cfg) {
   var mcp = {
     callTool: function (server, tool, input, options) {
       calls.push({ kind: "mcp", server: server, tool: tool, input: JSON.parse(JSON.stringify(input || {})), t: performance.now() });
+      if (hangs(server, tool)) return never(options && options.signal);
+      if (delays) return delayed(server, function () { return mcp.callNow(server, tool, input, options); });
+      return mcp.callNow(server, tool, input, options);
+    },
+    callNow: function (server, tool, input) {
       if (server === ATL) {
         if (cfg.noAtlassian || !atlTools[tool]) return Promise.reject(err(cfg.noAtlassian || "not_in_manifest"));
         var fa = fault(tool);
@@ -325,9 +389,11 @@ function installDropletStub(cfg) {
     },
     listTools: function () { return Promise.resolve({ servers: [] }); }
   };
-  if (cfg.eventSchema) mcp.describeTool = function (server, tool) {
+  if (cfg.eventSchema || cfg.peopleSchema) mcp.describeTool = function (server, tool) {
     calls.push({ kind: "describe", tool: tool });
-    return tool === "outlook_create_event" ? Promise.resolve({ name: tool, inputSchema: cfg.eventSchema }) : Promise.reject(err("not_in_manifest"));
+    if (tool === "outlook_create_event" && cfg.eventSchema) return Promise.resolve({ name: tool, inputSchema: cfg.eventSchema });
+    if (tool === "search_people" && cfg.peopleSchema) return Promise.resolve(deepFreeze({ name: tool, inputSchema: JSON.parse(JSON.stringify(cfg.peopleSchema)) }));
+    return Promise.reject(err("not_in_manifest"));
   };
 
   /* ---------- sample ---------- */
@@ -362,7 +428,12 @@ function installDropletStub(cfg) {
     return { draft: "Hi " + (from ? from[1] : "there") + ",\n\nThanks, noted. I will come back to you on this.\n\nKR\nSam" };
   }
   function answer(input, options, asJson) {
-    calls.push({ kind: "sample", json: asJson, input: JSON.parse(JSON.stringify(input)), options: options ? JSON.parse(JSON.stringify(options)) : null });
+    calls.push({ kind: "sample", json: asJson, input: JSON.parse(JSON.stringify(input)), options: options ? JSON.parse(JSON.stringify(Object.assign({}, options, { signal: undefined }))) : null });
+    if (hang.sample) return never(options && options.signal);
+    if (delays) return delayed("sample", function () { return answerNow(input, options, asJson); });
+    return answerNow(input, options, asJson);
+  }
+  function answerNow(input, options, asJson) {
     var prompt = typeof input === "string" ? input : input.map(function (t) { return t.content; }).join("\n");
     var isDraft = /You draft one (email|Teams chat) reply|You draft one Teams chat chase for|You draft one Jira comment/.test(prompt) && !/<<<ACTION>>>/.test(prompt);
     var extra = isDraft ? cfg.draftDelay || 0 : /You rank unread email/.test(prompt) ? cfg.rankDelay || 0 : 0;
@@ -372,9 +443,11 @@ function installDropletStub(cfg) {
     });
     return later(null).then(function () { return new Promise(function (r) { setTimeout(r, extra); }); }).then(function () {
       if (cfg.sampleFault) throw { code: cfg.sampleFault, message: cfg.sampleFault };
+      /* cfg.rankFault {code, message, times}: the next ranking calls fail (e.g. "sampling is unavailable right now"). */
+      if (/You rank unread email/.test(prompt) && cfg.rankFault && cfg.rankFault.times > 0) { cfg.rankFault.times--; throw { code: cfg.rankFault.code, message: cfg.rankFault.message || cfg.rankFault.code }; }
       var a = /You rank unread email/.test(prompt) ? rankAnswer(prompt) : isDraft ? draftAnswer(prompt) : extraAnswer(prompt) ||
         (chatQueue.length > 1 ? chatQueue.shift() : chatQueue[0] || { reply: "OK.", draft: null });
-      return asJson ? a : { text: JSON.stringify(a), truncated: false, modelTierApplied: "default" };
+      return deepFreeze(asJson ? a : { text: JSON.stringify(a), truncated: false, modelTierApplied: "default" });
     });
   }
   /* Increment 3 prompts: asks in sent messages, commitments in a transcript,
@@ -385,6 +458,22 @@ function installDropletStub(cfg) {
       var re = /<<<SENT \d+ id="([^"]+)">>>/g, mm, msgs = [];
       while ((mm = re.exec(prompt))) msgs.push({ id: mm[1], asks: JSON.parse(JSON.stringify((cfg.asksPlan || {})[mm[1]] || [])) });
       return { messages: msgs };
+    }
+    /* Done whichever way: cfg.fulfilPlan {itemKey: {action: "<piece of the action text>", clear}} or
+       cfg.fulfilAll (a Claude that obeys injected text: every item finishes every action). */
+    if (/^You check whether messages and meetings/.test(prompt)) {
+      var acts = [], ra = /<<<ACTION \d+ id="([^"]+)">>>\nText: ([^\n]*)/g, ma;
+      while ((ma = ra.exec(prompt))) acts.push({ id: ma[1], text: ma[2] });
+      var ri = /<<<ITEM \d+ id="([^"]+)">>>/g, mi, items = [];
+      while ((mi = ri.exec(prompt))) {
+        var key = mi[1];
+        if (cfg.fulfilRaw && cfg.fulfilRaw[key]) { cfg.fulfilRaw[key].forEach(function (x) { items.push(Object.assign({ id: key }, x)); }); continue; }
+        if (cfg.fulfilAll) { acts.forEach(function (a) { items.push({ id: key, action: a.id, clear: true }); }); continue; }
+        var p = (cfg.fulfilPlan || {})[key];
+        var hit = p && acts.filter(function (a) { return a.text.indexOf(p.action) >= 0; })[0];
+        items.push({ id: key, action: hit ? hit.id : null, clear: p ? p.clear !== false : false });
+      }
+      return { items: items };
     }
     if (/^You read one meeting transcript/.test(prompt)) {
       var subj = (/\nMeeting: "([^"]*)"/.exec(prompt) || [])[1] || "";
@@ -442,7 +531,7 @@ function installDropletStub(cfg) {
   function save() { try { sessionStorage.setItem(KEY, JSON.stringify(data)); } catch (e) { /* ignore */ } }
   window.__db = function () { return JSON.parse(JSON.stringify(data)); };
   function snap(id, v) {
-    return { id: id, exists: v !== undefined, data: function () { return v === undefined ? undefined : JSON.parse(JSON.stringify(v)); }, metadata: { fromCache: false, hasPendingWrites: false } };
+    return deepFreeze({ id: id, exists: v !== undefined, data: function () { return v === undefined ? undefined : deepFreeze(JSON.parse(JSON.stringify(v))); }, metadata: { fromCache: false, hasPendingWrites: false } });
   }
   function docRef(path) {
     var id = path.split("/").pop();
@@ -459,17 +548,64 @@ function installDropletStub(cfg) {
       path: path,
       doc: function (id) { return docRef(path + "/" + (id || ("auto" + Math.random().toString(36).slice(2)))); },
       get: function () {
+        calls.push({ kind: "db", op: "list", path: path });
+        if (hang.dbGet === true || (Array.isArray(hang.dbGet) && hang.dbGet.indexOf(path) >= 0)) return never();
+        var self = this;
+        if (hang.dbDelayMs) return new Promise(function (r) { setTimeout(r, hang.dbDelayMs); }).then(function () { return self.getNow(); });
+        return this.getNow();
+      },
+      getNow: function () {
         var docs = Object.keys(data).filter(function (k) { return k.indexOf(path + "/") === 0 && k.split("/").length === path.split("/").length + 1; })
           .sort().map(function (k) { return snap(k.split("/").pop(), data[k]); });
+        /* cfg.dbShape: how the snapshot comes back. "docs" (the contract, default), "array" (the docs array itself),
+           "forEach" (an object with forEach only), "dataObject" (data a plain object), "paged" (one doc per page, next()),
+           "unknown" (a form Droplet doesn't know). */
+        var shape = cfg.dbShape;
+        if (shape === "dataObject") docs = docs.map(function (d) { return { id: d.id, exists: true, data: d.data() }; });
+        if (shape === "array") return Promise.resolve(docs);
+        if (shape === "forEach") return Promise.resolve({ size: docs.length, forEach: function (f) { docs.forEach(f); } });
+        if (shape === "unknown") return Promise.resolve({ items: docs.map(function (d) { return { key: d.id, value: d.data() }; }), count: docs.length });
+        if (shape === "paged") {
+          var pageAt = function (i) {
+            return { docs: docs.slice(i, i + 1), size: Math.min(1, docs.length - i), empty: i >= docs.length, hasMore: i + 1 < docs.length,
+              next: function () { calls.push({ kind: "db", op: "next", path: path }); return Promise.resolve(pageAt(i + 1)); } };
+          };
+          return Promise.resolve(pageAt(0));
+        }
         return Promise.resolve({ docs: docs, size: docs.length, empty: !docs.length, docChanges: function () { return []; }, metadata: {} });
+      },
+      limit: function (n) {
+        calls.push({ kind: "db", op: "limit", path: path, n: n });
+        var self = this;
+        return { get: function () { return self.get(); } };
       }
     };
   }
   var db = { doc: docRef, collection: colRef };
 
-  var caps = { mcp: cfg.noMcp ? null : mcp, sample: cfg.noSample ? null : sample, db: cfg.noDb ? null : db };
+  /* ---------- permissions (built in): cfg.permissions is the state() map; absent → no capability ---------- */
+  var permMap = cfg.permissions ? JSON.parse(JSON.stringify(cfg.permissions)) : null;
+  var permissions = permMap && {
+    state: function (name) {
+      calls.push({ kind: "perm", op: "state", name: name || null });
+      if (name) return Promise.resolve(permMap[name] || "unavailable");
+      return Promise.resolve(JSON.parse(JSON.stringify(permMap)));
+    },
+    request: function (names) {
+      calls.push({ kind: "perm", op: "request", names: names ? names.slice() : null });
+      var after = cfg.permAfterRequest || {};
+      (names || Object.keys(permMap)).forEach(function (n) { if (permMap[n] === "prompt") permMap[n] = after[n] || "granted"; });
+      Object.keys(permMap).forEach(function (k) { if (k.indexOf("mcp:") === 0 && permMap[k] === "prompt" && (!names || names.indexOf("mcp") >= 0)) permMap[k] = after[k] || "granted"; });
+      return Promise.resolve(JSON.parse(JSON.stringify(permMap)));
+    }
+  };
+
+  var caps = { mcp: cfg.noMcp ? null : mcp, sample: cfg.noSample ? null : sample, db: cfg.noDb ? null : db, permissions: permissions || null };
   window.claude = Object.freeze({
-    use: function (name) { return new Promise(function (res) { setTimeout(function () { res(caps[name] || null); }, 0); }); }
+    use: function (name) {
+      if (Array.isArray(hang.use) && hang.use.indexOf(name) >= 0) return never();
+      return new Promise(function (res) { setTimeout(function () { res(caps[name] || null); }, 0); });
+    }
   });
 }
 module.exports = { installDropletStub: installDropletStub };

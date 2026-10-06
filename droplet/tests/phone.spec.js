@@ -35,7 +35,7 @@ test.describe('Phone (390 px)', () => {
     const box2 = await page.locator('#sendBtn').boundingBox();
     expect(box2.y + box2.height).toBeLessThanOrEqual(844);
     await page.tap('#sendBtn');
-    await expect(page.locator('#sendBtn')).toHaveText(/Sent ✓ 10:00/);
+    await expect(page.locator('#sendBtn')).toHaveText(/Sent 10:00/);
     expect(await noSideScroll(page)).toBe(true);
   });
 });

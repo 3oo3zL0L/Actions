@@ -10,7 +10,7 @@ test.describe('Send', () => {
     await page.click('[data-act="a3-bram"]');
     await expect(page.locator('#mailBody')).toContainText('Today please.');
     await page.dblclick('#sendBtn');
-    await expect(page.locator('#sendBtn')).toHaveText('Sent ✓ 10:00 · locked');
+    await expect(page.locator('#sendBtn')).toHaveText('Sent 10:00 · locked');
     await page.click('#sendBtn', { force: true });
     await page.click('#sendBtn', { clickCount: 3, force: true });
 
@@ -23,7 +23,7 @@ test.describe('Send', () => {
 
     await expect(page.locator('#draftText')).toHaveAttribute('readonly', '');
     await expect(page.locator('.sent-note')).toHaveText('Marked done · sent once');
-    await expect(page.locator('[data-id="a3-bram"] .state-chip')).toHaveText('Sent 10:00 · done');
+    await expect(page.locator('[data-id="a3-bram"]')).toHaveCount(0); // done: off the list
     expect((await app.db())['done/a3-bram']).toMatchObject({ how: 'sent' });
   });
 
@@ -32,7 +32,7 @@ test.describe('Send', () => {
     await page.click('[data-act="a2-anouk"]');
     await page.fill('#draftText', 'Use <b>8h</b> & "24h" for kiosks.\nThanks\n\nSam');
     await page.click('#sendBtn');
-    await expect(page.locator('#sendBtn')).toHaveText(/Sent ✓/);
+    await expect(page.locator('#sendBtn')).toHaveText(/Sent/);
     const create = (await app.calls('mcp')).find((c) => c.tool === 'outlook_create_reply_draft');
     expect(create.input.body).toBe('<p>Use &lt;b&gt;8h&lt;/b&gt; &amp; &quot;24h&quot; for kiosks.<br>Thanks</p><p>Sam</p>');
   });
@@ -41,18 +41,20 @@ test.describe('Send', () => {
     await app.boot();
     await page.click('[data-act="a3-bram"]');
     await page.click('#sendBtn');
-    await expect(page.locator('.toast')).toContainText('Sent. Marked done.');
+    await expect(page.locator('.toast')).toContainText('Sent. Marked done: Session store: read replica OK?');
     await page.click('[data-undo]');
     expect((await app.db())['done/a3-bram']).toBeUndefined();
-    await expect(page.locator('#sendBtn')).toHaveText('Sent ✓ 10:00 · locked');
+    await expect(page.locator('#sendBtn')).toHaveText('Sent 10:00 · locked');
     await expect(page.locator('.sent-note')).toHaveText('Sent once');
-    await expect(page.locator('[data-id="a3-bram"] .btn-act')).toBeVisible();
+    // Back in the list as "elsewhere": Sent · locked, with a quiet Mark done.
+    await expect(page.locator('[data-id="a3-bram"][data-state="locked"]')).toContainText('Sent 10:00 · locked');
+    await expect(page.locator('[data-id="a3-bram"] [data-held-done]')).toHaveText('Mark done');
     expect((await app.calls('mcp')).filter((c) => c.tool === 'outlook_send_draft')).toHaveLength(1);
     // After a reload the item is back (not done), but the reply stays sent and locked.
     await page.reload();
     await app.ready();
     await app.openItem('a3-bram');
-    await expect(page.locator('#sendBtn')).toHaveText('Sent ✓ 10:00 · locked');
+    await expect(page.locator('#sendBtn')).toHaveText('Sent 10:00 · locked');
     await page.click('#sendBtn', { force: true });
     expect(await app.writeTools()).toEqual([]);
   });
@@ -61,9 +63,11 @@ test.describe('Send', () => {
     await app.boot();
     await app.openItem('a2-anouk');
     await page.click('[data-done]');
-    await expect(page.locator('#app')).toHaveAttribute('data-view', 'list');
-    await expect(page.locator('[data-id="a2-anouk"] .state-chip')).toHaveText('Done');
-    expect((await app.db())['done/a2-anouk']).toMatchObject({ how: 'manual' });
+    // Laptop: the next item opens in its place; the done one is off every list.
+    await expect(page.locator('#app')).toHaveAttribute('data-view', 'item');
+    await expect(page.locator('.iv-crumb')).not.toContainText('Anouk');
+    await expect(page.locator('[data-id="a2-anouk"]')).toHaveCount(0);
+    expect((await app.db())['done/a2-anouk']).toMatchObject({ how: 'manual', title: 'C4A tenant export in 26.4?', src: 'mail' });
     await page.click('[data-undo]');
     expect((await app.db())['done/a2-anouk']).toBeUndefined();
     await expect(page.locator('[data-id="a2-anouk"] .btn-act')).toBeVisible();
@@ -111,7 +115,7 @@ test.describe('Send', () => {
     await page.evaluate(() => window.__stub.setFault('outlook_send_draft', null));
     await page.waitForTimeout(800);
     await page.click('#sendBtn');
-    await expect(page.locator('#sendBtn')).toHaveText('Sent ✓ 10:00 · locked');
+    await expect(page.locator('#sendBtn')).toHaveText('Sent 10:00 · locked');
     expect(await sends()).toBe(2);
     // The same draft is reused: one draft created in total.
     expect((await app.calls('mcp')).filter((c) => c.tool === 'outlook_create_reply_draft')).toHaveLength(1);
@@ -125,7 +129,7 @@ test.describe('Send', () => {
     await expect(page.locator('#draftText')).toHaveValue(/OK from me/);
     await expect(page.locator('#sendBtn')).toHaveText('Send');
     await page.click('#sendBtn');
-    await expect(page.locator('#sendBtn')).toHaveText('Sent ✓ 10:00 · locked');
+    await expect(page.locator('#sendBtn')).toHaveText('Sent 10:00 · locked');
     expect((await app.calls('mcp')).filter((c) => c.tool === 'outlook_create_reply_draft')).toHaveLength(1);
   });
 

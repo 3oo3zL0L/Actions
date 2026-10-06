@@ -158,7 +158,7 @@
   };
   waits.ask = function (o) {
     if (!rt.sample || typeof rt.sample.json !== "function") return Promise.reject({ code: "not_granted" });
-    return rt.sample.json(waits.askPrompt(o), { modelTier: "default" }).then(function (a) {
+    return rt.sampleJson(waits.askPrompt(o), { modelTier: "default" }).then(function (a) {
       var v = waits.validate(a, o.msgs, o.me);
       if (!v) throw { code: "invalid_json" };
       return v;

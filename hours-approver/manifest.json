@@ -1,0 +1,42 @@
+{
+  "manifest_version": 3,
+  "name": "Salesforce Hours Approver (Droplet)",
+  "version": "2.0.0",
+  "description": "Every Monday 13:00: approves Salesforce timecards, rejects overhead, checks last week's 40 hours and reports to Droplet. Based on svenb1980/Claude salesforce-approver.",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "tabs",
+    "cookies",
+    "storage",
+    "alarms"
+  ],
+  "host_permissions": [
+    "https://*.lightning.force.com/*",
+    "https://*.my.salesforce.com/*",
+    "https://*.salesforce.com/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Approve Hours"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://claude.ai/*",
+        "https://*.claude.ai/*",
+        "https://*.claudeusercontent.com/*",
+        "https://*.claude.site/*"
+      ],
+      "js": [
+        "bridge.js"
+      ],
+      "all_frames": true,
+      "match_origin_as_fallback": true,
+      "run_at": "document_start"
+    }
+  ]
+}

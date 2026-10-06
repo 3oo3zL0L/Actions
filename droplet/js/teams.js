@@ -125,14 +125,18 @@
 
   /* Chat messages of the last `days` days, up to `pages` pages of 25,
      normalised. Rejects with the connector error. */
+  /* Counts of the last search (diagnostics; numbers only). */
+  teams.stats = { raw: 0, msgs: 0 };
   teams.search = function (days, pages) {
     var all = [], page = 0;
+    teams.stats = { raw: 0, msgs: 0 };
     function next(offset) {
       page++;
       return rt.call("chat_message_search", { query: "*", afterDateTime: days + " days ago", limit: PAGE, offset: offset }).then(function (res) {
-        var more = null;
-        U.resultObjects(res).forEach(function (o) {
-          if (o.id && (o.chatId || URI_RE.test(String(o.uri || "")))) all.push(normMsg(o));
+        var more = null, objs = U.resultObjects(res);
+        teams.stats.raw += objs.length;
+        objs.forEach(function (o) {
+          if (o.id && (o.chatId || URI_RE.test(String(o.uri || "")))) { all.push(normMsg(o)); teams.stats.msgs++; }
           else if (o.moreResults !== undefined || o.nextOffset !== undefined) more = o;
         });
         if (more && more.moreResults && typeof more.nextOffset === "number" && more.nextOffset > offset && page < pages) return next(more.nextOffset);
@@ -143,7 +147,12 @@
   /* The last 2 days of chat messages, up to 3 pages of 25. Resolves the
      items; rejects with the connector error. */
   teams.load = function (me, now, extraDomains) {
-    return teams.search(DAYS, MAX_PAGES).then(function (all) { return teams.build(all, me, now, extraDomains); });
+    /* me may be a promise (get_me still on its way): the search starts at once. */
+    return Promise.all([teams.search(DAYS, MAX_PAGES), Promise.resolve(me)]).then(function (r) {
+      var who = r[1];
+      if (!who || !who.mail) throw { code: "no_me", message: "Your own address is unknown." };
+      return teams.build(r[0], who, now, typeof extraDomains === "function" ? extraDomains() : extraDomains);
+    });
   };
 
   /* The full text of the newest messages from others (read_resource), as

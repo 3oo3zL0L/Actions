@@ -92,7 +92,7 @@ test.describe('R3: waiting on others', () => {
     await app.boot(waitsConfig());
     await app.openItem(WAIT1);
     await page.click('[data-notwaiting]');
-    await expect(page.locator('#app')).toHaveAttribute('data-view', 'list');
+    await expect(page.locator(`[data-open="${WAIT1}"]`)).toHaveCount(0);
     expect(await app.focusIds()).not.toContain(WAIT1);
     expect((await waitDocs(app))['s1-ask-0'].status).toBe('dismissed');
     await expect(page.locator('.toast')).toContainText('No longer waiting on Anna.');
@@ -133,7 +133,7 @@ test.describe('R3: chasing', () => {
     expect(await page.evaluate(() => window.__opened)).toEqual([['https://teams.microsoft.com/l/chat/0/0?users=anna.jansen%40planonsoftware.com', '_blank', 'noopener,noreferrer']]);
     expect(await app.writeTools()).toEqual([]);
     expect((await waitDocs(app))['s1-ask-0'].chasedAt).toBe('2026-10-02T08:00:00.000Z');
-    await expect(page.locator(`[data-id="${WAIT1}"] .state-chip`)).toContainText('Chased in Teams 10:00');
+    await expect(page.locator(`[data-id="${WAIT1}"]`)).toHaveCount(0); // chased: done for now
     // Chased: it comes back only 3 working days later.
     await page.reload();
     await app.ready();
@@ -173,7 +173,7 @@ test.describe('R3: chasing', () => {
     await expect(page.locator('[data-outside]')).toHaveCount(0);
     expect(await app.writeTools()).toEqual([]);
     await page.click('#sendBtn');
-    await expect(page.locator('#sendBtn')).toHaveText(/Sent ✓ 10:00/);
+    await expect(page.locator('#sendBtn')).toHaveText(/Sent 10:00/);
     const w = (await app.calls('mcp')).filter((c) => /create|send_draft/.test(c.tool));
     expect(w.map((c) => c.tool)).toEqual(['outlook_create_reply_draft', 'outlook_send_draft']);
     expect(w[0].input).toMatchObject({ messageId: 's1-ask', bodyType: 'html' });

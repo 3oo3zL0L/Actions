@@ -224,7 +224,7 @@
   };
   function ask(prompt) {
     if (!rt.sample || typeof rt.sample.json !== "function") return Promise.reject({ code: "not_granted" });
-    return rt.sample.json(prompt, { modelTier: "default" });
+    return rt.sampleJson(prompt, { modelTier: "default" });
   }
   function clean(s, n) { s = U.clip(s, n); return U.hasAddressOrUrl(s) ? "" : s; }
   ns.askInvite = function (o) {

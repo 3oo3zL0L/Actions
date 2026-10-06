@@ -67,7 +67,7 @@ test.describe('Degraded states', () => {
     await expect(page.locator('.note-line')).toHaveCount(1);
     await expect(page.locator('[data-note="mail"]')).toContainText('Couldn’t reach your Outlook mail just now.');
     await expect(page.locator('#focus')).toContainText('All clear');
-    await page.click('#restToggle');
+    await app.openRest();
     await expect(page.locator('#restPanel')).toBeVisible();
     await page.click('[data-retry="mail"]');
     await app.ready();

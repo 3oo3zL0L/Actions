@@ -117,7 +117,7 @@
       turns.push({ role: m.u ? "user" : "assistant", content: String(m.t).slice(0, 2000) });
     });
     turns.push({ role: "user", content: String(message).slice(0, 2000) });
-    return rt.sample.json(turns, { modelTier: "default", cache: false }).then(function (a) {
+    return rt.sampleJson(turns, { modelTier: "default", cache: false }).then(function (a) {
       if (!a || typeof a !== "object") throw { code: "invalid_json" };
       var reply = typeof a.reply === "string" && a.reply.trim() ? U.clip(a.reply, 400) : "Updated the draft. Check it before you send.";
       var draft = typeof a.draft === "string" && a.draft.trim() ? a.draft.slice(0, 2400) : null;

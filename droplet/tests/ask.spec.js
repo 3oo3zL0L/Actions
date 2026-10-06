@@ -257,7 +257,7 @@ test.describe('Ask Claude (global)', () => {
     await expect(card.locator('[data-card-sent]')).toHaveText('Commented 10:00 · once');
     const adds = await tool(app, 'addCommentToJiraIssue');
     expect(adds.map((c) => c.input)).toEqual([{ cloudId: CLOUD, issueIdOrKey: 'OIDC-77', commentBody: 'Go with 8 hours, decided.', contentFormat: 'markdown' }]);
-    await expect(page.locator('[data-id="jira:OIDC-77"] .state-chip')).toHaveText('Commented 10:00 · done');
+    await expect(page.locator('[data-id="jira:OIDC-77"]')).toHaveCount(0);
   });
 
   test('without sample the prompt is disabled with one calm line', async ({ app, page }) => {
