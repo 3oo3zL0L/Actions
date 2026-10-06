@@ -1135,3 +1135,21 @@ html.is-dragging .lane-steer .drop-hint { display: block; }
 }
 @media (max-width: 959.98px) { .fi-act .btn-act, .fi .btn-act { min-height: 44px; margin-bottom: 4px; } }
 @media (max-width: 959.98px) { .lh .h1row { justify-content: flex-start; gap: 6px 14px; margin-top: 12px; } .lh .date, .lh .sub { margin: 0; } }
+
+/* Later · STEERCO cards: handle them in place (Done · Today · Off list), or drag. */
+.sc-open { display: flex; width: 100%; }
+.sc.is-note .sc-top { cursor: grab; min-height: 40px; }
+.sc-grip { margin-left: auto; padding: 0 12px; color: var(--faint); letter-spacing: -2px; display: flex; align-items: center; }
+.sc-act { display: flex; border-top: 1px dashed var(--line-2); margin-left: 3px; }
+.sc-btn {
+  flex: 1 1 0; min-width: 0; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 6px;
+  color: var(--muted); font-family: var(--f-meta); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap;
+}
+.sc-btn + .sc-btn { border-left: 1px solid var(--line); }
+.sc-btn .ico { width: 15px; height: 15px; }
+.sc-btn:hover { color: var(--ink); background: var(--steer-soft); }
+.sc-btn.ok:hover { color: var(--ok); background: var(--ok-soft); }
+.sc.is-note .sc-act { border-top-color: var(--steer-line); }
+.sc-btn.ask .ico { color: var(--accent); }
+.sc-btn.ask:hover { color: var(--ink); background: var(--accent-soft); }
+.sc-btn[aria-disabled="true"] { opacity: 0.45; cursor: default; }

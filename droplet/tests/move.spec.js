@@ -139,10 +139,10 @@ test.describe('Layout B: move between Today and Later', () => {
   });
 });
 
-test.describe('Layout C on a phone (390 px)', () => {
+test.describe('Layout B on a phone (390 px)', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
 
-  test('Today first, then the overview; no horizontal scroll; Later in reach', async ({ app, page }) => {
+  test('Today first, then the lanes; a jump bar; no horizontal scroll; Later in reach', async ({ app, page }) => {
     await app.boot();
     const sw = () => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
     expect(await sw()).toBe(true);
@@ -218,5 +218,53 @@ test.describe('Later: for STEERCO', () => {
     // Drag it from Everything else into Later.
     await drag(page, `#restList [data-open="${t[1]}"]`, '#steerList');
     expect(await steerIds(page)).toEqual([t[1]]);
+  });
+
+  test('handle a collected card: Done takes it off every list; drag it to Recently done too', async ({ app, page }) => {
+    await app.boot();
+    const t = await app.focusIds();
+    await page.click(`#focus [data-move="${t[1]}"]`);
+    await page.click(`#steerList [data-card-done="${t[1]}"]`);
+    expect(await steerIds(page)).toEqual([]);
+    expect(await app.focusIds()).not.toContain(t[1]);
+    await page.click('[data-undo]');
+    expect(await steerIds(page)).toEqual([t[1]]);
+    await drag(page, `#steerList [data-open="${t[1]}"]`, '#doneToggle');
+    expect(await steerIds(page)).toEqual([]);
+    await expect(page.locator('#doneCount')).toHaveText('1');
+  });
+
+  test('own points: Done, To Today (a new action in Today), and drag to Today at a spot', async ({ app, page }) => {
+    await app.boot();
+    const add = async (v) => { await page.fill('#steerIn', v); await page.press('#steerIn', 'Enter'); };
+    await add('Point one');
+    await page.click('[data-point-done]');
+    await expect(page.locator('#steerList .sc.is-note')).toHaveCount(0);
+    await expect(page.locator('.toast')).toContainText('Point done.');
+    await add('Ask Martijn about SIEM owner\nBefore 16 Nov');
+    await page.click('[data-point-today]');
+    await expect(page.locator('#steerList .sc.is-note')).toHaveCount(0);
+    await expect(page.locator('#focus')).toContainText('Ask Martijn about SIEM owner');
+    await page.click('[data-undo]');
+    await expect(page.locator('#focus')).not.toContainText('Ask Martijn about SIEM owner');
+    await expect(page.locator('#steerList .sc.is-note')).toHaveCount(1);
+    const first = (await app.focusIds())[0];
+    await drag(page, '#steerList [data-drag^="point:"]', `#focus [data-id="${first}"]`, { top: true });
+    await expect(page.locator('#steerList .sc.is-note')).toHaveCount(0);
+    await expect(page.locator('#focus .fi').first()).toContainText('Ask Martijn about SIEM owner');
+  });
+
+  test('Ask Claude on a Later card (about the item) and on an own point (prefilled)', async ({ app, page }) => {
+    await app.boot();
+    const t = await app.focusIds();
+    await page.click(`#focus [data-move="${t[1]}"]`);
+    await page.click(`[data-steer-ask="${t[1]}"]`);
+    await expect(page.locator('#askSheet [data-ask-about]')).toBeVisible();
+    await expect(page.locator('#chatIn')).toHaveValue('For STEERCO: ');
+    await page.keyboard.press('Escape');
+    await page.fill('#steerIn', 'Budget overrun Q4'); await page.press('#steerIn', 'Enter');
+    await page.click('[data-point-ask]');
+    await expect(page.locator('#chatIn')).toHaveValue('Help me prepare this STEERCO point: “Budget overrun Q4”. ');
+    expect(await app.writeTools()).toEqual([]);
   });
 });

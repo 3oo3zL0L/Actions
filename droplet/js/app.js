@@ -467,24 +467,36 @@
       .concat(steerNotes().map(function (x) { return { k: x.k, rec: x.rec, at: x.rec.at || '' }; }));
     return out.sort(function (a, b) { return String(a.at).localeCompare(String(b.at)); });
   }
+  /* Each card: open it, drag it (to Today, Everything else or Recently
+     done), and a row to handle it: Done, Today, Off the list. */
   function steerHTML(e, i) {
     var x = '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>';
     if (e.it) {
-      var it = e.it, p = placeRec(it), cur = isCur(it.id);
+      var it = e.it, p = placeRec(it), cur = isCur(it.id), t = esc(titleOf(it));
       return '<li class="sc" data-steer="' + esc(it.id) + '">' +
-        '<div class="sc-top"><button class="sc-open' + (cur ? ' is-current' : '') + '" data-open="' + esc(it.id) + '" data-drag="' + esc(it.id) + '" aria-keyshortcuts="m">' +
+        '<button class="sc-open' + (cur ? ' is-current' : '') + '" data-open="' + esc(it.id) + '" data-drag="' + esc(it.id) + '" aria-keyshortcuts="m">' +
           '<span class="sc-n">' + pad(i + 1) + '</span>' + ico(srcKind(it)) +
-          '<span class="sc-t"><span class="sc-title">' + esc(titleOf(it)) + '</span><span class="sc-sub">' + esc(srcLabel(it)) + ' · ' + esc(project(it)) + '</span></span></button>' +
-          '<button class="btn-today" data-move-today="' + esc(it.id) + '" aria-label="Move to Today: ' + esc(titleOf(it)) + '" title="Move to Today (m)">' + ico('today') + '<span>Today</span></button>' +
-          '<button class="btn-x" data-steer-off="' + esc(it.id) + '" aria-label="Take off the STEERCO list: ' + esc(titleOf(it)) + '" title="Take off the list">' + x + '</button></div>' +
+          '<span class="sc-t"><span class="sc-title">' + t + '</span><span class="sc-sub">' + esc(srcLabel(it)) + ' · ' + esc(project(it)) + '</span></span></button>' +
         '<label class="sr" for="sn-' + esc(it.key) + '">Your note for STEERCO</label>' +
-        '<textarea class="sc-note" id="sn-' + esc(it.key) + '" data-steer-note="' + esc(it.id) + '" rows="1" maxlength="2000" placeholder="Your note for STEERCO">' + esc(p.note || '') + '</textarea></li>';
+        '<textarea class="sc-note" id="sn-' + esc(it.key) + '" data-steer-note="' + esc(it.id) + '" rows="1" maxlength="2000" placeholder="Your note for STEERCO">' + esc(p.note || '') + '</textarea>' +
+        '<div class="sc-act">' +
+          '<button class="sc-btn ok" data-card-done="' + esc(it.id) + '" aria-label="Mark done: ' + t + '">' + ico('check') + '<span>Done</span></button>' +
+          '<button class="sc-btn" data-move-today="' + esc(it.id) + '" aria-label="Move to Today: ' + t + '" title="Move to Today (m)">' + ico('today') + '<span>Today</span></button>' +
+          '<button class="sc-btn" data-steer-off="' + esc(it.id) + '" aria-label="Take off the STEERCO list: ' + t + '" title="Off the list, out of Today">' + x + '<span>Off list</span></button>' +
+          '<button class="sc-btn ask" data-steer-ask="' + esc(it.id) + '"' + (rt.sample ? '' : ' aria-disabled="true"') + ' aria-label="Ask Claude about: ' + t + '">' + ico('spark') + '<span>Ask</span></button>' +
+        '</div></li>';
     }
     return '<li class="sc is-note" data-steer-k="' + esc(e.k) + '">' +
-      '<div class="sc-top"><span class="sc-n">' + pad(i + 1) + '</span><span class="sc-tag">Your point</span>' +
-        '<button class="btn-x" data-steer-del="' + esc(e.k) + '" aria-label="Remove this point" title="Remove">' + x + '</button></div>' +
+      '<div class="sc-top" data-drag="point:' + esc(e.k) + '" title="Drag to Today or Recently done"><span class="sc-n">' + pad(i + 1) + '</span><span class="sc-tag">Your point</span>' +
+        '<span class="sc-grip" aria-hidden="true">⋮⋮</span></div>' +
       '<label class="sr" for="sp-' + esc(e.k) + '">Your point for STEERCO</label>' +
-      '<textarea class="sc-note" id="sp-' + esc(e.k) + '" data-steer-free="' + esc(e.k) + '" rows="1" maxlength="2000">' + esc(e.rec.text) + '</textarea></li>';
+      '<textarea class="sc-note" id="sp-' + esc(e.k) + '" data-steer-free="' + esc(e.k) + '" rows="1" maxlength="2000">' + esc(e.rec.text) + '</textarea>' +
+      '<div class="sc-act">' +
+        '<button class="sc-btn ok" data-point-done="' + esc(e.k) + '" aria-label="Done: this point">' + ico('check') + '<span>Done</span></button>' +
+        '<button class="sc-btn" data-point-today="' + esc(e.k) + '" aria-label="Make this point an action in Today">' + ico('today') + '<span>To Today</span></button>' +
+        '<button class="sc-btn" data-steer-del="' + esc(e.k) + '" aria-label="Remove this point">' + x + '<span>Remove</span></button>' +
+        '<button class="sc-btn ask" data-point-ask="' + esc(e.k) + '"' + (ask.available() ? '' : ' aria-disabled="true"') + ' aria-label="Ask Claude about this point">' + ico('spark') + '<span>Ask</span></button>' +
+      '</div></li>';
   }
   function renderSteer(steer) {
     var list = steerEntries(steer), el = $('steerList');
@@ -529,6 +541,22 @@
     var prev = S.steer[k] ? U.clone(S.steer[k]) : null; if (!prev) return;
     setSteer(k, null); renderRest();
     toast('Point removed.', function () { setSteer(k, prev); renderRest(); });
+  }
+  /* A point handled: Done takes it off (Recently done is for real items, so
+     only a toast with Undo); To Today makes it your own action in Today. */
+  function pointDone(k) {
+    var prev = S.steer[k] ? U.clone(S.steer[k]) : null; if (!prev) return;
+    setSteer(k, null); renderRest();
+    toast('Point done.', function () { setSteer(k, prev); renderRest(); });
+  }
+  function pointToToday(k, j) {
+    var prev = S.steer[k] ? U.clone(S.steer[k]) : null; if (!prev) return;
+    var lines = prev.text.trim().split('\n'), docId = addAction(lines[0], lines.slice(1).join('\n'));
+    if (!docId) return;
+    var it = S.byId['mine:' + docId];
+    if (it && j != null) setPlace(it, { place: 'today', order: orderAt(j, it), at: new Date().toISOString(), title: U.clip(titleOf(it), 160) });
+    setSteer(k, null); renderAll();
+    toast('Now an action in Today.', function () { removeActionQuiet(docId); setSteer(k, prev); renderAll(); });
   }
   function copySteer() {
     var list = steerEntries(restItems().filter(inSteer));
@@ -2934,8 +2962,8 @@
     if (t.where === 'today') {
       if (d.from === 'today' && !t.el && !t.end) return;
       if (t.el) t.el.classList.add('drop-before'); else if (t.end) t.end.classList.add('drop-after'); else $('focus').classList.add('drop-on');
-    } else if (t.where === 'later') { if (d.from !== 'steer') $('laterBox').classList.add('drop-on'); }
-    else if (t.where === 'off') { if (d.from !== 'rest') $('restBox').classList.add('drop-on'); }
+    } else if (t.where === 'later') { if (d.from !== 'steer' && d.from !== 'point') $('laterBox').classList.add('drop-on'); }
+    else if (t.where === 'off') { if (d.from !== 'rest' && d.from !== 'point') $('restBox').classList.add('drop-on'); }
     else if (t.where === 'done') document.querySelector('[data-drop="done"]').classList.add('drop-on');
   }
   function dragStart(e) {
@@ -2977,6 +3005,12 @@
     S.dragSwallow = true; setTimeout(function () { S.dragSwallow = false; }, 0);
     var t = drop && d.t;
     if (!t) return;
+    if (d.from === 'point') {
+      var k = d.id.slice(6);
+      if (t.where === 'done') return pointDone(k);
+      if (t.where === 'today') return pointToToday(k, t.j === Infinity ? null : t.j);
+      return;
+    }
     if (t.where === 'later' && d.from !== 'steer') return moveTo(d.id, 'later');
     if (t.where === 'off' && d.from !== 'rest') return moveTo(d.id, 'off');
     if (t.where === 'done') return moveTo(d.id, 'done');
@@ -2989,9 +3023,10 @@
   document.addEventListener('pointerdown', function (e) {
     if (e.button !== 0 || S.drag) return;
     var el = e.target.closest('[data-drag]'); if (!el) return;
-    var id = el.getAttribute('data-drag'), it = S.byId[id]; if (!it) return;
-    var top = topItems(), i = top.indexOf(it);
-    S.drag = { id: id, el: el, x0: e.clientX, y0: e.clientY, pid: e.pointerId, from: i > -1 ? 'today' : inSteer(it) ? 'steer' : 'rest', i: i, touch: e.pointerType === 'touch', ready: e.pointerType !== 'touch' };
+    var id = el.getAttribute('data-drag'), it = S.byId[id], pt = /^point:/.test(id);
+    if (!it && !pt) return;
+    var top = topItems(), i = pt ? -1 : top.indexOf(it);
+    S.drag = { id: id, el: el, x0: e.clientX, y0: e.clientY, pid: e.pointerId, from: pt ? 'point' : i > -1 ? 'today' : inSteer(it) ? 'steer' : 'rest', i: i, touch: e.pointerType === 'touch', ready: e.pointerType !== 'touch' };
     if (S.drag.touch) S.drag.hold = setTimeout(function () { if (S.drag && S.drag.id === id) { S.drag.ready = true; dragStart({ clientX: S.drag.x, clientY: S.drag.y }); } }, HOLD_MS);
     S.drag.x = e.clientX; S.drag.y = e.clientY;
   });
@@ -3042,6 +3077,17 @@
     if ((id = t.getAttribute('data-move-today'))) return moveTo(id, 'today');
     if ((id = t.getAttribute('data-steer-off'))) return moveTo(id, 'off');
     if ((id = t.getAttribute('data-steer-del'))) return delSteerPoint(id);
+    if ((id = t.getAttribute('data-point-done'))) return pointDone(id);
+    if ((id = t.getAttribute('data-point-today'))) return pointToToday(id);
+    /* Ask Claude on a Later card: about that item (its own conversation), or
+       about his own point (the global prompt, with the point filled in). */
+    if ((id = t.getAttribute('data-steer-ask'))) { if (rt.sample && S.byId[id]) ask.openSheet(id, 'For STEERCO: '); else toast('Claude isn’t available here.'); return; }
+    if ((id = t.getAttribute('data-point-ask'))) {
+      var pr = S.steer[id];
+      if (pr && ask.available()) ask.openSheet(null, 'Help me prepare this STEERCO point: “' + pr.text.trim().replace(/\s*\n\s*/g, ' · ') + '”. ');
+      else toast('Claude isn’t available here.');
+      return;
+    }
     if (t.id === 'steerCopy') return copySteer();
     if ((id = t.getAttribute('data-jump'))) { var jt = $(id); if (jt) jt.scrollIntoView({ block: 'start', behavior: 'smooth' }); return; }
     if (t.id === 'restToggle') { S.restOpen = !S.restOpen; renderRest(); if (S.restOpen) $('q').focus(); return; }
