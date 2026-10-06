@@ -67,19 +67,11 @@
           </div>
         </div>
       </section>
-      <section class="lane lane-steer" id="laterBox" aria-label="Later: for STEERCO" data-drop="later">
-        <h2 class="lane-h"><b>Later</b><span class="count" id="steerCount"></span><span class="r">For STEERCO</span>
-          <button class="lane-btn" id="steerCopy" type="button" title="Copy the list, to paste in your STEERCO notes">
-            <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12"/><path d="M16 8V4H4v12h4"/></svg><span>Copy</span></button></h2>
+      <section class="lane lane-later" id="laterBox" aria-label="Later" data-drop="off">
+        <h2 class="lane-h"><b>Later</b><span class="count" id="offCount"></span><span class="r">Out of Today</span></h2>
         <div class="lane-b">
-          <p class="drop-hint" aria-hidden="true">Drop here for STEERCO</p>
-          <form class="steer-add" id="steerForm" data-steerform autocomplete="off">
-            <label class="sr" for="steerIn">Add a point for STEERCO</label>
-            <input id="steerIn" type="text" maxlength="300" enterkeyhint="done" placeholder="Add a point for STEERCO">
-            <button class="steer-btn" type="submit">Add</button>
-          </form>
-          <ol class="steer-list" id="steerList"></ol>
-          <div class="ov-rest rest" id="restBox" data-drop="off">
+          <ul class="rest-list is-off" id="offList"></ul>
+          <div class="ov-rest rest" id="restBox">
             <button class="rest-toggle" id="restToggle" aria-expanded="false" aria-controls="restPanel" aria-keyshortcuts="/">
               <span>Everything else<span class="count" id="restCount"></span></span>
               <span class="kbd" aria-hidden="true">/</span>
@@ -112,7 +104,25 @@
               <p class="done-foot">Bring back puts it where it was. Nothing is unsent.</p>
             </div>
           </section>
-          <p class="ov-keys">Drag cards between Today, Later, Everything else and Recently done, or press <span class="kbd">m</span> on one. <span class="kbd">Enter</span> opens · <span class="kbd">Esc</span> closes.</p>
+          <p class="ov-keys">Drag cards between Today, Waiting on, Later, STEERCO and the Week (done), or press <span class="kbd">m</span> on one. <span class="kbd">Enter</span> opens · <span class="kbd">Esc</span> closes.</p>
+        </div>
+      </section>
+      <section class="lane lane-steer" id="steerBox" aria-label="STEERCO" data-drop="later">
+        <h2 class="lane-h"><b>STEERCO</b><span class="count" id="steerCount"></span><span class="r" id="steerNext">To raise</span>
+          <button class="lane-btn" id="steerCopy" type="button" title="Copy the list, to paste in your STEERCO notes">
+            <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12"/><path d="M16 8V4H4v12h4"/></svg><span>Copy</span></button></h2>
+        <div class="lane-b">
+          <p class="drop-hint" aria-hidden="true">Drop here for STEERCO</p>
+          <form class="steer-add" id="steerForm" data-steerform autocomplete="off">
+            <label class="sr" for="steerIn">Add a point for STEERCO</label>
+            <input id="steerIn" type="text" maxlength="300" enterkeyhint="done" placeholder="Add a point for STEERCO">
+            <button class="steer-btn" type="submit">Add</button>
+          </form>
+          <ol class="steer-list" id="steerList"></ol>
+          <div class="steer-sugg" id="steerSuggBox" hidden>
+            <h3 class="lane-sub"><b>From meetings</b><span class="count" id="steerSuggCount"></span><span class="r">Suggested by Claude</span></h3>
+            <ul class="sugg-list" id="steerSugg"></ul>
+          </div>
         </div>
       </section>
     </div>

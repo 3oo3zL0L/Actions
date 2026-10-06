@@ -10,6 +10,7 @@ const places = async (app) => Object.entries(await app.db()).filter(([k]) => k.s
 
 const toLater = (page, id) => drag(page, `#focus [data-id="${id}"] .fi-open`, '#steerList');
 async function drag(page, from, to, opts = {}) {
+  await page.locator(from).first().scrollIntoViewIfNeeded();
   const a = await page.locator(from).boundingBox();
   const b = await page.locator(to).boundingBox();
   const x1 = b.x + b.width / 2, y1 = opts.top ? b.y + 6 : b.y + b.height / 2;
@@ -21,11 +22,15 @@ async function drag(page, from, to, opts = {}) {
 }
 
 test.describe('Layout B: move between Today and Later', () => {
-  test('three lanes next to Today; an open item is a drawer over them, Today stays', async ({ app, page }) => {
+  test('lanes next to Today, STEERCO as a panel under Later and Week; an open item is a drawer over them, Today stays', async ({ app, page }) => {
     await app.boot();
     await expect(page.locator('#over')).toBeVisible();
     const boxes = await Promise.all(['#listCol', '#laneWait', '#laterBox', '#laneWeek'].map((s) => page.locator(s).boundingBox()));
     for (let i = 1; i < boxes.length; i++) expect(boxes[i].x).toBeGreaterThan(boxes[i - 1].x + boxes[i - 1].width - 1);
+    const st = await page.locator('#steerBox').boundingBox();
+    expect(st.y).toBeGreaterThan(boxes[2].y + boxes[2].height - 1);
+    expect(Math.abs(st.x - boxes[2].x)).toBeLessThan(2);
+    expect(st.x + st.width).toBeGreaterThan(boxes[3].x + boxes[3].width - 2);
     await expect(page.locator('#laneWeek #doneToggle')).toBeVisible();
     await expect(page.locator('text=Standing by')).toHaveCount(0);
     const today = await app.focusIds();
@@ -49,10 +54,10 @@ test.describe('Layout B: move between Today and Later', () => {
     await app.boot();
     const today = await app.focusIds();
     const id = today[1];
-    await drag(page, `#focus [data-id="${id}"] .fi-open`, '#laterBox', {
+    await drag(page, `#focus [data-id="${id}"] .fi-open`, '#steerBox', {
       check: async () => {
         await expect(page.locator('.drag-ghost')).toHaveCount(1);
-        await expect(page.locator('#laterBox')).toHaveClass(/drop-on/);
+        await expect(page.locator('#steerBox')).toHaveClass(/drop-on/);
       }
     });
     await expect(page.locator('.drag-ghost')).toHaveCount(0);
@@ -60,7 +65,7 @@ test.describe('Layout B: move between Today and Later', () => {
     expect(await app.focusIds()).not.toContain(id);
     expect(await steerIds(page)).toEqual([id]);
     expect(await restIds(page)).not.toContain(id);
-    await expect(page.locator('.toast')).toContainText('Moved to Later, for STEERCO.');
+    await expect(page.locator('.toast')).toContainText('Added to STEERCO.');
     const saved = await places(app);
     expect(saved).toHaveLength(1);
     expect(saved[0][1]).toMatchObject({ place: 'later' });
@@ -69,7 +74,7 @@ test.describe('Layout B: move between Today and Later', () => {
     expect(await app.focusIds()).toContain(id);
     expect(await places(app)).toHaveLength(0);
     // Again, then reload: it stays in Later, and Today is not refilled with it.
-    await drag(page, `#focus [data-id="${id}"] .fi-open`, '#laterBox');
+    await drag(page, `#focus [data-id="${id}"] .fi-open`, '#steerBox');
     await page.reload(); await app.ready();
     await expect(page.locator(`#steerList [data-steer="${id}"]`)).toHaveCount(1);
     expect(await app.focusIds()).not.toContain(id);
@@ -112,7 +117,7 @@ test.describe('Layout B: move between Today and Later', () => {
     await expect(page.locator('#ivTitle')).toBeVisible();
     await page.evaluate(() => document.activeElement && document.activeElement.blur());
     await page.keyboard.press('Escape');
-    const lb = await page.locator('#laterBox').boundingBox();
+    const lb = await page.locator('#steerBox').boundingBox();
     await page.mouse.move(box.x + 40, box.y + 20);
     await page.mouse.down();
     await page.mouse.move(lb.x + 50, lb.y + 30, { steps: 6 });
@@ -197,7 +202,7 @@ test.describe('Later: for STEERCO', () => {
     await expect(page.locator('#steerList .sc.is-note')).toHaveCount(1);
   });
 
-  test('take a card off the list: it stays out of Today, under Everything else', async ({ app, page }) => {
+  test('take a card off the STEERCO list: it stays out of Today, in Later', async ({ app, page }) => {
     await app.boot();
     const t = await app.focusIds();
     await toLater(page, t[1]);
@@ -206,9 +211,9 @@ test.describe('Later: for STEERCO', () => {
     expect(await steerIds(page)).toEqual([]);
     expect(await app.focusIds()).not.toContain(t[1]);
     await app.openRest();
-    await expect(page.locator(`#restList [data-open="${t[1]}"]`)).toContainText('moved out of Today by you');
-    // Drag it from Everything else into Later.
-    await drag(page, `#restList [data-open="${t[1]}"]`, '#steerList');
+    await expect(page.locator(`#offList [data-open="${t[1]}"]`)).toContainText('moved out of Today by you');
+    // Drag it from Later back into STEERCO.
+    await drag(page, `#offList [data-open="${t[1]}"]`, '#steerList');
     expect(await steerIds(page)).toEqual([t[1]]);
   });
 

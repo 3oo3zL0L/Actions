@@ -65,7 +65,9 @@
   function placeRec(it) { return it && it.key && S.places[it.key] || null; }
   function movedLater(it) { var p = placeRec(it); return !!(p && (p.place === 'later' || p.place === 'off' || p.place === 'wait')); }
   function putWait(it) { var p = placeRec(it); return !!(p && p.place === 'wait'); }
-  function inWaitLane(it) { return putWait(it) || isWait(it) && !placeRec(it); }
+  /* An action someone else took on in a meeting (owner) waits on them. */
+  function ownedByOther(it) { return !!(it && it.src === 'mine' && it.owner); }
+  function inWaitLane(it) { return putWait(it) || (isWait(it) || ownedByOther(it)) && !placeRec(it); }
   function inSteer(it) { var p = placeRec(it); return !!(p && p.place === 'later'); }
   function movedToday(it) { var p = placeRec(it); return !!(p && p.place === 'today'); }
   function groupOf(it) {
@@ -81,6 +83,7 @@
          Today while Claude places it; it is never hidden. */
       if (it.due && it.due <= mine.today()) return 'now';
       if (pinned(it)) return 'now';
+      if (it.owner) return 'later'; /* someone else's: it waits in Waiting on */
       if (S.fresh[it.id] && !it.r) return 'now';
       if (g === 'hidden') return 'later';
     }
@@ -127,7 +130,7 @@
     var vis = visible().filter(function (it) { return S.verdict[it.id] !== 'down' || pinned(it); });
     var top = vis.filter(function (it) { return groupOf(it) === 'now'; }).slice(0, FOCUS_MAX);
     vis.forEach(function (it) { if (pinned(it) && top.indexOf(it) < 0) top.push(it); }); /* pinned to Today: never cut */
-    if (top.length < FOCUS_MIN) vis.forEach(function (it) { if (top.length < FOCUS_MIN && top.indexOf(it) < 0 && !movedLater(it)) top.push(it); });
+    if (top.length < FOCUS_MIN) vis.forEach(function (it) { if (top.length < FOCUS_MIN && top.indexOf(it) < 0 && !movedLater(it) && !ownedByOther(it)) top.push(it); });
     /* A card dragged to a spot in Today keeps that spot. */
     return top.map(function (it, i) { var p = placeRec(it); return { it: it, i: i, o: p && p.place === 'today' && isFinite(p.order) ? p.order : i }; })
       .sort(function (a, b) { return a.o - b.o || a.i - b.i; }).map(function (x) { return x.it; });
@@ -398,6 +401,7 @@
       (isWait(it) && !n ? ' · asked ' + it.n + ' working day' + (it.n === 1 ? '' : 's') + ' ago' : '') +
       (it.meeting ? ' · meeting ' + esc(it.meeting.hhmm) : '') + (waitingTeams(it.id) ? ' · waiting for you to send in Teams' : '') +
       (isMine(it) && it.due ? ' · ' + esc(mine.dueLabel(it.due).toLowerCase()) : '') +
+      (ownedByOther(it) && it.origin ? ' · from ' + esc(U.clip(it.origin.subject || 'a meeting', 40)) : '') +
       (S.verdict[it.id] === 'down' ? ' · marked not important' : '') + (putWait(it) ? ' · put in Waiting by you' : movedLater(it) ? ' · moved out of Today by you' : '') + (isWait(it) ? ' ' + waitChip(it) : '') + '</span></span></button>' +
       '</li>';
   }
@@ -411,6 +415,12 @@
     var steer = all.filter(inSteer), lane = all.filter(function (it) { return !inSteer(it); });
     var waits = lane.filter(inWaitLane), els = lane.filter(function (it) { return !inWaitLane(it) && isHeld(it); });
     var later = lane.filter(function (it) { return waits.indexOf(it) < 0 && els.indexOf(it) < 0; });
+    /* Later: what you moved out of Today, then everything else (folded). */
+    var offs = later.filter(function (it) { var p = placeRec(it); return !!(p && p.place === 'off'); });
+    later = later.filter(function (it) { return offs.indexOf(it) < 0; });
+    $('offCount').textContent = offs.length + later.length;
+    $('offList').innerHTML = offs.length ? offs.map(function (it) { return restRow(it, num(it)); }).join('') :
+      '<li class="rest-empty">Drag a card here to take it out of Today.</li>';
     var wpts = steerNotes().filter(function (x) { return x.rec.lane === 'wait'; });
     $('waitCount').textContent = waits.length + wpts.length;
     $('waitR').textContent = els.length ? '+ elsewhere ' + els.length : '';
@@ -452,7 +462,8 @@
     var el = $('jump'); if (!el) return;
     el.innerHTML = '<button data-jump="listCol" class="go">Today <b>' + topItems().length + '</b></button>' +
       '<button data-jump="laneWait" class="j-wait">Waiting <b>' + nWait + '</b></button>' +
-      '<button data-jump="laterBox" class="j-steer">Later <b>' + nSteer + '</b></button>' +
+      '<button data-jump="laterBox">Later</button>' +
+      '<button data-jump="steerBox" class="j-steer">STEERCO <b>' + nSteer + '</b></button>' +
       '<button data-jump="laneWeek" class="j-week">Week</button>';
   }
 
@@ -499,7 +510,41 @@
         '<button class="sc-btn ask" data-point-ask="' + esc(e.k) + '"' + (ask.available() ? '' : ' aria-disabled="true"') + ' aria-label="Ask Claude about this point">' + ico('spark') + '<span>Ask</span></button>' +
       '</div></li>';
   }
+  /* Claude's suggestions from meeting transcripts: one click adds a point. */
+  function steerSuggestions() {
+    var out = [];
+    Object.keys(S.meetingsDb || {}).forEach(function (k) {
+      var m = S.meetingsDb[k];
+      (m && Array.isArray(m.points) ? m.points : []).forEach(function (p, i) { if (p && p.state === 'new') out.push({ k: k, i: i, p: p, m: m }); });
+    });
+    return out.sort(function (a, b) { return String(b.m.date || b.m.at).localeCompare(String(a.m.date || a.m.at)); }).slice(0, 8);
+  }
+  function renderSuggestions() {
+    var box = $('steerSuggBox'); if (!box) return;
+    var sg = steerSuggestions();
+    box.hidden = !sg.length;
+    $('steerSuggCount').textContent = sg.length;
+    $('steerSugg').innerHTML = sg.map(function (x) {
+      var ref = esc(x.k + '#' + x.i), day = x.m.date ? U.when(x.m.date, new Date()) : '';
+      return '<li class="sugg"><span class="sugg-t"><span class="sugg-title">' + esc(x.p.what) + '</span><span class="sugg-sub">' + esc(U.clip(x.m.subject || 'Meeting', 60)) + (day ? ' · ' + esc(day) : '') + '</span></span>' +
+        '<button class="sc-btn" data-sugg-add="' + ref + '" aria-label="Add to STEERCO: ' + esc(x.p.what) + '">' + ico('check') + '<span>Add</span></button>' +
+        '<button class="sc-btn" data-sugg-skip="' + ref + '" aria-label="Not for STEERCO: ' + esc(x.p.what) + '"><span>Skip</span></button></li>';
+    }).join('');
+  }
+  function suggest(ref, add) {
+    var m = /^(.+)#(\d+)$/.exec(ref || ''); if (!m) return;
+    var mt = S.meetingsDb[m[1]], p = mt && mt.points && mt.points[+m[2]]; if (!p) return;
+    p.state = add ? 'added' : 'skipped';
+    store.setMeeting(m[1], mt);
+    if (add) {
+      var k = 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+      setSteer(k, { text: (p.what + '\nFrom ' + (mt.subject || 'a meeting') + ': “' + p.quote + '”').slice(0, 2000), at: new Date().toISOString() });
+    }
+    renderRest();
+    toast(add ? 'Added to STEERCO.' : 'Skipped.');
+  }
   function renderSteer(steer) {
+    renderSuggestions();
     var list = steerEntries(steer), el = $('steerList');
     $('steerCount').textContent = list.length;
     var sig = list.map(function (e) { return e.it ? e.it.id + (isCur(e.it.id) ? '*' : '') : 'n:' + e.k; }).join('|');
@@ -536,7 +581,7 @@
     setSteer(k, { text: U.clip(v, 2000), at: new Date().toISOString() });
     inp.value = '';
     renderRest();
-    toast('Added to Later, for STEERCO.', function () { setSteer(k, null); renderRest(); });
+    toast('Added to STEERCO.', function () { setSteer(k, null); renderRest(); });
   }
   function delSteerPoint(k) {
     var prev = S.steer[k] ? U.clone(S.steer[k]) : null; if (!prev) return;
@@ -554,7 +599,7 @@
     var prev = S.steer[k] ? U.clone(S.steer[k]) : null; if (!prev || (prev.lane || 'later') === lane) return;
     var rec = U.clone(prev); if (lane === 'later') delete rec.lane; else rec.lane = lane;
     setSteer(k, rec); renderRest();
-    toast(lane === 'wait' ? 'Point moved to Waiting on.' : 'Point moved to Later, for STEERCO.', function () { setSteer(k, prev); renderRest(); });
+    toast(lane === 'wait' ? 'Point moved to Waiting on.' : 'Point moved to STEERCO.', function () { setSteer(k, prev); renderRest(); });
   }
   function pointToToday(k, j) {
     var prev = S.steer[k] ? U.clone(S.steer[k]) : null; if (!prev) return;
@@ -1915,7 +1960,20 @@
             };
             S.actions[docId] = a; store.setAction(docId, a); existing.push(a.text); made++;
           });
-          cacheMeeting(ev, { state: 'done', n: made });
+          /* What others took on: an action with an owner, in Waiting on. */
+          (list.actions || []).forEach(function (c) {
+            var text = mine.clean(c.what);
+            if (!text || existing.some(function (x) { return tx.similar(x, text); })) return;
+            var docId = mine.newId(), a = {
+              text: text, owner: c.owner, created: new Date().toISOString(), done: false, doneAt: null, due: c.due || null, dueBy: c.due ? 'claude' : null, notes: '',
+              origin: { eventId: ev.id, quote: c.quote, subject: U.clip(d.subject || ev.subject, 160), date: new Date(ev.start).toISOString(), kind: 'task', who: [c.owner], project: c.project || null,
+                attendees: others.slice(0, 20) }
+            };
+            S.actions[docId] = a; store.setAction(docId, a); existing.push(text); made++;
+          });
+          var pts = (list.points || []).map(function (x) { return { what: x.what, quote: x.quote, state: 'new' }; });
+          cacheMeeting(ev, { state: 'done', n: made, points: pts, date: new Date(ev.start).toISOString() });
+          if (pts.length) renderRest();
         }, function () { /* Claude couldn't answer: read again on the next sync */ });
       });
     }, function () { /* the event couldn't be read: tried again on the next sync */ });
@@ -2929,7 +2987,7 @@
     else renderAll();
     var drop = $('focus').querySelector('[data-id="' + cssEsc(id) + '"]') || $('over').querySelector('[data-steer="' + cssEsc(id) + '"]') || $('over').querySelector('[data-open="' + cssEsc(id) + '"]');
     if (drop) { drop.classList.add('just-moved'); setTimeout(function () { drop.classList.remove('just-moved'); }, 900); }
-    toast(where === 'later' ? 'Moved to Later, for STEERCO.' : where === 'wait' ? 'Moved to Waiting on.' : where === 'off' ? (wasSteer ? 'Taken off the STEERCO list.' : 'Moved out of Today.') :
+    toast(where === 'later' ? 'Added to STEERCO.' : where === 'wait' ? 'Moved to Waiting on.' : where === 'off' ? (wasSteer ? 'Taken off the STEERCO list.' : 'Moved to Later.') :
       inToday ? 'Moved in Today.' : 'Moved to Today.', function () { setPlace(it, prev); renderAll(); });
   }
   function cssEsc(v) { return window.CSS && CSS.escape ? CSS.escape(v) : String(v).replace(/["\\]/g, '\\$&'); }
@@ -2985,12 +3043,12 @@
     }
     if (w === 'later') {
       if (d.from === 'steer' || d.from === 'point') return null;
-      return { go: pt ? function () { pointLane(k, 'later'); } : function () { moveTo(d.id, 'later'); }, el: $('laterBox') };
+      return { go: pt ? function () { pointLane(k, 'later'); } : function () { moveTo(d.id, 'later'); }, el: $('steerBox') };
     }
     if (w === 'off') {
-      if (pt) return { no: 'Your own points live in Later or Waiting on. Drop it on Recently done when it’s handled.' };
+      if (pt) return { no: 'Your own points live in STEERCO or Waiting on. Drop it on the Week when it’s handled.' };
       if (d.from === 'rest') return null;
-      return { go: function () { moveTo(d.id, 'off'); }, el: $('restBox') };
+      return { go: function () { moveTo(d.id, 'off'); }, el: $('laterBox') };
     }
     return null;
   }
@@ -3108,6 +3166,8 @@
     if ((id = t.getAttribute('data-steer-off'))) return moveTo(id, 'off');
     if ((id = t.getAttribute('data-steer-del'))) return delSteerPoint(id);
     if ((id = t.getAttribute('data-point-done'))) return pointDone(id);
+    if ((id = t.getAttribute('data-sugg-add'))) return suggest(id, true);
+    if ((id = t.getAttribute('data-sugg-skip'))) return suggest(id, false);
     if ((id = t.getAttribute('data-point-today'))) return pointToToday(id);
     /* Ask Claude on a Later card: about that item (its own conversation), or
        about his own point (the global prompt, with the point filled in). */
@@ -3312,6 +3372,10 @@
     else if (name === 'mcp') load({ full: false });
     else if (name === 'permissions') checkPerms();
   };
+  /* While Droplet is open it checks again every 30 minutes (mail, Teams,
+     Atlassian, waits and new meeting transcripts), only when visible. */
+  var REFRESH_MS = 30 * 60 * 1000;
+  setInterval(function () { if (!S.loading && rt.inited && document.visibilityState !== 'hidden') load({ full: false }); }, REFRESH_MS);
   rt.init().then(function () {
     renderStatus(); renderAskbar();
     checkPerms();

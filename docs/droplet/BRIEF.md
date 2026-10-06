@@ -93,3 +93,10 @@ Thomas chose layout B after using C. It replaces C:
 - **Week** lane (green): hours reminders recap, Recently done.
 - Ask Claude sits top right on a laptop (as in the mockup), a bar at the bottom on a phone.
 - As in the mockup: one header across the top; Today is a lane with compact cards (command inline, Done on the right). Moving is by drag (whole card; touch: hold) or m; no Later/Today buttons. Drop targets: Today, Waiting on (db place "wait"; own points get lane "wait"), Later, Everything else, Recently done; an open item is a drawer (max 660 px) over the right lanes with a scrim, Today stays in view. Laptop 960–1199 px: Week goes under Waiting and Later. Phone: lanes stack under Today with a sticky jump bar.
+
+## STEERCO panel, transcripts, alerts (6 okt 2026)
+
+- **STEERCO** is its own panel, bottom right across Later and Week (points two across). Waiting on runs full height on the left of it. **Later** is a plain lane again: what Thomas moved out of Today, then Everything else (folded).
+- **Transcripts** (R6, extended): window about a week (4 working days back). Besides Thomas's own commitments, Claude lists actions others took on (owner by name, quote checked against the transcript) → own actions with `owner`, shown in Waiting on; and up to 3 key points per meeting → STEERCO suggestions ("From meetings": Add / Skip, stored on `meetings/<key>.points`).
+- Droplet re-checks its sources every 30 minutes while open (visible tab).
+- **Push alerts**: an Artifact cannot send OS notifications. A Routine "Droplet new-task alerts" (weekdays 07:55–17:55 Amsterdam, push + email, read-only prompt) exists but is disabled: Routines created from this session carry no connectors. Thomas adds Microsoft 365 and Atlassian Rovo to it in claude.ai → Routines, then enables it.

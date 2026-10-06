@@ -1170,3 +1170,34 @@ html.drag-over-item .item-col, html.drag-over-item .b-scrim { opacity: 0; pointe
    the lane instead of pushing the list down mid-drag. */
 .lane-steer .lane-b { position: relative; }
 .lane-steer .drop-hint { position: absolute; z-index: 3; top: 6px; left: 8px; right: 8px; margin: 0; background: var(--bg-2); pointer-events: none; }
+
+/* ============================================================
+   STEERCO as its own panel (6 Oct 2026)
+   Bottom right, across Later and Week, so the columns get room and
+   the grid breaks once, for the one thing that is a meeting, not a lane.
+   Waiting on runs the full height on the left of it.
+   ============================================================ */
+.lane-later { --lc: var(--muted); }
+.rest-list.is-off > li { background: var(--surface); margin-bottom: 4px; box-shadow: inset 3px 0 0 var(--line-3); }
+.lane-later .ov-rest { margin-top: 4px; }
+.sugg-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.sugg { display: flex; align-items: stretch; background: var(--bg-2); border: 1px dashed var(--steer-line); }
+.sugg-t { flex: 1; min-width: 0; padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; }
+.sugg-title { font-size: 14px; line-height: 1.35; }
+.sugg-sub { font-family: var(--f-meta); font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sugg .sc-btn { flex: none; width: auto; padding: 0 12px; border-left: 1px solid var(--line); }
+@media (min-width: 960px) {
+  .app, .app[data-view="item"] { padding: 0 14px 12px; grid-template-columns: minmax(0, 1.15fr) minmax(0, 3fr); gap: 0 10px; }
+  .over.lanes, .app[data-view="item"] .over.lanes {
+    grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: minmax(0, 0.95fr) minmax(0, 1.05fr); gap: 10px;
+  }
+  .lane-wait { grid-column: 1; grid-row: 1 / 3; }
+  .lane-later { grid-column: 2; grid-row: 1; }
+  .lane-week { grid-column: 3; grid-row: 1; }
+  .lane-steer { grid-column: 2 / 4; grid-row: 2; }
+  /* The panel is wide: points sit two across. */
+  .lane-steer .steer-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; align-items: start; }
+  .lane-steer .steer-list > .steer-empty { grid-column: 1 / -1; }
+  .lane-steer .steer-add { max-width: 520px; }
+}
+.rest-list.is-off > li.rest-empty { background: none; box-shadow: none; }

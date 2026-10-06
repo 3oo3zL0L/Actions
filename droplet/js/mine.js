@@ -118,7 +118,7 @@
   mine.toItem = function (docId, a) {
     return {
       src: "mine", id: "mine:" + docId, key: "mine-" + docId, docId: docId,
-      subject: a.text, senderName: "You", sender: "", received: a.created, internal: true, summary: a.notes || "",
+      subject: a.text, senderName: a.owner || "You", owner: a.owner || null, sender: "", received: a.created, internal: true, summary: a.notes || "",
       recipients: 0, importance: "normal"
     };
   };

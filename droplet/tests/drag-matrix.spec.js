@@ -13,17 +13,17 @@ async function drag(page, from, to) {
   for (let i = 1; i <= 10; i++) await page.mouse.move(x0 + (x1 - x0) * i / 10, y0 + (y1 - y0) * i / 10);
   await page.mouse.up();
 }
-const TARGET = { today: '#focus', wait: '#laneWait', later: '#steerList', off: '#restToggle', done: '#laneWeek' };
+const TARGET = { today: '#focus', wait: '#laneWait', later: '#steerList', off: '#laterBox', done: '#laneWeek' };
 async function where(page, id) {
   const has = async (sel) => (await page.locator(sel).count()) > 0;
   if (await has(`#focus [data-id="${id}"]`)) return 'today';
   if (await has(`#waitList [data-open="${id}"]`)) return 'wait';
   if (await has(`#steerList [data-steer="${id}"]`)) return 'later';
-  if (await has(`#restList [data-open="${id}"]`)) return 'off';
+  if (await has(`#offList [data-open="${id}"]`) || await has(`#restList [data-open="${id}"]`)) return 'off';
   return 'gone';
 }
 function handle(lane, id) {
-  return { today: `#focus [data-id="${id}"] .fi-open`, wait: `#waitList [data-open="${id}"]`, later: `#steerList [data-steer="${id}"] .sc-sub`, off: `#restList [data-open="${id}"]` }[lane];
+  return { today: `#focus [data-id="${id}"] .fi-open`, wait: `#waitList [data-open="${id}"]`, later: `#steerList [data-steer="${id}"] .sc-sub`, off: `#offList [data-open="${id}"], #restList [data-open="${id}"]` }[lane];
 }
 async function walk(page, id, path) {
   await page.evaluate(() => { const t = document.getElementById('restToggle'); if (t.getAttribute('aria-expanded') !== 'true') t.click(); });
@@ -74,11 +74,11 @@ test.describe('Drag matrix (laptop)', () => {
     await app.boot();
     const add = async (v) => { await page.fill('#steerIn', v); await page.press('#steerIn', 'Enter'); };
     await add('Point A');
-    const pt = '#laterBox [data-drag^="point:"] .sc-top, #laneWait [data-drag^="point:"] .sc-top';
+    const pt = '#steerBox [data-drag^="point:"] .sc-top, #laneWait [data-drag^="point:"] .sc-top';
     await page.waitForTimeout(100);
     await page.evaluate(() => { const u = document.querySelector('[data-undo]'); if (u) window.Droplet.state.undo = null; });
     await drag(page, pt, '#restToggle');
-    await expect(page.locator('.toast')).toContainText('Your own points live in Later or Waiting on.');
+    await expect(page.locator('.toast')).toContainText('Your own points live in STEERCO or Waiting on.');
     await expect(page.locator('#steerList .sc.is-note')).toHaveCount(1);
     await drag(page, pt, '#laneWait');
     await expect(page.locator('#waitList .sc.is-note')).toHaveCount(1);
