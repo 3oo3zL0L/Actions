@@ -13,6 +13,7 @@
   "use strict";
   var U = D.util, rt = D.rt, store = D.store;
   var L = D.leave = {};
+  L.HELLO_MS = 5000;
   var OUTCOMES = ["approved", "checked", "check-failed", "unknown", "not-done"];
 
   function str(v, max) { return typeof v === "string" && v.length <= (max || 200); }
@@ -34,8 +35,8 @@
   };
   L.approved = function (rep) { return (rep && rep.requests || []).filter(function (q) { return q.outcome === "approved"; }); };
 
-  var S = L.state = { reports: {}, loaded: false };
-  var onChange = function () {}, buffer = [], started = false;
+  var S = L.state = { reports: {}, loaded: false, bridge: null };
+  var onChange = function () {}, onBridge = function () {}, buffer = [], started = false;
   function post(msg) { try { window.postMessage(msg, "*"); } catch (e) { /* ignore */ } }
 
   /* Only from this window itself: the bridge is a content script in the same frame. */
@@ -45,6 +46,7 @@
     var d = e.data;
     if (!d || typeof d !== "object" || d.source !== "leave-approver" || d.type !== "reports" || !Array.isArray(d.reports)) return;
     var list = d.reports.slice(0, 50);
+    if (S.bridge !== true) { S.bridge = true; onBridge(true); } /* the extension answered: it is installed here */
     if (!started) { buffer = buffer.concat(list); return; }
     receive(list);
   }
@@ -72,6 +74,7 @@
   L.start = function (opts) {
     if (started) return Promise.resolve();
     onChange = opts && opts.onChange || onChange;
+    onBridge = opts && opts.onBridge || onBridge;
     return rt.timeout(Promise.resolve().then(function () { return store.readColl("leave"); }), rt.cfg.storeMs, "Reading leave").then(function (v) {
       S.reports = U.clone(v || {}); S.loaded = true;
     }, function () { S.loaded = false; }).then(function () {
@@ -79,6 +82,8 @@
       var b = buffer; buffer = [];
       if (b.length) receive(b);
       post({ source: "action-desk", type: "hello" });
+      /* The bridge answers a hello at once; no answer means no extension in this browser. */
+      setTimeout(function () { if (S.bridge !== true) { S.bridge = false; onBridge(false); } }, L.HELLO_MS);
       onChange();
     });
   };

@@ -52,4 +52,20 @@ test.describe('Leave approvals', () => {
     await expect(page.locator('#focus .fi[data-id="leave:run-1791300000000"]')).toHaveCount(0);
     expect(await app.writeTools()).toEqual([]);
   });
+
+  test('diagnostics say whether the extension answered', async ({ app, page }) => {
+    await bridge(page);
+    await app.boot();
+    await send(page, []); // the bridge answers a hello with its pending reports, even none
+    await page.click('#status');
+    await expect(page.locator('[data-diag-src="leave"] .d-state')).toHaveText('ok · connected');
+  });
+
+  test('no extension in this browser: diagnostics say so after a few seconds; nothing else changes', async ({ app, page }) => {
+    await app.boot();
+    await page.click('#status');
+    await expect(page.locator('[data-diag-src="leave"] .d-state')).toHaveText('error · not_found', { timeout: 8000 });
+    await expect(page.locator('.note-line')).toHaveCount(0);
+  });
 });
+

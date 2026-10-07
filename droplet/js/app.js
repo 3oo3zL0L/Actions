@@ -1442,7 +1442,7 @@
      timeout, so a consent prompt nobody answers or a stalled connector
      turns into one quiet line of its own and never blocks the rest. */
   var CORE = ['saved', 'me', 'mail', 'teams', 'atl', 'cal'];
-  var SRC_NAME = { saved: 'Saved items', me: 'Your profile', mail: 'Mail', teams: 'Teams', atl: 'Jira and Confluence', cal: 'Calendar', agenda: 'Agenda',
+  var SRC_NAME = { saved: 'Saved items', me: 'Your profile', mail: 'Mail', teams: 'Teams', atl: 'Jira and Confluence', cal: 'Calendar', agenda: 'Agenda', leave: 'Leave approver (extension)',
     waits: 'Waiting on others', tx: 'Meeting transcripts', rank: 'Claude ranking', perms: 'Permissions' };
   var LOADING_TEXT = { saved: 'Loading your saved items…', mail: 'Loading mail…', teams: 'Loading Teams chats…', atl: 'Loading Jira and Confluence…' };
   S.src = {}; S.srcMail = []; S.srcTeams = []; S.jiraRaw = null; S.jiraFirst = null; S.calWanted = false; S.savedOk = false;
@@ -1761,7 +1761,7 @@
   }
 
   /* ---------------- Diagnostics (tap the status strip) ---------------- */
-  var DIAG_KEYS = ['saved', 'me', 'mail', 'teams', 'atl', 'cal', 'waits', 'tx', 'rank', 'perms'];
+  var DIAG_KEYS = ['saved', 'me', 'mail', 'teams', 'atl', 'cal', 'agenda', 'leave', 'waits', 'tx', 'rank', 'perms'];
   function hms(d) { return d ? U.hhmm(d) + ':' + pad(d.getSeconds()) : '··:··'; }
   function diagState(s) { return s.state === 'idle' ? 'not started' : s.state === 'error' ? 'error · ' + s.code : s.state; }
   function renderDiag() {
@@ -1770,7 +1770,7 @@
     if (!S.diagOpen) return;
     var h = '<ul class="diag-list">';
     DIAG_KEYS.forEach(function (k) {
-      var s = srcState(k), extra = k === 'me' && S.meFrom === 'atlassian' ? ' · using the Atlassian email' : '';
+      var s = srcState(k), extra = k === 'me' && S.meFrom === 'atlassian' ? ' · using the Atlassian email' : k === 'leave' && s.state === 'ok' ? ' · connected' : '';
       h += '<li data-diag-src="' + k + '"><span class="d-name">' + esc(SRC_NAME[k]) + '</span>' +
         '<span class="d-state" data-state="' + esc(s.state) + '">' + esc(diagState(s) + extra) + '</span>' +
         '<span class="d-time">' + esc(hms(s.at)) + '</span>' +
@@ -3492,6 +3492,10 @@
     checkPerms();
     load({ full: true });
     if (hours) hours.start({ onChange: rebuild });
-    if (D.leave) D.leave.start({ onChange: function () { rebuild(); renderAllKeepFocus(); } });
+    if (D.leave) {
+      setSrc('leave', 'loading');
+      D.leave.start({ onChange: function () { rebuild(); renderAllKeepFocus(); },
+        onBridge: function (ok) { if (ok) setSrc('leave', 'ok'); else setSrc('leave', 'error', { code: 'not_found', message: 'The Planon leave approver extension did not answer in this browser.' }); } });
+    }
   });
 })(window.Droplet = window.Droplet || {});
