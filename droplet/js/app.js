@@ -1552,7 +1552,7 @@
      items. Your own address is left out once get_me is known. */
   /* The agenda for Today: each sync, on its own; it never blocks the list. */
   function startAgenda() {
-    if (!D.agenda) return;
+    if (!D.agenda || !rt.mcp) return; /* without the connector the mail line already says so */
     run('agenda', function () { return D.agenda.load(new Date()); }, rt.cfg.callMs + 2000).then(function (x) {
       if (x.stale) return;
       if (x.ok) { S.agenda = x.r || []; S.notes.agenda = null; }
