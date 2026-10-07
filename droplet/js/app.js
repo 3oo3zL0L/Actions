@@ -75,7 +75,7 @@
     if (movedToday(it)) return 'now';
     if (movedLater(it)) return 'later';
     if (it.standstill) return 'now';
-    if (it.src === 'hours') return 'now'; /* the weekly hours recap: pinned to Today until Done */
+    if (it.src === 'hours' || it.src === 'cal') return 'now'; /* the hours recap and agenda items: in Today until Done */
     if (S.verdict[it.id] === 'up') return 'now';
     if (it.src === 'wait' && g === 'hidden') return 'later';
     if (it.src === 'mine') {
@@ -93,10 +93,10 @@
      placed by Claude: shown at the top of Today (after R1 and ★). */
   function urgentMine(it) {
     if (movedLater(it)) return false;
-    if (it.src === 'hours') return true;
+    if (it.src === 'hours' || it.src === 'cal') return true;
     return it.src === 'mine' && (pinned(it) || S.verdict[it.id] !== 'down' && (!!(it.due && it.due <= mine.today()) || !!(S.fresh[it.id] && !it.r)));
   }
-  function pinned(it) { if (movedLater(it)) return false; if (movedToday(it)) return true; if (it && it.src === 'hours') return true; var a = it && it.src === 'mine' && S.actions[it.docId]; return !!(a && a.pinnedToday && !a.done); }
+  function pinned(it) { if (movedLater(it)) return false; if (movedToday(it)) return true; if (it && (it.src === 'hours' || it.src === 'cal')) return true; var a = it && it.src === 'mine' && S.actions[it.docId]; return !!(a && a.pinnedToday && !a.done); }
   function GI(g) { return g === 'now' ? 0 : g === 'later' ? 1 : 2; }
   function cmp(a, b) {
     var x, y;
@@ -148,15 +148,16 @@
   function alsoIn(it) {
     return S.items.filter(function (o) { return o !== it && rk(o).dupOf === it.id && o.src !== it.src; });
   }
-  var SRC = { mail: 'Mail', teams: 'Teams', mine: 'My action', wait: 'Waiting', meeting: 'Meeting', jira: 'Jira', confluence: 'Confluence', hours: 'Hours' };
+  var SRC = { mail: 'Mail', teams: 'Teams', mine: 'My action', wait: 'Waiting', meeting: 'Meeting', jira: 'Jira', confluence: 'Confluence', hours: 'Hours', cal: 'Agenda' };
   function isHours(it) { return it && it.src === 'hours'; }
+  function isCal(it) { return it && it.src === 'cal'; }
   function isJira(it) { return it && it.src === 'jira'; }
   function isPage(it) { return it && it.src === 'confluence'; }
   function isMine(it) { return it && it.src === 'mine'; }
   function isWait(it) { return it && it.src === 'wait'; }
   /* An own action made from a meeting commitment (R6). */
   function fromMeeting(it) { return isMine(it) && it.origin && it.origin.eventId ? it.origin : null; }
-  function srcLabel(it) { var o = fromMeeting(it); return o ? 'From meeting ' + U.clip(o.subject || 'a meeting', 40) : SRC[it.src]; }
+  function srcLabel(it) { if (isCal(it)) return 'Agenda'; var o = fromMeeting(it); return o ? 'From meeting ' + U.clip(o.subject || 'a meeting', 40) : SRC[it.src]; }
   /* The list item mirrors its stored action. */
   function syncAction(it) {
     var a = S.actions[it.docId]; if (!a) return it;
@@ -236,6 +237,7 @@
     if (S.notes.teams) line('teams', S.notes.teams, true);
     if (S.notes.atl) line('atl', S.notes.atl, true);
     if (S.notes.cal) line('cal', S.notes.cal, false);
+    if (S.notes.agenda) line('agenda', S.notes.agenda, false);
     var noun = S.rankingTeams ? ' new item' : ' new mail';
     if (S.ranking) line('ranking', 'Claude is ranking ' + S.ranking + noun + (S.ranking === 1 ? '' : 's') + '…', false);
     else if (S.notes.rank) line('rank', S.notes.rank, true);
@@ -309,7 +311,7 @@
         '<span class="fi-title">' + esc(titleOf(it)) + '</span></span></div>' +
       '<div class="fi-act"><div class="done-line" data-done-line>' + ico('check') + esc(g.label) + '</div></div></li>';
   }
-  function srcKind(it) { return isHours(it) ? 'hours' : isTeams(it) ? 'teams' : isWait(it) ? 'wait' : fromMeeting(it) ? 'meeting' : isMine(it) ? 'mine' : isJira(it) ? 'jira' : isPage(it) ? 'confluence' : 'mail'; }
+  function srcKind(it) { return isCal(it) ? 'meeting' : isHours(it) ? 'hours' : isTeams(it) ? 'teams' : isWait(it) ? 'wait' : fromMeeting(it) ? 'meeting' : isMine(it) ? 'mine' : isJira(it) ? 'jira' : isPage(it) ? 'confluence' : 'mail'; }
   function srcHTML(it) { var k = srcKind(it); return '<span class="src" data-src="' + k + '">' + ico(k) + esc(srcLabel(it)) + '</span>'; }
   function dueHTML(it) { return isMine(it) && it.due ? '<span class="flag" data-due>' + esc(mine.dueLabel(it.due)) + '</span>' : ''; }
   function meetingHTML(it) { return it.meeting ? '<span class="flag" data-meeting>Meeting ' + esc(it.meeting.hhmm) + '</span>' : ''; }
@@ -328,6 +330,7 @@
   }
   function actHTML(it) {
     if (isHours(it)) return ''; /* the recap has no action, only Done */
+    if (isCal(it) && !rk(it).label) return '';
     if (waitingTeams(it.id)) return '<button class="btn-act is-wait" data-act="' + esc(it.id) + '" data-waiting>' + 'Waiting for you to send in Teams' + '</button>';
     if (isClosed(it.id)) return stateChip(it.id);
     return '<button class="btn-act" data-act="' + esc(it.id) + '">' + esc(rk(it).label) + '</button>';
@@ -370,7 +373,8 @@
         '<button class="fi-open" data-open="' + esc(it.id) + '" data-drag="' + esc(it.id) + '"' + (cur ? ' aria-current="true"' : '') + ' aria-keyshortcuts="m" aria-label="Open ' + (i + 1) + ': ' + esc(titleOf(it)) + '">' +
           '<span class="fi-rank" aria-hidden="true">' + pad(i + 1) + '</span>' +
           '<span class="fi-body">' +
-            '<span class="fi-meta">' + srcHTML(it) + '<span class="sep" aria-hidden="true">·</span><span>' + esc(project(it)) + '</span>' +
+            '<span class="fi-meta">' + srcHTML(it) + (isCal(it) && it.color ? '<span class="cal-dot cal-' + esc(it.color) + '" title="' + esc(it.color) + ' category"></span>' : '') +
+              '<span class="sep" aria-hidden="true">·</span><span>' + esc(project(it)) + '</span>' +
               (fl ? '<span class="flag">' + esc(fl) + '</span>' : '') + waitChip(it) + meetingHTML(it) + dueHTML(it) +
               (n ? '<span>+' + n + ' in thread</span>' : '') + alsoTag(it) +
               '<span class="cur-tag" aria-hidden="true">In panel</span></span>' +
@@ -1217,6 +1221,7 @@
     col.classList.toggle('is-idle', S.view !== 'item' || !it);
     if (S.view !== 'item' || !it) { out.innerHTML = emptyHTML(); return; }
     if (isHours(it)) { out.innerHTML = hoursItemHTML(it); S.anim = false; return; }
+    if (isCal(it)) { out.innerHTML = calItemHTML(it); S.anim = false; return; }
     if (isWait(it)) { out.innerHTML = waitItemHTML(it); S.anim = false; return; }
     if (isJira(it)) { out.innerHTML = jiraItemHTML(it); S.anim = false; return; }
     if (isPage(it)) { out.innerHTML = pageItemHTML(it); S.anim = false; return; }
@@ -1296,6 +1301,41 @@
         r: { group: 'now', why: hours.summary(x), project: 'Salesforce', label: '', action: 'open' } });
     });
   }
+  /* Agenda items (js/agenda.js): today's Green/Blue/Red appointments and
+     STEERCO / Q release plan from 14 days ahead. Never ranked; Open, Done. */
+  function agendaItems() {
+    var now = new Date();
+    return (S.agenda || []).map(function (e) {
+      var id = 'cal:' + D.agenda.key(e), old = S.byId[id], it = old && isCal(old) ? old : { id: id, src: 'cal' };
+      var t = U.hhmm(new Date(e.start)) + '–' + U.hhmm(new Date(e.end)), n = D.agenda.daysUntil(e.start, now);
+      var when = n <= 0 ? 'Today ' + t : n === 1 ? 'Tomorrow ' + U.hhmm(new Date(e.start)) : 'In ' + n + ' days · ' + U.whenLong(new Date(e.start).toISOString());
+      var why, label;
+      if (e.kind === 'today') { why = [e.location, e.people ? e.people + ' people' : ''].filter(Boolean).join(' · ') || 'In your agenda today.'; label = e.webLink ? 'Open in Outlook' : ''; }
+      else if (e.kind === 'steerco') { var np = steerEntries(restItems().filter(inSteer)).length; why = when + ' · your STEERCO list has ' + np + ' point' + (np === 1 ? '' : 's') + '.'; label = 'Open STEERCO list'; }
+      else { why = when + ' · prepare your part of the release plan.'; label = e.webLink ? 'Open in Outlook' : ''; }
+      return Object.assign(it, { key: D.agenda.key(e), ev: e, color: e.color, calKind: e.kind, subject: e.subject, senderName: 'Agenda', sender: e.organizer || '',
+        summary: why, received: new Date(e.start).toISOString(), internal: true,
+        r: { group: 'now', why: why, project: e.kind === 'today' ? t : (e.kind === 'steerco' ? 'STEERCO' : 'Release plan'), label: label, action: 'open', pos: -1e6 + (e.start - now.getTime()) / 6e4 } });
+    });
+  }
+  function calItemHTML(it) {
+    var e = it.ev, top = topItems(), i = top.indexOf(it), n = i > -1 ? i + 1 : restItems().indexOf(it) + top.length + 1;
+    var link = e.webLink ? '<a class="btn-q" href="' + esc(e.webLink) + '" target="_blank" rel="noopener noreferrer">' + ico('out') + 'Open in Outlook</a>' : '';
+    return '<div class="iv-head">' +
+        '<button class="btn-back" data-back aria-label="Back to the list">' + ico('back') + '<span class="lbl-phone">Back</span><span class="lbl-desk">Close</span></button>' +
+        '<span class="iv-crumb" aria-label="Location"><span class="c-sec">' + (i > -1 ? 'Today' : 'Everything else') + '</span><span class="sep" aria-hidden="true">›</span>' +
+          '<span class="c-n">#' + pad(n) + '</span><span class="sep" aria-hidden="true">›</span><b>Agenda</b></span>' +
+        '<span class="kbd" aria-hidden="true">Esc</span>' +
+      '</div>' +
+      '<div class="iv-scroll' + (S.anim ? ' enter' : '') + '">' +
+        '<div class="iv-meta">' + srcHTML(it) + (it.color ? '<span class="cal-dot cal-' + esc(it.color) + '"></span>' : '') + '<span class="sep" aria-hidden="true">·</span><span>' + esc(U.whenLong(new Date(e.start).toISOString())) + ' – ' + esc(U.hhmm(new Date(e.end))) + '</span></div>' +
+        '<h2 class="iv-title" id="ivTitle" tabindex="-1">' + esc(titleOf(it)) + '</h2>' +
+        '<div class="iv-why"><span class="who" aria-hidden="true">' + ico('meeting') + '</span><p>' + esc(it.r.why) + '</p></div>' +
+        (e.location ? '<p class="muted">' + esc(e.location) + '</p>' : '') +
+        '<div class="held-act">' + link + (it.calKind === 'steerco' ? '<button class="btn-q" data-steer-open>' + ico('later') + 'Open STEERCO list</button>' : '') + '</div>' +
+      '</div>' +
+      '<div class="iv-bar"><div class="quiet"></div><button class="btn-send" id="sendBtn" data-done-primary>' + ico('check') + 'Done</button></div>';
+  }
   function barHTML(it) {
     var st = sendState(it.id), locked = st.phase === 'sent', busy = st.phase === 'sending';
     var q = function (key, icon, label, k, pressed) {
@@ -1369,7 +1409,7 @@
      timeout, so a consent prompt nobody answers or a stalled connector
      turns into one quiet line of its own and never blocks the rest. */
   var CORE = ['saved', 'me', 'mail', 'teams', 'atl', 'cal'];
-  var SRC_NAME = { saved: 'Saved items', me: 'Your profile', mail: 'Mail', teams: 'Teams', atl: 'Jira and Confluence', cal: 'Calendar',
+  var SRC_NAME = { saved: 'Saved items', me: 'Your profile', mail: 'Mail', teams: 'Teams', atl: 'Jira and Confluence', cal: 'Calendar', agenda: 'Agenda',
     waits: 'Waiting on others', tx: 'Meeting transcripts', rank: 'Claude ranking', perms: 'Permissions' };
   var LOADING_TEXT = { saved: 'Loading your saved items…', mail: 'Loading mail…', teams: 'Loading Teams chats…', atl: 'Loading Jira and Confluence…' };
   S.src = {}; S.srcMail = []; S.srcTeams = []; S.jiraRaw = null; S.jiraFirst = null; S.calWanted = false; S.savedOk = false;
@@ -1406,7 +1446,7 @@
     if (opts.full || !S.savedOk) startSaved();
     if (opts.full) loadPlaces();
     startMe();
-    startMail(now); startTeams(now); startAtl();
+    startMail(now); startTeams(now); startAtl(); startAgenda();
     S.calWanted = true;
     rebuild();
   }
@@ -1510,6 +1550,16 @@
   }
   /* Today's calendar (R5): read once per sync, only when there are open
      items. Your own address is left out once get_me is known. */
+  /* The agenda for Today: each sync, on its own; it never blocks the list. */
+  function startAgenda() {
+    if (!D.agenda) return;
+    run('agenda', function () { return D.agenda.load(new Date()); }, rt.cfg.callMs + 2000).then(function (x) {
+      if (x.stale) return;
+      if (x.ok) { S.agenda = x.r || []; S.notes.agenda = null; }
+      else S.notes.agenda = 'Couldn’t read your agenda just now.';
+      arrived();
+    });
+  }
   function maybeStartCal() {
     if (!S.calWanted || !S.items.length) return;
     S.calWanted = false;
@@ -1577,7 +1627,7 @@
       if (j) { j.status = j.status || x.status; j.projectName = j.projectName || x.projectName; if (!j.project0) j.project0 = x.project0; return; }
       atlList.push(x);
     });
-    var all = S.srcMail.concat(S.srcTeams, S.jiraMail, atlList, hoursItems()), doneIds = {};
+    var all = S.srcMail.concat(S.srcTeams, S.jiraMail, atlList, hoursItems(), agendaItems()), doneIds = {};
     var items = all.filter(function (m) {
       var done = S.doneDb && S.doneDb[m.key] && !S.doneNow[m.id];
       /* A Jira item comes back when a newer notification arrives after your comment. */
@@ -1593,7 +1643,7 @@
     var wi = waitItemsNow(now);
     items = items.concat(wi.due); S.waitPre = wi.pre;
     items = items.filter(function (m) {
-      if (isHours(m)) return true; /* never ranked, never drafted */
+      if (isHours(m) || isCal(m)) return true; /* never ranked, never drafted */
       try { attach(m); return true; } catch (e) { noteError('attach ' + (m.src || '?'), e); return !!m.src; }
     });
     /* R8: an item merged into one that is done is done too. */
@@ -3179,7 +3229,11 @@
     if ((t.hasAttribute('data-done') || t.hasAttribute('data-done-primary') || t.hasAttribute('data-notwaiting')) && performance.now() < (S.doneGuardUntil || 0)) return;
     if ((t.hasAttribute('data-open') || t.hasAttribute('data-act')) && !desk() && performance.now() < (S.doneGuardUntil || 0) - 150) return;
     if ((id = t.getAttribute('data-open'))) return openItem(id, false);
-    if ((id = t.getAttribute('data-act'))) { var it = S.byId[id]; return openItem(id, !!(it && rk(it).kind === 'reply')); }
+    if ((id = t.getAttribute('data-act'))) {
+      var it = S.byId[id];
+      if (isCal(it)) { if (it.calKind === 'steerco') return setSteerOpen(true); if (it.ev.webLink) { try { window.open(it.ev.webLink, '_blank', 'noopener,noreferrer'); } catch (x) { /* blocked */ } } return; }
+      return openItem(id, !!(it && rk(it).kind === 'reply'));
+    }
     if ((id = t.getAttribute('data-move'))) return moveTo(id, 'later');
     if ((id = t.getAttribute('data-move-today'))) return moveTo(id, 'today');
     if ((id = t.getAttribute('data-steer-off'))) return moveTo(id, 'off');
@@ -3378,7 +3432,7 @@
     if (S.view !== 'item' || !S.cur) return;
     /* d (Done) works from either pane and also after a send. */
     if (e.key === 'd') { e.preventDefault(); markDone(); return; }
-    if (S.pane !== 'item' || isHours(S.byId[S.cur])) return;
+    if (S.pane !== 'item' || isHours(S.byId[S.cur]) || isCal(S.byId[S.cur])) return;
     var ph = sendState(S.cur).phase;
     if (ph === 'sent' || ph === 'sending') return;
     if (e.key === 'c') { e.preventDefault(); toggleChat(); }

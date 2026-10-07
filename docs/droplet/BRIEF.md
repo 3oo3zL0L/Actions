@@ -109,3 +109,9 @@ Thomas rejected STEERCO as a column and as a big panel ("klein, ergens"). UX pro
 - Open (click, `Shift+S`): a 480 px panel under the tray with the list (notes, Done / Off list / Remove / Ask), Copy and the "From meetings" suggestions; it still takes drops. Esc, ✕, the tray or a click outside close it; focus returns to the tray.
 - Phone: the tray is a full-width row under the header; open is a bottom sheet (80% height).
 - The lanes are again three full-height columns next to Today: Waiting on, Later, Week.
+
+## Agenda in Today (7 okt 2026)
+
+- Today's appointments with the Outlook categories **Green / Blue / Red** (default names, Dutch too) appear in Today until they have ended, in time order, with a small colour dot. Command: Open in Outlook; Done hides the card (db `done/cal-…`).
+- **STEERCO** and the **quarterly release plan** ("Release plan Qn", "Qn release") appear from **14 days** before ("In 10 days · …"). STEERCO's command opens the STEERCO list.
+- Read-only (`js/agenda.js`): three `outlook_calendar_search` calls per sync (today, "steerco", "release"); nothing in the calendar changes.

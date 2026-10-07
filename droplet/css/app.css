@@ -1282,3 +1282,9 @@ html.is-dragging .st-pop .drop-hint { display: block; }
 }
 html.drag-from-steer .st-pop { opacity: 0.12; pointer-events: none; transition: opacity 0.15s ease; }
 html.drag-from-steer .drag-ghost { opacity: 1; }
+
+/* Agenda items: the Outlook category as a small dot (no new tokens). */
+.cal-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-left: 2px; flex: none; }
+.cal-green { background: #7fc98a; }
+.cal-blue { background: #6ea8de; }
+.cal-red { background: #e0736c; }

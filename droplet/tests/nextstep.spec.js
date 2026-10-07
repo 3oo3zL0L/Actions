@@ -23,7 +23,7 @@ test.describe('Find a time', () => {
     // "free" time doesn't block. Bas's calendar can't be read: said so.
     await expect(page.locator('[data-ns-slot]')).toHaveText(['Mon 5 Oct · 10:00–10:30', 'Tue 6 Oct · 12:00–12:30', 'Wed 7 Oct · 09:30–10:00']);
     await expect(page.locator('[data-cal-note]')).toHaveText('Only your calendar was checked for Bas: theirs isn’t readable here.');
-    const cal = (await app.calls('mcp')).filter((c) => c.tool === 'outlook_calendar_search' && c.input.afterDateTime === '2026-10-02');
+    const cal = (await app.calls('mcp')).filter((c) => c.tool === 'outlook_calendar_search' && c.input.afterDateTime === '2026-10-02' && !/^(steerco|release)$/.test(c.input.query));
     expect(cal.map((c) => c.input.calendarOwnerEmail || 'me').sort()).toEqual([ANNA.address, BAS.address, 'me']);
     await expect(page.locator('#nsTitle')).toHaveValue('DoD follow-up');
     await expect(page.locator('#nsAgenda')).toHaveValue('Agree the final DoD.\n\n- Walk through the draft\n- Decide what goes to PST');
@@ -91,7 +91,7 @@ test.describe('Find a time', () => {
     await expect(page.locator('[data-ns-unknown]')).toContainText('Droplet doesn’t know an address for Zoë.');
     await expect(page.locator('[data-ns-person]')).toHaveCount(0);
     await expect(page.locator('[data-ns-invite]')).toHaveAttribute('aria-disabled', 'true');
-    expect((await app.calls('mcp')).filter((c) => c.tool === 'outlook_calendar_search' && c.input.afterDateTime === '2026-10-02')).toHaveLength(0); // no slot search yet
+    expect((await app.calls('mcp')).filter((c) => c.tool === 'outlook_calendar_search' && c.input.afterDateTime === '2026-10-02' && !/^(steerco|release)$/.test(c.input.query))).toHaveLength(0); // no slot search yet
     expect(await page.locator('#itemCol').innerText()).not.toMatch(/zo[eë][^\s]*@/i);
 
     await amb.locator('[data-ns-pick]').nth(1).click();

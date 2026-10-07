@@ -121,7 +121,8 @@ function installDropletStub(cfg) {
   function calSearchShape(e) {
     return { uri: "calendar:///events/" + encodeURIComponent(e.id), id: e.id, subject: e.subject, organizer: e.organizer.address,
       attendees: (e.people || []).map(function (p) { return p.address; }), start: e.start, end: e.end, isCancelled: !!e.isCancelled,
-      showAs: e.showAs || "busy", isAllDay: !!e.isAllDay, isOrganizer: e.organizer.address === (cfg.me || {}).mail, webLink: "https://outlook.office365.com/calendar/item/" + e.id };
+      showAs: e.showAs || "busy", isAllDay: !!e.isAllDay, isOrganizer: e.organizer.address === (cfg.me || {}).mail, webLink: "https://outlook.office365.com/calendar/item/" + e.id,
+      categories: e.categories || null, location: e.location || null };
   }
   function bound(s, end) {
     if (!s) return end ? Infinity : -Infinity;

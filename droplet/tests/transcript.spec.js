@@ -8,7 +8,7 @@ const txPrompts = async (app) => (await app.calls('sample')).filter((c) => /^You
 test.describe('R6: commitments from meeting transcripts', () => {
   test('"Ik plan een vervolg met Anna en Bas" becomes an own action with the quote and the meeting', async ({ app, page }) => {
     await app.boot(meetingsConfig());
-    const cal = (await app.calls('mcp')).filter((c) => c.tool === 'outlook_calendar_search' && c.input.afterDateTime !== 'today');
+    const cal = (await app.calls('mcp')).filter((c) => c.tool === 'outlook_calendar_search' && c.input.afterDateTime !== 'today' && !/^(steerco|release)$/.test(c.input.query));
     expect(cal.map((c) => c.input)).toEqual([{ query: '*', afterDateTime: '2026-09-27', beforeDateTime: 'tomorrow', limit: 25, offset: 0 }]);
     // Each ended meeting in the window is read once; the transcript URL is passed verbatim.
     const reads = (await app.calls('mcp')).filter((c) => c.tool === 'read_resource').map((c) => c.input.uri);
