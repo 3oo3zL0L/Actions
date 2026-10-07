@@ -75,7 +75,7 @@
     if (movedToday(it)) return 'now';
     if (movedLater(it)) return 'later';
     if (it.standstill) return 'now';
-    if (it.src === 'hours' || it.src === 'cal') return 'now'; /* the hours recap and agenda items: in Today until Done */
+    if (it.src === 'hours' || it.src === 'cal' || it.src === 'leave') return 'now'; /* hours recap, agenda, approved leave: in Today until Done */
     if (S.verdict[it.id] === 'up') return 'now';
     if (it.src === 'wait' && g === 'hidden') return 'later';
     if (it.src === 'mine') {
@@ -93,10 +93,10 @@
      placed by Claude: shown at the top of Today (after R1 and ★). */
   function urgentMine(it) {
     if (movedLater(it)) return false;
-    if (it.src === 'hours' || it.src === 'cal') return true;
+    if (it.src === 'hours' || it.src === 'cal' || it.src === 'leave') return true;
     return it.src === 'mine' && (pinned(it) || S.verdict[it.id] !== 'down' && (!!(it.due && it.due <= mine.today()) || !!(S.fresh[it.id] && !it.r)));
   }
-  function pinned(it) { if (movedLater(it)) return false; if (movedToday(it)) return true; if (it && (it.src === 'hours' || it.src === 'cal')) return true; var a = it && it.src === 'mine' && S.actions[it.docId]; return !!(a && a.pinnedToday && !a.done); }
+  function pinned(it) { if (movedLater(it)) return false; if (movedToday(it)) return true; if (it && (it.src === 'hours' || it.src === 'cal' || it.src === 'leave')) return true; var a = it && it.src === 'mine' && S.actions[it.docId]; return !!(a && a.pinnedToday && !a.done); }
   function GI(g) { return g === 'now' ? 0 : g === 'later' ? 1 : 2; }
   function cmp(a, b) {
     var x, y;
@@ -148,16 +148,17 @@
   function alsoIn(it) {
     return S.items.filter(function (o) { return o !== it && rk(o).dupOf === it.id && o.src !== it.src; });
   }
-  var SRC = { mail: 'Mail', teams: 'Teams', mine: 'My action', wait: 'Waiting', meeting: 'Meeting', jira: 'Jira', confluence: 'Confluence', hours: 'Hours', cal: 'Agenda' };
+  var SRC = { mail: 'Mail', teams: 'Teams', mine: 'My action', wait: 'Waiting', meeting: 'Meeting', jira: 'Jira', confluence: 'Confluence', hours: 'Hours', cal: 'Agenda', leave: 'Leave' };
   function isHours(it) { return it && it.src === 'hours'; }
   function isCal(it) { return it && it.src === 'cal'; }
+  function isLeave(it) { return it && it.src === 'leave'; }
   function isJira(it) { return it && it.src === 'jira'; }
   function isPage(it) { return it && it.src === 'confluence'; }
   function isMine(it) { return it && it.src === 'mine'; }
   function isWait(it) { return it && it.src === 'wait'; }
   /* An own action made from a meeting commitment (R6). */
   function fromMeeting(it) { return isMine(it) && it.origin && it.origin.eventId ? it.origin : null; }
-  function srcLabel(it) { if (isCal(it)) return 'Agenda'; var o = fromMeeting(it); return o ? 'From meeting ' + U.clip(o.subject || 'a meeting', 40) : SRC[it.src]; }
+  function srcLabel(it) { if (isCal(it)) return 'Agenda'; if (isLeave(it)) return 'Leave'; var o = fromMeeting(it); return o ? 'From meeting ' + U.clip(o.subject || 'a meeting', 40) : SRC[it.src]; }
   /* The list item mirrors its stored action. */
   function syncAction(it) {
     var a = S.actions[it.docId]; if (!a) return it;
@@ -311,7 +312,7 @@
         '<span class="fi-title">' + esc(titleOf(it)) + '</span></span></div>' +
       '<div class="fi-act"><div class="done-line" data-done-line>' + ico('check') + esc(g.label) + '</div></div></li>';
   }
-  function srcKind(it) { return isCal(it) ? 'meeting' : isHours(it) ? 'hours' : isTeams(it) ? 'teams' : isWait(it) ? 'wait' : fromMeeting(it) ? 'meeting' : isMine(it) ? 'mine' : isJira(it) ? 'jira' : isPage(it) ? 'confluence' : 'mail'; }
+  function srcKind(it) { return isLeave(it) ? 'check' : isCal(it) ? 'meeting' : isHours(it) ? 'hours' : isTeams(it) ? 'teams' : isWait(it) ? 'wait' : fromMeeting(it) ? 'meeting' : isMine(it) ? 'mine' : isJira(it) ? 'jira' : isPage(it) ? 'confluence' : 'mail'; }
   function srcHTML(it) { var k = srcKind(it); return '<span class="src" data-src="' + k + '">' + ico(k) + esc(srcLabel(it)) + '</span>'; }
   function dueHTML(it) { return isMine(it) && it.due ? '<span class="flag" data-due>' + esc(mine.dueLabel(it.due)) + '</span>' : ''; }
   function meetingHTML(it) { return it.meeting ? '<span class="flag" data-meeting>Meeting ' + esc(it.meeting.hhmm) + '</span>' : ''; }
@@ -329,7 +330,7 @@
     return '';
   }
   function actHTML(it) {
-    if (isHours(it)) return ''; /* the recap has no action, only Done */
+    if (isHours(it) || isLeave(it)) return ''; /* a recap or a report: no action, only Done */
     if (isCal(it) && !rk(it).label) return '';
     if (waitingTeams(it.id)) return '<button class="btn-act is-wait" data-act="' + esc(it.id) + '" data-waiting>' + 'Waiting for you to send in Teams' + '</button>';
     if (isClosed(it.id)) return stateChip(it.id);
@@ -1222,6 +1223,7 @@
     if (S.view !== 'item' || !it) { out.innerHTML = emptyHTML(); return; }
     if (isHours(it)) { out.innerHTML = hoursItemHTML(it); S.anim = false; return; }
     if (isCal(it)) { out.innerHTML = calItemHTML(it); S.anim = false; return; }
+    if (isLeave(it)) { out.innerHTML = leaveItemHTML(it); S.anim = false; return; }
     if (isWait(it)) { out.innerHTML = waitItemHTML(it); S.anim = false; return; }
     if (isJira(it)) { out.innerHTML = jiraItemHTML(it); S.anim = false; return; }
     if (isPage(it)) { out.innerHTML = pageItemHTML(it); S.anim = false; return; }
@@ -1317,6 +1319,37 @@
         summary: why, received: new Date(e.start).toISOString(), internal: true,
         r: { group: 'now', why: why, project: e.kind === 'today' ? t : (e.kind === 'steerco' ? 'STEERCO' : 'Release plan'), label: label, action: 'open', pos: -1e6 + (e.start - now.getTime()) / 6e4 } });
     });
+  }
+  /* Approved leave (js/leave.js): one card per run of the leave approver that
+     approved something. Only what was approved; Done takes it off. */
+  function leaveItems() {
+    if (!D.leave || !D.leave.state.loaded) return [];
+    return D.leave.withApprovals().map(function (r) {
+      var id = 'leave:' + r.id, old = S.byId[id], it = old && isLeave(old) ? old : { id: id, src: 'leave' };
+      var ap = D.leave.approved(r);
+      var line = ap.slice(0, 3).map(function (q) { return U.firstName(q.requestor) + ' ' + D.leave.span(q) + (q.hours != null ? ' (' + D.leave.hoursText(q.hours) + ')' : ''); }).join(' · ') + (ap.length > 3 ? ' · +' + (ap.length - 3) + ' more' : '');
+      return Object.assign(it, { key: 'leave-' + r.id, report: r, approvedList: ap, subject: 'Leave approved · ' + ap.length + ' request' + (ap.length === 1 ? '' : 's'),
+        senderName: 'Planon', sender: '', summary: line, received: new Date(r.finishedAt).toISOString(), internal: true,
+        r: { group: 'now', why: line, project: 'Planon', label: '', action: 'open' } });
+    });
+  }
+  function leaveItemHTML(it) {
+    var top = topItems(), i = top.indexOf(it), n = i > -1 ? i + 1 : restItems().indexOf(it) + top.length + 1;
+    return '<div class="iv-head">' +
+        '<button class="btn-back" data-back aria-label="Back to the list">' + ico('back') + '<span class="lbl-phone">Back</span><span class="lbl-desk">Close</span></button>' +
+        '<span class="iv-crumb" aria-label="Location"><span class="c-sec">' + (i > -1 ? 'Today' : 'Everything else') + '</span><span class="sep" aria-hidden="true">›</span>' +
+          '<span class="c-n">#' + pad(n) + '</span><span class="sep" aria-hidden="true">›</span><b>Leave</b></span>' +
+        '<span class="kbd" aria-hidden="true">Esc</span>' +
+      '</div>' +
+      '<div class="iv-scroll' + (S.anim ? ' enter' : '') + '">' +
+        '<div class="iv-meta">' + srcHTML(it) + '<span class="sep" aria-hidden="true">·</span><span>Planon</span><span class="sep" aria-hidden="true">·</span><span>' + esc(U.when(it.received, new Date())) + '</span></div>' +
+        '<h2 class="iv-title" id="ivTitle" tabindex="-1">' + esc(titleOf(it)) + '</h2>' +
+        '<p class="muted">Approved by the leave approver in Planon' + (it.report.auto ? ' (started from your Planon link)' : '') + '. Nothing to do: Done takes it off your list.</p>' +
+        '<ul class="leave-list">' + it.approvedList.map(function (q) {
+          return '<li><span class="lv-who">' + esc(q.requestor) + '</span><span class="lv-when">' + esc(D.leave.span(q)) + '</span><span class="lv-h">' + esc(D.leave.hoursText(q.hours)) + '</span><span class="lv-n">#' + esc(q.number) + '</span></li>';
+        }).join('') + '</ul>' +
+      '</div>' +
+      '<div class="iv-bar"><div class="quiet"></div><button class="btn-send" id="sendBtn" data-done-primary>' + ico('check') + 'Done</button></div>';
   }
   function calItemHTML(it) {
     var e = it.ev, top = topItems(), i = top.indexOf(it), n = i > -1 ? i + 1 : restItems().indexOf(it) + top.length + 1;
@@ -1627,7 +1660,7 @@
       if (j) { j.status = j.status || x.status; j.projectName = j.projectName || x.projectName; if (!j.project0) j.project0 = x.project0; return; }
       atlList.push(x);
     });
-    var all = S.srcMail.concat(S.srcTeams, S.jiraMail, atlList, hoursItems(), agendaItems()), doneIds = {};
+    var all = S.srcMail.concat(S.srcTeams, S.jiraMail, atlList, hoursItems(), agendaItems(), leaveItems()), doneIds = {};
     var items = all.filter(function (m) {
       var done = S.doneDb && S.doneDb[m.key] && !S.doneNow[m.id];
       /* A Jira item comes back when a newer notification arrives after your comment. */
@@ -1643,7 +1676,7 @@
     var wi = waitItemsNow(now);
     items = items.concat(wi.due); S.waitPre = wi.pre;
     items = items.filter(function (m) {
-      if (isHours(m) || isCal(m)) return true; /* never ranked, never drafted */
+      if (isHours(m) || isCal(m) || isLeave(m)) return true; /* never ranked, never drafted */
       try { attach(m); return true; } catch (e) { noteError('attach ' + (m.src || '?'), e); return !!m.src; }
     });
     /* R8: an item merged into one that is done is done too. */
@@ -3432,7 +3465,7 @@
     if (S.view !== 'item' || !S.cur) return;
     /* d (Done) works from either pane and also after a send. */
     if (e.key === 'd') { e.preventDefault(); markDone(); return; }
-    if (S.pane !== 'item' || isHours(S.byId[S.cur]) || isCal(S.byId[S.cur])) return;
+    if (S.pane !== 'item' || isHours(S.byId[S.cur]) || isCal(S.byId[S.cur]) || isLeave(S.byId[S.cur])) return;
     var ph = sendState(S.cur).phase;
     if (ph === 'sent' || ph === 'sending') return;
     if (e.key === 'c') { e.preventDefault(); toggleChat(); }
@@ -3459,5 +3492,6 @@
     checkPerms();
     load({ full: true });
     if (hours) hours.start({ onChange: rebuild });
+    if (D.leave) D.leave.start({ onChange: function () { rebuild(); renderAllKeepFocus(); } });
   });
 })(window.Droplet = window.Droplet || {});

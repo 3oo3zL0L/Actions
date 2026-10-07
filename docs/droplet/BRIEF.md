@@ -115,3 +115,9 @@ Thomas rejected STEERCO as a column and as a big panel ("klein, ergens"). UX pro
 - Today's appointments with the Outlook categories **Green / Blue / Red** (default names, Dutch too) appear in Today until they have ended, in time order, with a small colour dot. Command: Open in Outlook; Done hides the card (db `done/cal-…`).
 - **STEERCO** and the **quarterly release plan** ("Release plan Qn", "Qn release") appear from **14 days** before ("In 10 days · …"). STEERCO's command opens the STEERCO list.
 - Read-only (`js/agenda.js`): three `outlook_calendar_search` calls per sync (today, "steerco", "release"); nothing in the calendar changes.
+
+## Approved leave (7 okt 2026)
+
+- Source: the colleague's Chrome extension "Planon Verlof Goedkeurder" v1.1+ (not in this repo). Its bridge runs in claude.ai frames and talks to "Action Desk"; Droplet speaks the same messages (`js/leave.js`): hello → reports → store `leave/<run-id>` → `leave-ack`.
+- Thomas only wants to hear what was **approved**: a run with approved requests is one card in Today ("Leave approved · n requests", who / when / hours); Done takes it off. Skipped or failed checks are not shown. Droplet never approves or starts a run.
+- Checked end-to-end with the real extension loaded in Chromium (report saved by its background → pushed → card → ack → extension's pending list empty → Done).
