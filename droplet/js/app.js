@@ -163,6 +163,7 @@
   function syncAction(it) {
     var a = S.actions[it.docId]; if (!a) return it;
     it.subject = a.text; it.due = a.due || null; it.dueBy = a.dueBy || null; it.notes = a.notes || ''; it.summary = a.notes || ''; it.origin = a.origin || null;
+    it.cowork = D.cowork ? D.cowork.of(it.docId) : null;
     return it;
   }
   function isTeams(it) { return it && it.src === 'teams'; }
@@ -406,6 +407,7 @@
       (isWait(it) && !n ? ' · asked ' + it.n + ' working day' + (it.n === 1 ? '' : 's') + ' ago' : '') +
       (it.meeting ? ' · meeting ' + esc(it.meeting.hhmm) : '') + (waitingTeams(it.id) ? ' · waiting for you to send in Teams' : '') +
       (isMine(it) && it.due ? ' · ' + esc(mine.dueLabel(it.due).toLowerCase()) : '') +
+      (it.cowork ? ' · ' + esc(D.cowork.label(it.cowork).toLowerCase()) : '') +
       (ownedByOther(it) && it.origin ? ' · from ' + esc(U.clip(it.origin.subject || 'a meeting', 40)) : '') +
       (S.verdict[it.id] === 'down' ? ' · marked not important' : '') + (putWait(it) ? ' · put in Waiting by you' : movedLater(it) ? ' · moved out of Today by you' : '') + (isWait(it) ? ' ' + waitChip(it) : '') + '</span></span></button>' +
       '</li>';
@@ -836,6 +838,7 @@
         '<div class="iv-why"><span class="who" aria-hidden="true">' + ico('spark') + '</span><p><span class="sr">Claude: </span>' + esc(r.why) + '</p></div>' +
         (next ? '<p class="act-next" data-next>' + ico('spark', 'ico-sm') + '<span>Next step: ' + esc(next.charAt(0).toLowerCase() + next.slice(1)) + '</span></p>' : '') +
         nextHTML(it) +
+        coworkHTML(it) +
         originHTML(it) +
         alsoHTML(it) +
         '<div class="sec-label">' + ico('mine') + 'Details</div>' +
@@ -956,6 +959,19 @@
 
   /* ---------------- Render: meeting origin and next steps (R6) ---------------- */
   var fDay = new Intl.DateTimeFormat('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+  /* Handed to Cowork from Ask Claude: the brief, and what Cowork wrote back (as text). */
+  function coworkHTML(it) {
+    var c = it.cowork; if (!c) return '';
+    var at = c.finishedAt || c.takenAt || c.queuedAt;
+    return '<div class="sec-label">' + ico('out') + 'With Cowork</div>' +
+      '<div class="card src-card cw-card" data-cowork="' + esc(c.status) + '">' +
+        '<div class="mail-from"><span><b data-cowork-status>' + esc(D.cowork.label(c)) + '</b></span><span>' + esc(at ? U.when(at, new Date()) : '') + '</span></div>' +
+        (c.result ? '<p class="cw-result" data-cowork-result>' + esc(c.result) + '</p>' : '') +
+        '<p class="cw-brief">' + esc(c.brief) + '</p>' +
+        (c.from && c.from.title ? '<p class="muted">About: ' + esc(c.from.title) + '</p>' : '') +
+        '<div class="ns-start"><button class="ns-btn" data-cowork-copy="' + esc(it.docId) + '">Copy brief</button></div>' +
+      '</div>';
+  }
   function originHTML(it) {
     var o = fromMeeting(it); if (!o) return '';
     var d = new Date(o.date);
@@ -1479,7 +1495,7 @@
     if (opts.full || !S.savedOk) startSaved();
     if (opts.full) loadPlaces();
     startMe();
-    startMail(now); startTeams(now); startAtl(); startAgenda();
+    startMail(now); startTeams(now); startAtl(); startAgenda(); startCowork();
     S.calWanted = true;
     rebuild();
   }
@@ -1584,6 +1600,30 @@
   /* Today's calendar (R5): read once per sync, only when there are open
      items. Your own address is left out once get_me is known. */
   /* The agenda for Today: each sync, on its own; it never blocks the list. */
+  /* The Cowork queue: read on every sync, so what Cowork wrote back shows. */
+  function startCowork() {
+    if (!D.cowork) return;
+    D.cowork.load().then(function () { if (S.loaded || S.items.length) { S.items.forEach(function (m) { if (isMine(m)) syncAction(m); }); renderAllKeepFocus(); } }, function (e) { noteError('cowork', e); });
+  }
+  /* Ask Claude's "Hand to Cowork" click: an action owned by Cowork plus its brief in the queue. */
+  function handToCowork(o) {
+    var from = o.scope && S.byId[o.scope];
+    var text = mine.clean(o.title); if (!text) return Promise.reject({ message: 'The task needs a title.' });
+    var now = new Date(), docId = mine.newId();
+    var a = { text: text, created: now.toISOString(), done: false, doneAt: null, due: null, dueBy: null, notes: '', pinnedToday: false, owner: 'Cowork' };
+    return D.cowork.queue(docId, { title: text, brief: o.brief, from: from ? { title: titleOf(from), ref: from.src === 'mail' ? from.id : from.issueKey || from.pageId || from.id } : null }).then(function () {
+      S.actions[docId] = a;
+      store.setAction(docId, a);
+      var it = syncAction(mine.toItem(docId, a));
+      S.items.push(it); S.byId[it.id] = it;
+      renderAll();
+      return docId;
+    });
+  }
+  function copyCowork(docId) {
+    var c = D.cowork && D.cowork.of(docId); if (!c) return;
+    copyText(D.cowork.prompt(c, D.cowork.HOME)).then(function () { toast('Copied. Paste it in Cowork if it hasn’t picked it up.'); }, function () { toast('Couldn’t copy. Open the action and copy the brief.'); });
+  }
   function startAgenda() {
     if (!D.agenda || !rt.mcp) return; /* without the connector the mail line already says so */
     run('agenda', function () { return D.agenda.load(new Date()); }, rt.cfg.callMs + 2000).then(function (x) {
@@ -2657,6 +2697,7 @@
     delete S.byId[it.id]; delete S.rankings[it.key];
     S.confirmDel = null;
     store.deleteAction(it.docId); store.clearRanking(it.key);
+    if (D.cowork) D.cowork.drop(it.docId);
     back();
     toast('Deleted “' + U.clip(a && a.text || '', 40) + '”.');
   }
@@ -2952,6 +2993,7 @@
     delete S.byId[id];
     if (it) { delete S.rankings[it.key]; store.clearRanking(it.key); }
     store.deleteAction(docId);
+    if (D.cowork) D.cowork.drop(docId);
     if (S.view === 'item' && S.cur === id) back(); else renderAll();
   }
   function openInviteFromAsk(o) {
@@ -3000,7 +3042,7 @@
     ico: ico, item: function (id) { return S.byId[id] || null; }, title: titleOf, me: function () { return S.me; }, toast: toast,
     isExternal: isExternal, nameFor: nameFor, draftTarget: draftTarget, draftKind: function (it) { var t = draftTarget(it); return t ? t.kind : ''; },
     setDraft: setDraftFromClaude, undoDraft: undoClaudeDraft, chatContext: chatContext, focusList: focusList,
-    addAction: function (t) { return addAction(t); }, removeAction: removeActionQuiet, openInvite: openInviteFromAsk,
+    addAction: function (t) { return addAction(t); }, removeAction: removeActionQuiet, handToCowork: handToCowork, copyCowork: copyCowork, openInvite: openInviteFromAsk,
     replySent: replySent, jiraCommented: jiraCommentedKey, pageUpdated: pageUpdated, followUp: cardFollowUp
   });
   function renderAskbar() {
@@ -3020,6 +3062,7 @@
     if ((id = t.getAttribute('data-card-go'))) return ask.go(id);
     if ((id = t.getAttribute('data-card-open'))) return ask.openPage(id);
     if ((id = t.getAttribute('data-card-undo'))) return ask.undoCard(id);
+    if ((id = t.getAttribute('data-card-copy'))) return ask.copyCard(id);
     if ((id = t.getAttribute('data-card-invite'))) return ask.invite(id);
     if ((id = t.getAttribute('data-card-repropose'))) return ask.repropose(id);
     if ((id = t.getAttribute('data-ask-undo-draft'))) return undoClaudeDraft(id);
@@ -3342,6 +3385,7 @@
     if (t.hasAttribute('data-jira-post') && cur) return onJiraPost();
     if (t.hasAttribute('data-open-page') && cur) return openPage();
     if (t.hasAttribute('data-conf-ask') && cur) return ask.openSheet(cur, 'Update this page: ');
+    if ((id = t.getAttribute('data-cowork-copy'))) return copyCowork(id);
     if (t.hasAttribute('data-star') && cur) return toggleStar();
     if (t.hasAttribute('data-notimp') && cur) return notImportant();
     if (t.hasAttribute('data-nottoday') && cur) return notToday();

@@ -121,3 +121,9 @@ Thomas rejected STEERCO as a column and as a big panel ("klein, ergens"). UX pro
 - Source: the colleague's Chrome extension "Planon Verlof Goedkeurder" v1.1+ (not in this repo). Its bridge runs in claude.ai frames and talks to "Action Desk"; Droplet speaks the same messages (`js/leave.js`): hello → reports → store `leave/<run-id>` → `leave-ack`.
 - Thomas only wants to hear what was **approved**: a run with approved requests is one card in Today ("Leave approved · n requests", who / when / hours); Done takes it off. Skipped or failed checks are not shown. Droplet never approves or starts a run.
 - Checked end-to-end with the real extension loaded in Chromium (report saved by its background → pushed → card → ack → extension's pending list empty → Done).
+
+## Hand to Cowork (8 okt 2026)
+- Ask Claude heeft een tool `hand_to_cowork`: Claude maakt een kaart met een taaktitel en een brief die je kunt aanpassen. Pas als jij op **Hand to Cowork** klikt, komt de taak in de wachtrij.
+- In de wachtrij is de taak een eigen actie met eigenaar "Cowork". Die staat in Waiting on, met de streeplijn voor elsewhere. De brief staat in db `cowork/<id>`.
+- Cowork pakt de taak op met de skill `docs/droplet/cowork-skill/droplet-queue`. De skill leest de collectie via ArtifactData en zet de status op working en daarna op finished of failed, met een kort resultaat. Droplet laat dat resultaat bij elke sync als tekst zien.
+- Met Undo op de kaart, of met Delete op de actie, haal je de taak terug. Done blijft jouw klik. Met **Copy brief** plak je de taak met de hand in Cowork.
