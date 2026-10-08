@@ -87,6 +87,7 @@ test.describe('Layout B: move between Today and Later', () => {
 
   test('drag an Everything else row into Today at a spot; it stays there after a reload', async ({ app, page }) => {
     await app.boot();
+    await page.setViewportSize({ width: 1280, height: 1600 }); // the whole Today lane in view
     await app.openRest();
     const later = await restIds(page);
     const id = later[later.length - 1];

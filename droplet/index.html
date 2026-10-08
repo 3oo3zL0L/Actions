@@ -81,6 +81,21 @@
         </div>
       </form>
       <ol class="focus" id="focus" aria-label="Today"></ol>
+      <div class="ov-rest rest" id="restBox">
+        <button class="rest-toggle" id="restToggle" aria-expanded="true" aria-controls="restPanel" aria-keyshortcuts="/">
+          <span>More today<span class="count" id="restCount"></span></span>
+          <span class="kbd" aria-hidden="true">/</span>
+          <svg class="ico chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <div id="restPanel">
+          <div class="search">
+            <label class="sr" for="q">Search everything</label>
+            <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg>
+            <input id="q" type="search" placeholder="Search people, projects, words" autocomplete="off">
+          </div>
+          <ul class="rest-list" id="restList"></ul>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -102,21 +117,6 @@
         <h2 class="lane-h"><b>Later</b><span class="count" id="offCount"></span><span class="r">Out of Today</span></h2>
         <div class="lane-b">
           <ul class="rest-list is-off" id="offList"></ul>
-          <div class="ov-rest rest" id="restBox">
-            <button class="rest-toggle" id="restToggle" aria-expanded="false" aria-controls="restPanel" aria-keyshortcuts="/">
-              <span>Everything else<span class="count" id="restCount"></span></span>
-              <span class="kbd" aria-hidden="true">/</span>
-              <svg class="ico chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
-            </button>
-            <div id="restPanel" hidden>
-              <div class="search">
-                <label class="sr" for="q">Search everything</label>
-                <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg>
-                <input id="q" type="search" placeholder="Search people, projects, words" autocomplete="off">
-              </div>
-              <ul class="rest-list" id="restList"></ul>
-            </div>
-          </div>
         </div>
       </section>
       <section class="lane lane-week" id="laneWeek" aria-label="Week" data-drop="done">

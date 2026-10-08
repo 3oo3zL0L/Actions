@@ -127,3 +127,8 @@ Thomas rejected STEERCO as a column and as a big panel ("klein, ergens"). UX pro
 - In de wachtrij is de taak een eigen actie met eigenaar "Cowork". Die staat in Waiting on, met de streeplijn voor elsewhere. De brief staat in db `cowork/<id>`.
 - Cowork pakt de taak op met de skill `docs/droplet/cowork-skill/droplet-queue`. De skill leest de collectie via ArtifactData en zet de status op working en daarna op finished of failed, met een kort resultaat. Droplet laat dat resultaat bij elke sync als tekst zien.
 - Met Undo op de kaart, of met Delete op de actie, haal je de taak terug. Done blijft jouw klik. Met **Copy brief** plak je de taak met de hand in Cowork.
+
+## More today (8 okt 2026)
+- Today verbergt niets meer. Onder de top-kaarten staat **More today** met al je overige open werk, standaard open en in rangorde. Wat Claude lager rangschikt, is dus niet meer ingeklapt onder Later.
+- Je kunt het inklappen met de kop. Met / zoek je erin.
+- Het werkt hetzelfde als vroeger Everything else: slepen naar alle lanes, en de lijst scrollt mee als je sleept.

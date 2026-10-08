@@ -4,6 +4,8 @@ const { test, expect } = require('./helpers/harness');
 const { waitsConfig } = require('./helpers/fixtures3');
 
 async function drag(page, from, to) {
+  await page.locator(from).first().scrollIntoViewIfNeeded();
+  await page.locator(to).first().scrollIntoViewIfNeeded().catch(() => {});
   const a = await page.locator(from).first().boundingBox();
   const b = await page.locator(to).first().boundingBox();
   const x0 = a.x + Math.min(40, a.width / 2), y0 = a.y + Math.min(14, a.height / 2);
@@ -51,7 +53,7 @@ test.describe('Drag matrix (laptop)', () => {
 
   test('an Everything else card: → Later → Waiting → Everything else → Today', async ({ app, page }) => {
     await app.boot();
-    await page.click('#restToggle');
+    await expect(page.locator('#restToggle')).toHaveAttribute('aria-expanded', 'true');
     const id = await page.locator('#restList [data-open]').first().getAttribute('data-open');
     await walk(page, id, ['later', 'wait', 'off', 'today']);
   });

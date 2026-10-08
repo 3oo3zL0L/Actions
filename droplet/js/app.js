@@ -3229,7 +3229,7 @@
     /* Near an edge: scroll the page (phone) or the column under the pointer. */
     var edge = 56, dy = e.clientY < edge ? -14 : e.clientY > window.innerHeight - edge ? 14 : 0;
     if (dy) {
-      var under = document.elementFromPoint(e.clientX, e.clientY), col = under && under.closest('.list-col, .lane-b');
+      var under = document.elementFromPoint(e.clientX, e.clientY), col = under && under.closest('.list-main, .list-col, .lane-b');
       if (col && col.scrollHeight > col.clientHeight) col.scrollTop += dy; else window.scrollBy(0, dy);
     }
   }
@@ -3517,7 +3517,7 @@
   });
 
   /* ---------------- Boot ---------------- */
-  S.restOpen = false; /* layout B: Everything else folds under the STEERCO list; / opens it */
+  S.restOpen = true; /* the rest of your open work shows under Today (More today); it can fold; / searches it */
   store.onError = function (path) { if (S.saveManaged && S.saveManaged[path]) return; S.notes.store = 'Couldn’t save a change; it may be gone after a reload.'; renderNotes(); };
   renderAll(); renderAskbar();
   /* A capability that answers after use()'s timeout lights up late. */
