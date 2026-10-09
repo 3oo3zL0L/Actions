@@ -4,6 +4,8 @@ const { test, expect } = require('./helpers/harness');
 const { waitsConfig } = require('./helpers/fixtures3');
 
 async function drag(page, from, to) {
+  await page.locator(from).first().scrollIntoViewIfNeeded();
+  await page.locator(to).first().scrollIntoViewIfNeeded().catch(() => {});
   const a = await page.locator(from).first().boundingBox();
   const b = await page.locator(to).first().boundingBox();
   const x0 = a.x + Math.min(40, a.width / 2), y0 = a.y + Math.min(14, a.height / 2);
@@ -13,22 +15,27 @@ async function drag(page, from, to) {
   for (let i = 1; i <= 10; i++) await page.mouse.move(x0 + (x1 - x0) * i / 10, y0 + (y1 - y0) * i / 10);
   await page.mouse.up();
 }
-const TARGET = { today: '#focus', wait: '#laneWait', later: '#steerList', off: '#restToggle', done: '#laneWeek' };
+const TARGET = { today: '#focus', wait: '#laneWait', later: '#steerTray', off: '#laterBox', done: '#laneWeek' };
 async function where(page, id) {
   const has = async (sel) => (await page.locator(sel).count()) > 0;
   if (await has(`#focus [data-id="${id}"]`)) return 'today';
   if (await has(`#waitList [data-open="${id}"]`)) return 'wait';
   if (await has(`#steerList [data-steer="${id}"]`)) return 'later';
-  if (await has(`#restList [data-open="${id}"]`)) return 'off';
+  if (await has(`#offList [data-open="${id}"]`) || await has(`#restList [data-open="${id}"]`)) return 'off';
   return 'gone';
 }
 function handle(lane, id) {
-  return { today: `#focus [data-id="${id}"] .fi-open`, wait: `#waitList [data-open="${id}"]`, later: `#steerList [data-steer="${id}"] .sc-sub`, off: `#restList [data-open="${id}"]` }[lane];
+  return { today: `#focus [data-id="${id}"] .fi-open`, wait: `#waitList [data-open="${id}"]`, later: `#steerList [data-steer="${id}"] .sc-sub`, off: `#offList [data-open="${id}"], #restList [data-open="${id}"]` }[lane];
 }
+const steerOpen = async (page, on) => {
+  const open = (await page.getAttribute('#steerToggle', 'aria-expanded')) === 'true';
+  if (open !== on) await page.click('#steerToggle');
+};
 async function walk(page, id, path) {
   await page.evaluate(() => { const t = document.getElementById('restToggle'); if (t.getAttribute('aria-expanded') !== 'true') t.click(); });
   let at = await where(page, id);
   for (const to of path) {
+    await steerOpen(page, at === 'later');
     await drag(page, handle(at, id), TARGET[to]);
     await expect.poll(() => where(page, id), { message: `${id}: ${at} → ${to}` }).toBe(to === 'done' ? 'gone' : to);
     at = to;
@@ -46,7 +53,7 @@ test.describe('Drag matrix (laptop)', () => {
 
   test('an Everything else card: → Later → Waiting → Everything else → Today', async ({ app, page }) => {
     await app.boot();
-    await page.click('#restToggle');
+    await expect(page.locator('#restToggle')).toHaveAttribute('aria-expanded', 'true');
     const id = await page.locator('#restList [data-open]').first().getAttribute('data-open');
     await walk(page, id, ['later', 'wait', 'off', 'today']);
   });
@@ -70,24 +77,29 @@ test.describe('Drag matrix (laptop)', () => {
     await expect(page.locator('#app')).toHaveAttribute('data-view', 'item');
   });
 
-  test('own points: Later → Waiting → Later → Today (an action); Everything else says why not; Done', async ({ app, page }) => {
+  test('own points: STEERCO → Waiting → STEERCO → Today (an action); Later says why not; Done', async ({ app, page }) => {
     await app.boot();
     const add = async (v) => { await page.fill('#steerIn', v); await page.press('#steerIn', 'Enter'); };
     await add('Point A');
-    const pt = '#laterBox [data-drag^="point:"] .sc-top, #laneWait [data-drag^="point:"] .sc-top';
+    const inSteer = '#steerList [data-drag^="point:"] .sc-top', inWait = '#laneWait [data-drag^="point:"] .sc-top';
     await page.waitForTimeout(100);
-    await page.evaluate(() => { const u = document.querySelector('[data-undo]'); if (u) window.Droplet.state.undo = null; });
-    await drag(page, pt, '#restToggle');
-    await expect(page.locator('.toast')).toContainText('Your own points live in Later or Waiting on.');
+    await page.evaluate(() => { window.Droplet.state.undo = null; });
+    await steerOpen(page, true);
+    await drag(page, inSteer, '#laterBox');
+    await expect(page.locator('.toast')).toContainText('Your own points live in STEERCO or Waiting on.');
     await expect(page.locator('#steerList .sc.is-note')).toHaveCount(1);
-    await drag(page, pt, '#laneWait');
+    await steerOpen(page, true);
+    await drag(page, inSteer, '#laneWait');
     await expect(page.locator('#waitList .sc.is-note')).toHaveCount(1);
-    await drag(page, pt, '#steerList');
+    await steerOpen(page, false);
+    await drag(page, inWait, '#steerTray');
     await expect(page.locator('#steerList .sc.is-note')).toHaveCount(1);
-    await drag(page, pt, '#laneWeek');
+    await steerOpen(page, true);
+    await drag(page, inSteer, '#laneWeek');
     await expect(page.locator('.sc.is-note')).toHaveCount(0);
     await add('Point B');
-    await drag(page, pt, '#focus');
+    await steerOpen(page, true);
+    await drag(page, inSteer, '#focus');
     await expect(page.locator('#focus')).toContainText('Point B');
   });
 });
@@ -108,11 +120,28 @@ test.describe('Drag by touch (hold, then move)', () => {
     const t = await app.focusIds();
     await touch(`#focus [data-id="${t[1]}"] .fi-open`, '#laneWait');
     await expect(page.locator(`#waitList [data-open="${t[1]}"]`)).toHaveCount(1);
-    await touch(`#focus [data-id="${t[2]}"] .fi-open`, '#steerList');
+    await touch(`#focus [data-id="${t[2]}"] .fi-open`, '#steerTray');
     await expect(page.locator(`#steerList [data-steer="${t[2]}"]`)).toHaveCount(1);
+    await page.tap('#steerToggle');
     await touch(`#steerList [data-steer="${t[2]}"] .sc-sub`, '#focus');
     expect(await app.focusIds()).toContain(t[2]);
     await expect(page.locator('#app')).toHaveAttribute('data-view', 'list'); // no card opened by the release
+  });
+});
+
+test.describe('After a drop', () => {
+  test('a keyboard click is never swallowed: Enter in a form right after a drag still submits', async ({ app, page }) => {
+    await app.boot();
+    await page.fill('#steerIn', 'Point B');
+    // The state right after a drop, before the timer clears it (input can run first on a slow machine).
+    await page.evaluate(() => { window.Droplet.state.dragSwallow = true; });
+    await page.press('#steerIn', 'Enter');
+    await expect(page.locator('#steerList .sc.is-note')).toHaveCount(1);
+    // A real pointer click in that moment is still swallowed (no card opens by the release).
+    await page.evaluate(() => { window.Droplet.state.dragSwallow = true; });
+    const id = (await app.focusIds())[0];
+    await page.click(`#focus [data-id="${id}"] .fi-open`);
+    await expect(page.locator('#app')).toHaveAttribute('data-view', 'list');
   });
 });
 

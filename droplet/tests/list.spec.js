@@ -118,10 +118,14 @@ test.describe('Load and rank', () => {
     expect(await app.focusIds()).toEqual(before);
   });
 
-  test('Everything else folds under Later; / opens it; in rank order, and searchable', async ({ app, page }) => {
+  test('the rest of your open work shows under Today (More today), open; it folds on click; / searches it; in rank order', async ({ app, page }) => {
     await app.boot();
-    await expect(page.locator('#restPanel')).toBeHidden();
+    await expect(page.locator('#listCol #restPanel')).toBeVisible();
+    await expect(page.locator('#restToggle')).toContainText('More today');
     await expect(page.locator('#restCount')).toHaveText('5');
+    await expect(page.locator('#restList .rr')).toHaveCount(5);
+    await page.click('#restToggle');
+    await expect(page.locator('#restPanel')).toBeHidden();
     await page.keyboard.press('/');
     await expect(page.locator('#restPanel')).toBeVisible();
     await expect(page.locator('#q')).toBeFocused();

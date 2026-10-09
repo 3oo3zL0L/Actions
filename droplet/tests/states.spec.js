@@ -117,9 +117,12 @@ test.describe('The moment of completion', () => {
   test('the fold is a 280 ms animation (only when motion is allowed)', async ({ app, page }) => {
     await app.boot();
     await page.click('#focus [data-card-done="a2-anouk"]');
-    const ghost = page.locator('#focus [data-leaving="a2-anouk"].is-leaving');
-    await expect(ghost).toHaveCount(1, { timeout: 1500 });
-    expect(await ghost.evaluate((el) => [getComputedStyle(el).animationName, getComputedStyle(el).animationDuration])).toEqual(['fold', '0.28s']);
+    // Read the style in the same frame the fold is seen: it only lasts 280 ms.
+    const got = await page.waitForFunction(() => {
+      const el = document.querySelector('#focus [data-leaving="a2-anouk"].is-leaving');
+      return el && [getComputedStyle(el).animationName, getComputedStyle(el).animationDuration];
+    }, null, { timeout: 1500, polling: 'raf' });
+    expect(await got.jsonValue()).toEqual(['fold', '0.28s']);
   });
 
   test('reduced motion: the line shows, no fold, then it goes', async ({ app, page }) => {

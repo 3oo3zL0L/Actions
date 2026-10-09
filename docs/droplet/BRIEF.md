@@ -93,3 +93,42 @@ Thomas chose layout B after using C. It replaces C:
 - **Week** lane (green): hours reminders recap, Recently done.
 - Ask Claude sits top right on a laptop (as in the mockup), a bar at the bottom on a phone.
 - As in the mockup: one header across the top; Today is a lane with compact cards (command inline, Done on the right). Moving is by drag (whole card; touch: hold) or m; no Later/Today buttons. Drop targets: Today, Waiting on (db place "wait"; own points get lane "wait"), Later, Everything else, Recently done; an open item is a drawer (max 660 px) over the right lanes with a scrim, Today stays in view. Laptop 960–1199 px: Week goes under Waiting and Later. Phone: lanes stack under Today with a sticky jump bar.
+
+## STEERCO panel, transcripts, alerts (6 okt 2026)
+
+- **STEERCO** is its own panel, bottom right across Later and Week (points two across). Waiting on runs full height on the left of it. **Later** is a plain lane again: what Thomas moved out of Today, then Everything else (folded).
+- **Transcripts** (R6, extended): window about a week (4 working days back). Besides Thomas's own commitments, Claude lists actions others took on (owner by name, quote checked against the transcript) → own actions with `owner`, shown in Waiting on; and up to 3 key points per meeting → STEERCO suggestions ("From meetings": Add / Skip, stored on `meetings/<key>.points`).
+- Droplet re-checks its sources every 30 minutes while open (visible tab).
+- **Push alerts**: an Artifact cannot send OS notifications. A Routine "Droplet new-task alerts" (weekdays 07:55–17:55 Amsterdam, push + email, read-only prompt) exists but is disabled: Routines created from this session carry no connectors. Thomas adds Microsoft 365 and Atlassian Rovo to it in claude.ai → Routines, then enables it.
+
+## STEERCO tray (6 okt 2026, UX direction A)
+
+Thomas rejected STEERCO as a column and as a big panel ("klein, ergens"). UX proposed three small collectors (`docs/droplet/design/steerco.html`); he chose **A, the header tray**:
+- Closed: a lilac bar left of Ask Claude: `STEERCO n [+suggestions] ⌄ | + Add a point… | Add`. Adding (`s`, type, Enter) never opens it.
+- While dragging: the tray lights up and a pocket opens under it ("Drop to raise in STEERCO"). Dragging out of the open panel fades the panel so the lanes show.
+- Open (click, `Shift+S`): a 480 px panel under the tray with the list (notes, Done / Off list / Remove / Ask), Copy and the "From meetings" suggestions; it still takes drops. Esc, ✕, the tray or a click outside close it; focus returns to the tray.
+- Phone: the tray is a full-width row under the header; open is a bottom sheet (80% height).
+- The lanes are again three full-height columns next to Today: Waiting on, Later, Week.
+
+## Agenda in Today (7 okt 2026)
+
+- Today's appointments with the Outlook categories **Green / Blue / Red** (default names, Dutch too) appear in Today until they have ended, in time order, with a small colour dot. Command: Open in Outlook; Done hides the card (db `done/cal-…`).
+- **STEERCO** and the **quarterly release plan** ("Release plan Qn", "Qn release") appear from **14 days** before ("In 10 days · …"). STEERCO's command opens the STEERCO list.
+- Read-only (`js/agenda.js`): three `outlook_calendar_search` calls per sync (today, "steerco", "release"); nothing in the calendar changes.
+
+## Approved leave (7 okt 2026)
+
+- Source: the colleague's Chrome extension "Planon Verlof Goedkeurder" v1.1+ (not in this repo). Its bridge runs in claude.ai frames and talks to "Action Desk"; Droplet speaks the same messages (`js/leave.js`): hello → reports → store `leave/<run-id>` → `leave-ack`.
+- Thomas only wants to hear what was **approved**: a run with approved requests is one card in Today ("Leave approved · n requests", who / when / hours); Done takes it off. Skipped or failed checks are not shown. Droplet never approves or starts a run.
+- Checked end-to-end with the real extension loaded in Chromium (report saved by its background → pushed → card → ack → extension's pending list empty → Done).
+
+## Hand to Cowork (8 okt 2026)
+- Ask Claude heeft een tool `hand_to_cowork`: Claude maakt een kaart met een taaktitel en een brief die je kunt aanpassen. Pas als jij op **Hand to Cowork** klikt, komt de taak in de wachtrij.
+- In de wachtrij is de taak een eigen actie met eigenaar "Cowork". Die staat in Waiting on, met de streeplijn voor elsewhere. De brief staat in db `cowork/<id>`.
+- Cowork pakt de taak op met de skill `docs/droplet/cowork-skill/droplet-queue`. De skill leest de collectie via ArtifactData en zet de status op working en daarna op finished of failed, met een kort resultaat. Droplet laat dat resultaat bij elke sync als tekst zien.
+- Met Undo op de kaart, of met Delete op de actie, haal je de taak terug. Done blijft jouw klik. Met **Copy brief** plak je de taak met de hand in Cowork.
+
+## More today (8 okt 2026)
+- Today verbergt niets meer. Onder de top-kaarten staat **More today** met al je overige open werk, standaard open en in rangorde. Wat Claude lager rangschikt, is dus niet meer ingeklapt onder Later.
+- Je kunt het inklappen met de kop. Met / zoek je erin.
+- Het werkt hetzelfde als vroeger Everything else: slepen naar alle lanes, en de lijst scrollt mee als je sleept.

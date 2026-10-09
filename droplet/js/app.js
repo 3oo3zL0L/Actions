@@ -48,7 +48,7 @@
     notes: { mail: null, teams: null, cal: null, rank: null, store: null }, rankings: {}, feedback: [], verdict: {}, doneNow: {},
     drafts: {}, touched: {}, drafting: {}, send: {}, detail: {}, chat: {}, undo: null, handoff: {}, meetings: [], actions: {}, confirmDel: null, rankAgain: false, fresh: {}, actEdit: {},
     waits: {}, asksDb: {}, meetingsDb: {}, waitPre: [], scanning: false, teams10: [], sentMsgs: [], chaseMail: {}, ns: {},
-    atlOk: null, atlItems: [], jiraMail: [], aiUndo: {}, places: {}, placesTouched: {}, drag: null, steer: {}, steerTouched: {}
+    atlOk: null, atlItems: [], jiraMail: [], aiUndo: {}, places: {}, placesTouched: {}, drag: null, steer: {}, steerTouched: {}, steerOpen: false
   };
   D.state = S;
   var $ = function (id) { return document.getElementById(id); };
@@ -65,7 +65,9 @@
   function placeRec(it) { return it && it.key && S.places[it.key] || null; }
   function movedLater(it) { var p = placeRec(it); return !!(p && (p.place === 'later' || p.place === 'off' || p.place === 'wait')); }
   function putWait(it) { var p = placeRec(it); return !!(p && p.place === 'wait'); }
-  function inWaitLane(it) { return putWait(it) || isWait(it) && !placeRec(it); }
+  /* An action someone else took on in a meeting (owner) waits on them. */
+  function ownedByOther(it) { return !!(it && it.src === 'mine' && it.owner); }
+  function inWaitLane(it) { return putWait(it) || (isWait(it) || ownedByOther(it)) && !placeRec(it); }
   function inSteer(it) { var p = placeRec(it); return !!(p && p.place === 'later'); }
   function movedToday(it) { var p = placeRec(it); return !!(p && p.place === 'today'); }
   function groupOf(it) {
@@ -73,7 +75,7 @@
     if (movedToday(it)) return 'now';
     if (movedLater(it)) return 'later';
     if (it.standstill) return 'now';
-    if (it.src === 'hours') return 'now'; /* the weekly hours recap: pinned to Today until Done */
+    if (it.src === 'hours' || it.src === 'cal' || it.src === 'leave') return 'now'; /* hours recap, agenda, approved leave: in Today until Done */
     if (S.verdict[it.id] === 'up') return 'now';
     if (it.src === 'wait' && g === 'hidden') return 'later';
     if (it.src === 'mine') {
@@ -81,6 +83,7 @@
          Today while Claude places it; it is never hidden. */
       if (it.due && it.due <= mine.today()) return 'now';
       if (pinned(it)) return 'now';
+      if (it.owner) return 'later'; /* someone else's: it waits in Waiting on */
       if (S.fresh[it.id] && !it.r) return 'now';
       if (g === 'hidden') return 'later';
     }
@@ -90,10 +93,10 @@
      placed by Claude: shown at the top of Today (after R1 and ★). */
   function urgentMine(it) {
     if (movedLater(it)) return false;
-    if (it.src === 'hours') return true;
+    if (it.src === 'hours' || it.src === 'cal' || it.src === 'leave') return true;
     return it.src === 'mine' && (pinned(it) || S.verdict[it.id] !== 'down' && (!!(it.due && it.due <= mine.today()) || !!(S.fresh[it.id] && !it.r)));
   }
-  function pinned(it) { if (movedLater(it)) return false; if (movedToday(it)) return true; if (it && it.src === 'hours') return true; var a = it && it.src === 'mine' && S.actions[it.docId]; return !!(a && a.pinnedToday && !a.done); }
+  function pinned(it) { if (movedLater(it)) return false; if (movedToday(it)) return true; if (it && (it.src === 'hours' || it.src === 'cal' || it.src === 'leave')) return true; var a = it && it.src === 'mine' && S.actions[it.docId]; return !!(a && a.pinnedToday && !a.done); }
   function GI(g) { return g === 'now' ? 0 : g === 'later' ? 1 : 2; }
   function cmp(a, b) {
     var x, y;
@@ -127,7 +130,7 @@
     var vis = visible().filter(function (it) { return S.verdict[it.id] !== 'down' || pinned(it); });
     var top = vis.filter(function (it) { return groupOf(it) === 'now'; }).slice(0, FOCUS_MAX);
     vis.forEach(function (it) { if (pinned(it) && top.indexOf(it) < 0) top.push(it); }); /* pinned to Today: never cut */
-    if (top.length < FOCUS_MIN) vis.forEach(function (it) { if (top.length < FOCUS_MIN && top.indexOf(it) < 0 && !movedLater(it)) top.push(it); });
+    if (top.length < FOCUS_MIN) vis.forEach(function (it) { if (top.length < FOCUS_MIN && top.indexOf(it) < 0 && !movedLater(it) && !ownedByOther(it)) top.push(it); });
     /* A card dragged to a spot in Today keeps that spot. */
     return top.map(function (it, i) { var p = placeRec(it); return { it: it, i: i, o: p && p.place === 'today' && isFinite(p.order) ? p.order : i }; })
       .sort(function (a, b) { return a.o - b.o || a.i - b.i; }).map(function (x) { return x.it; });
@@ -145,19 +148,22 @@
   function alsoIn(it) {
     return S.items.filter(function (o) { return o !== it && rk(o).dupOf === it.id && o.src !== it.src; });
   }
-  var SRC = { mail: 'Mail', teams: 'Teams', mine: 'My action', wait: 'Waiting', meeting: 'Meeting', jira: 'Jira', confluence: 'Confluence', hours: 'Hours' };
+  var SRC = { mail: 'Mail', teams: 'Teams', mine: 'My action', wait: 'Waiting', meeting: 'Meeting', jira: 'Jira', confluence: 'Confluence', hours: 'Hours', cal: 'Agenda', leave: 'Leave' };
   function isHours(it) { return it && it.src === 'hours'; }
+  function isCal(it) { return it && it.src === 'cal'; }
+  function isLeave(it) { return it && it.src === 'leave'; }
   function isJira(it) { return it && it.src === 'jira'; }
   function isPage(it) { return it && it.src === 'confluence'; }
   function isMine(it) { return it && it.src === 'mine'; }
   function isWait(it) { return it && it.src === 'wait'; }
   /* An own action made from a meeting commitment (R6). */
   function fromMeeting(it) { return isMine(it) && it.origin && it.origin.eventId ? it.origin : null; }
-  function srcLabel(it) { var o = fromMeeting(it); return o ? 'From meeting ' + U.clip(o.subject || 'a meeting', 40) : SRC[it.src]; }
+  function srcLabel(it) { if (isCal(it)) return 'Agenda'; if (isLeave(it)) return 'Leave'; var o = fromMeeting(it); return o ? 'From meeting ' + U.clip(o.subject || 'a meeting', 40) : SRC[it.src]; }
   /* The list item mirrors its stored action. */
   function syncAction(it) {
     var a = S.actions[it.docId]; if (!a) return it;
     it.subject = a.text; it.due = a.due || null; it.dueBy = a.dueBy || null; it.notes = a.notes || ''; it.summary = a.notes || ''; it.origin = a.origin || null;
+    it.cowork = D.cowork ? D.cowork.of(it.docId) : null;
     return it;
   }
   function isTeams(it) { return it && it.src === 'teams'; }
@@ -233,6 +239,7 @@
     if (S.notes.teams) line('teams', S.notes.teams, true);
     if (S.notes.atl) line('atl', S.notes.atl, true);
     if (S.notes.cal) line('cal', S.notes.cal, false);
+    if (S.notes.agenda) line('agenda', S.notes.agenda, false);
     var noun = S.rankingTeams ? ' new item' : ' new mail';
     if (S.ranking) line('ranking', 'Claude is ranking ' + S.ranking + noun + (S.ranking === 1 ? '' : 's') + '…', false);
     else if (S.notes.rank) line('rank', S.notes.rank, true);
@@ -306,7 +313,7 @@
         '<span class="fi-title">' + esc(titleOf(it)) + '</span></span></div>' +
       '<div class="fi-act"><div class="done-line" data-done-line>' + ico('check') + esc(g.label) + '</div></div></li>';
   }
-  function srcKind(it) { return isHours(it) ? 'hours' : isTeams(it) ? 'teams' : isWait(it) ? 'wait' : fromMeeting(it) ? 'meeting' : isMine(it) ? 'mine' : isJira(it) ? 'jira' : isPage(it) ? 'confluence' : 'mail'; }
+  function srcKind(it) { return isLeave(it) ? 'check' : isCal(it) ? 'meeting' : isHours(it) ? 'hours' : isTeams(it) ? 'teams' : isWait(it) ? 'wait' : fromMeeting(it) ? 'meeting' : isMine(it) ? 'mine' : isJira(it) ? 'jira' : isPage(it) ? 'confluence' : 'mail'; }
   function srcHTML(it) { var k = srcKind(it); return '<span class="src" data-src="' + k + '">' + ico(k) + esc(srcLabel(it)) + '</span>'; }
   function dueHTML(it) { return isMine(it) && it.due ? '<span class="flag" data-due>' + esc(mine.dueLabel(it.due)) + '</span>' : ''; }
   function meetingHTML(it) { return it.meeting ? '<span class="flag" data-meeting>Meeting ' + esc(it.meeting.hhmm) + '</span>' : ''; }
@@ -324,7 +331,8 @@
     return '';
   }
   function actHTML(it) {
-    if (isHours(it)) return ''; /* the recap has no action, only Done */
+    if (isHours(it) || isLeave(it)) return ''; /* a recap or a report: no action, only Done */
+    if (isCal(it) && !rk(it).label) return '';
     if (waitingTeams(it.id)) return '<button class="btn-act is-wait" data-act="' + esc(it.id) + '" data-waiting>' + 'Waiting for you to send in Teams' + '</button>';
     if (isClosed(it.id)) return stateChip(it.id);
     return '<button class="btn-act" data-act="' + esc(it.id) + '">' + esc(rk(it).label) + '</button>';
@@ -367,7 +375,8 @@
         '<button class="fi-open" data-open="' + esc(it.id) + '" data-drag="' + esc(it.id) + '"' + (cur ? ' aria-current="true"' : '') + ' aria-keyshortcuts="m" aria-label="Open ' + (i + 1) + ': ' + esc(titleOf(it)) + '">' +
           '<span class="fi-rank" aria-hidden="true">' + pad(i + 1) + '</span>' +
           '<span class="fi-body">' +
-            '<span class="fi-meta">' + srcHTML(it) + '<span class="sep" aria-hidden="true">·</span><span>' + esc(project(it)) + '</span>' +
+            '<span class="fi-meta">' + srcHTML(it) + (isCal(it) && it.color ? '<span class="cal-dot cal-' + esc(it.color) + '" title="' + esc(it.color) + ' category"></span>' : '') +
+              '<span class="sep" aria-hidden="true">·</span><span>' + esc(project(it)) + '</span>' +
               (fl ? '<span class="flag">' + esc(fl) + '</span>' : '') + waitChip(it) + meetingHTML(it) + dueHTML(it) +
               (n ? '<span>+' + n + ' in thread</span>' : '') + alsoTag(it) +
               '<span class="cur-tag" aria-hidden="true">In panel</span></span>' +
@@ -398,6 +407,8 @@
       (isWait(it) && !n ? ' · asked ' + it.n + ' working day' + (it.n === 1 ? '' : 's') + ' ago' : '') +
       (it.meeting ? ' · meeting ' + esc(it.meeting.hhmm) : '') + (waitingTeams(it.id) ? ' · waiting for you to send in Teams' : '') +
       (isMine(it) && it.due ? ' · ' + esc(mine.dueLabel(it.due).toLowerCase()) : '') +
+      (it.cowork ? ' · ' + esc(D.cowork.label(it.cowork).toLowerCase()) : '') +
+      (ownedByOther(it) && it.origin ? ' · from ' + esc(U.clip(it.origin.subject || 'a meeting', 40)) : '') +
       (S.verdict[it.id] === 'down' ? ' · marked not important' : '') + (putWait(it) ? ' · put in Waiting by you' : movedLater(it) ? ' · moved out of Today by you' : '') + (isWait(it) ? ' ' + waitChip(it) : '') + '</span></span></button>' +
       '</li>';
   }
@@ -411,6 +422,12 @@
     var steer = all.filter(inSteer), lane = all.filter(function (it) { return !inSteer(it); });
     var waits = lane.filter(inWaitLane), els = lane.filter(function (it) { return !inWaitLane(it) && isHeld(it); });
     var later = lane.filter(function (it) { return waits.indexOf(it) < 0 && els.indexOf(it) < 0; });
+    /* Later: what you moved out of Today, then everything else (folded). */
+    var offs = later.filter(function (it) { var p = placeRec(it); return !!(p && p.place === 'off'); });
+    later = later.filter(function (it) { return offs.indexOf(it) < 0; });
+    $('offCount').textContent = offs.length + later.length;
+    $('offList').innerHTML = offs.length ? offs.map(function (it) { return restRow(it, num(it)); }).join('') :
+      '<li class="rest-empty">Drag a card here to take it out of Today.</li>';
     var wpts = steerNotes().filter(function (x) { return x.rec.lane === 'wait'; });
     $('waitCount').textContent = waits.length + wpts.length;
     $('waitR').textContent = els.length ? '+ elsewhere ' + els.length : '';
@@ -452,7 +469,7 @@
     var el = $('jump'); if (!el) return;
     el.innerHTML = '<button data-jump="listCol" class="go">Today <b>' + topItems().length + '</b></button>' +
       '<button data-jump="laneWait" class="j-wait">Waiting <b>' + nWait + '</b></button>' +
-      '<button data-jump="laterBox" class="j-steer">Later <b>' + nSteer + '</b></button>' +
+      '<button data-jump="laterBox">Later</button>' +
       '<button data-jump="laneWeek" class="j-week">Week</button>';
   }
 
@@ -499,9 +516,57 @@
         '<button class="sc-btn ask" data-point-ask="' + esc(e.k) + '"' + (ask.available() ? '' : ' aria-disabled="true"') + ' aria-label="Ask Claude about this point">' + ico('spark') + '<span>Ask</span></button>' +
       '</div></li>';
   }
+  /* The STEERCO tray in the header: small when closed (count, add a point,
+     a drop target); open, a panel under it with the list. Esc, the ✕, the
+     tray again or a click outside close it; focus returns to the tray. */
+  function setSteerOpen(on, focusBack) {
+    S.steerOpen = !!on;
+    var box = $('steerBox'), tg = $('steerToggle');
+    box.hidden = !S.steerOpen;
+    tg.setAttribute('aria-expanded', String(S.steerOpen));
+    $('steerTray').classList.toggle('is-open', S.steerOpen);
+    if (S.steerOpen) { renderRest(); var f = box.querySelector('textarea, button'); if (f && desk()) f.focus({ preventScroll: true }); }
+    else if (focusBack) tg.focus({ preventScroll: true });
+  }
+  /* Claude's suggestions from meeting transcripts: one click adds a point. */
+  function steerSuggestions() {
+    var out = [];
+    Object.keys(S.meetingsDb || {}).forEach(function (k) {
+      var m = S.meetingsDb[k];
+      (m && Array.isArray(m.points) ? m.points : []).forEach(function (p, i) { if (p && p.state === 'new') out.push({ k: k, i: i, p: p, m: m }); });
+    });
+    return out.sort(function (a, b) { return String(b.m.date || b.m.at).localeCompare(String(a.m.date || a.m.at)); }).slice(0, 8);
+  }
+  function renderSuggestions() {
+    var box = $('steerSuggBox'); if (!box) return;
+    var sg = steerSuggestions();
+    box.hidden = !sg.length;
+    $('steerSuggCount').textContent = sg.length;
+    var bd = $('steerSuggBadge'); if (bd) { bd.hidden = !sg.length; bd.textContent = '+' + sg.length; bd.title = sg.length + ' suggested from meetings'; }
+    $('steerSugg').innerHTML = sg.map(function (x) {
+      var ref = esc(x.k + '#' + x.i), day = x.m.date ? U.when(x.m.date, new Date()) : '';
+      return '<li class="sugg"><span class="sugg-t"><span class="sugg-title">' + esc(x.p.what) + '</span><span class="sugg-sub">' + esc(U.clip(x.m.subject || 'Meeting', 60)) + (day ? ' · ' + esc(day) : '') + '</span></span>' +
+        '<button class="sc-btn" data-sugg-add="' + ref + '" aria-label="Add to STEERCO: ' + esc(x.p.what) + '">' + ico('check') + '<span>Add</span></button>' +
+        '<button class="sc-btn" data-sugg-skip="' + ref + '" aria-label="Not for STEERCO: ' + esc(x.p.what) + '"><span>Skip</span></button></li>';
+    }).join('');
+  }
+  function suggest(ref, add) {
+    var m = /^(.+)#(\d+)$/.exec(ref || ''); if (!m) return;
+    var mt = S.meetingsDb[m[1]], p = mt && mt.points && mt.points[+m[2]]; if (!p) return;
+    p.state = add ? 'added' : 'skipped';
+    store.setMeeting(m[1], mt);
+    if (add) {
+      var k = 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+      setSteer(k, { text: (p.what + '\nFrom ' + (mt.subject || 'a meeting') + ': “' + p.quote + '”').slice(0, 2000), at: new Date().toISOString() });
+    }
+    renderRest();
+    toast(add ? 'Added to STEERCO.' : 'Skipped.');
+  }
   function renderSteer(steer) {
+    renderSuggestions();
     var list = steerEntries(steer), el = $('steerList');
     $('steerCount').textContent = list.length;
+    $('steerCountP').textContent = list.length;
     var sig = list.map(function (e) { return e.it ? e.it.id + (isCur(e.it.id) ? '*' : '') : 'n:' + e.k; }).join('|');
     /* While he types a note, the list stays as it is (focus and caret too). */
     if (el.contains(document.activeElement) && el.getAttribute('data-sig') === sig) return;
@@ -536,7 +601,7 @@
     setSteer(k, { text: U.clip(v, 2000), at: new Date().toISOString() });
     inp.value = '';
     renderRest();
-    toast('Added to Later, for STEERCO.', function () { setSteer(k, null); renderRest(); });
+    toast('Added to STEERCO.', function () { setSteer(k, null); renderRest(); });
   }
   function delSteerPoint(k) {
     var prev = S.steer[k] ? U.clone(S.steer[k]) : null; if (!prev) return;
@@ -554,7 +619,7 @@
     var prev = S.steer[k] ? U.clone(S.steer[k]) : null; if (!prev || (prev.lane || 'later') === lane) return;
     var rec = U.clone(prev); if (lane === 'later') delete rec.lane; else rec.lane = lane;
     setSteer(k, rec); renderRest();
-    toast(lane === 'wait' ? 'Point moved to Waiting on.' : 'Point moved to Later, for STEERCO.', function () { setSteer(k, prev); renderRest(); });
+    toast(lane === 'wait' ? 'Point moved to Waiting on.' : 'Point moved to STEERCO.', function () { setSteer(k, prev); renderRest(); });
   }
   function pointToToday(k, j) {
     var prev = S.steer[k] ? U.clone(S.steer[k]) : null; if (!prev) return;
@@ -773,6 +838,7 @@
         '<div class="iv-why"><span class="who" aria-hidden="true">' + ico('spark') + '</span><p><span class="sr">Claude: </span>' + esc(r.why) + '</p></div>' +
         (next ? '<p class="act-next" data-next>' + ico('spark', 'ico-sm') + '<span>Next step: ' + esc(next.charAt(0).toLowerCase() + next.slice(1)) + '</span></p>' : '') +
         nextHTML(it) +
+        coworkHTML(it) +
         originHTML(it) +
         alsoHTML(it) +
         '<div class="sec-label">' + ico('mine') + 'Details</div>' +
@@ -893,6 +959,19 @@
 
   /* ---------------- Render: meeting origin and next steps (R6) ---------------- */
   var fDay = new Intl.DateTimeFormat('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+  /* Handed to Cowork from Ask Claude: the brief, and what Cowork wrote back (as text). */
+  function coworkHTML(it) {
+    var c = it.cowork; if (!c) return '';
+    var at = c.finishedAt || c.takenAt || c.queuedAt;
+    return '<div class="sec-label">' + ico('out') + 'With Cowork</div>' +
+      '<div class="card src-card cw-card" data-cowork="' + esc(c.status) + '">' +
+        '<div class="mail-from"><span><b data-cowork-status>' + esc(D.cowork.label(c)) + '</b></span><span>' + esc(at ? U.when(at, new Date()) : '') + '</span></div>' +
+        (c.result ? '<p class="cw-result" data-cowork-result>' + esc(c.result) + '</p>' : '') +
+        '<p class="cw-brief">' + esc(c.brief) + '</p>' +
+        (c.from && c.from.title ? '<p class="muted">About: ' + esc(c.from.title) + '</p>' : '') +
+        '<div class="ns-start"><button class="ns-btn" data-cowork-copy="' + esc(it.docId) + '">Copy brief</button></div>' +
+      '</div>';
+  }
   function originHTML(it) {
     var o = fromMeeting(it); if (!o) return '';
     var d = new Date(o.date);
@@ -1159,6 +1238,8 @@
     col.classList.toggle('is-idle', S.view !== 'item' || !it);
     if (S.view !== 'item' || !it) { out.innerHTML = emptyHTML(); return; }
     if (isHours(it)) { out.innerHTML = hoursItemHTML(it); S.anim = false; return; }
+    if (isCal(it)) { out.innerHTML = calItemHTML(it); S.anim = false; return; }
+    if (isLeave(it)) { out.innerHTML = leaveItemHTML(it); S.anim = false; return; }
     if (isWait(it)) { out.innerHTML = waitItemHTML(it); S.anim = false; return; }
     if (isJira(it)) { out.innerHTML = jiraItemHTML(it); S.anim = false; return; }
     if (isPage(it)) { out.innerHTML = pageItemHTML(it); S.anim = false; return; }
@@ -1238,6 +1319,72 @@
         r: { group: 'now', why: hours.summary(x), project: 'Salesforce', label: '', action: 'open' } });
     });
   }
+  /* Agenda items (js/agenda.js): today's Green/Blue/Red appointments and
+     STEERCO / Q release plan from 14 days ahead. Never ranked; Open, Done. */
+  function agendaItems() {
+    var now = new Date();
+    return (S.agenda || []).map(function (e) {
+      var id = 'cal:' + D.agenda.key(e), old = S.byId[id], it = old && isCal(old) ? old : { id: id, src: 'cal' };
+      var t = U.hhmm(new Date(e.start)) + '–' + U.hhmm(new Date(e.end)), n = D.agenda.daysUntil(e.start, now);
+      var when = n <= 0 ? 'Today ' + t : n === 1 ? 'Tomorrow ' + U.hhmm(new Date(e.start)) : 'In ' + n + ' days · ' + U.whenLong(new Date(e.start).toISOString());
+      var why, label;
+      if (e.kind === 'today') { why = [e.location, e.people ? e.people + ' people' : ''].filter(Boolean).join(' · ') || 'In your agenda today.'; label = e.webLink ? 'Open in Outlook' : ''; }
+      else if (e.kind === 'steerco') { var np = steerEntries(restItems().filter(inSteer)).length; why = when + ' · your STEERCO list has ' + np + ' point' + (np === 1 ? '' : 's') + '.'; label = 'Open STEERCO list'; }
+      else { why = when + ' · prepare your part of the release plan.'; label = e.webLink ? 'Open in Outlook' : ''; }
+      return Object.assign(it, { key: D.agenda.key(e), ev: e, color: e.color, calKind: e.kind, subject: e.subject, senderName: 'Agenda', sender: e.organizer || '',
+        summary: why, received: new Date(e.start).toISOString(), internal: true,
+        r: { group: 'now', why: why, project: e.kind === 'today' ? t : (e.kind === 'steerco' ? 'STEERCO' : 'Release plan'), label: label, action: 'open', pos: -1e6 + (e.start - now.getTime()) / 6e4 } });
+    });
+  }
+  /* Approved leave (js/leave.js): one card per run of the leave approver that
+     approved something. Only what was approved; Done takes it off. */
+  function leaveItems() {
+    if (!D.leave || !D.leave.state.loaded) return [];
+    return D.leave.withApprovals().map(function (r) {
+      var id = 'leave:' + r.id, old = S.byId[id], it = old && isLeave(old) ? old : { id: id, src: 'leave' };
+      var ap = D.leave.approved(r);
+      var line = ap.slice(0, 3).map(function (q) { return U.firstName(q.requestor) + ' ' + D.leave.span(q) + (q.hours != null ? ' (' + D.leave.hoursText(q.hours) + ')' : ''); }).join(' · ') + (ap.length > 3 ? ' · +' + (ap.length - 3) + ' more' : '');
+      return Object.assign(it, { key: 'leave-' + r.id, report: r, approvedList: ap, subject: 'Leave approved · ' + ap.length + ' request' + (ap.length === 1 ? '' : 's'),
+        senderName: 'Planon', sender: '', summary: line, received: new Date(r.finishedAt).toISOString(), internal: true,
+        r: { group: 'now', why: line, project: 'Planon', label: '', action: 'open' } });
+    });
+  }
+  function leaveItemHTML(it) {
+    var top = topItems(), i = top.indexOf(it), n = i > -1 ? i + 1 : restItems().indexOf(it) + top.length + 1;
+    return '<div class="iv-head">' +
+        '<button class="btn-back" data-back aria-label="Back to the list">' + ico('back') + '<span class="lbl-phone">Back</span><span class="lbl-desk">Close</span></button>' +
+        '<span class="iv-crumb" aria-label="Location"><span class="c-sec">' + (i > -1 ? 'Today' : 'Everything else') + '</span><span class="sep" aria-hidden="true">›</span>' +
+          '<span class="c-n">#' + pad(n) + '</span><span class="sep" aria-hidden="true">›</span><b>Leave</b></span>' +
+        '<span class="kbd" aria-hidden="true">Esc</span>' +
+      '</div>' +
+      '<div class="iv-scroll' + (S.anim ? ' enter' : '') + '">' +
+        '<div class="iv-meta">' + srcHTML(it) + '<span class="sep" aria-hidden="true">·</span><span>Planon</span><span class="sep" aria-hidden="true">·</span><span>' + esc(U.when(it.received, new Date())) + '</span></div>' +
+        '<h2 class="iv-title" id="ivTitle" tabindex="-1">' + esc(titleOf(it)) + '</h2>' +
+        '<p class="muted">Approved by the leave approver in Planon' + (it.report.auto ? ' (started from your Planon link)' : '') + '. Nothing to do: Done takes it off your list.</p>' +
+        '<ul class="leave-list">' + it.approvedList.map(function (q) {
+          return '<li><span class="lv-who">' + esc(q.requestor) + '</span><span class="lv-when">' + esc(D.leave.span(q)) + '</span><span class="lv-h">' + esc(D.leave.hoursText(q.hours)) + '</span><span class="lv-n">#' + esc(q.number) + '</span></li>';
+        }).join('') + '</ul>' +
+      '</div>' +
+      '<div class="iv-bar"><div class="quiet"></div><button class="btn-send" id="sendBtn" data-done-primary>' + ico('check') + 'Done</button></div>';
+  }
+  function calItemHTML(it) {
+    var e = it.ev, top = topItems(), i = top.indexOf(it), n = i > -1 ? i + 1 : restItems().indexOf(it) + top.length + 1;
+    var link = e.webLink ? '<a class="btn-q" href="' + esc(e.webLink) + '" target="_blank" rel="noopener noreferrer">' + ico('out') + 'Open in Outlook</a>' : '';
+    return '<div class="iv-head">' +
+        '<button class="btn-back" data-back aria-label="Back to the list">' + ico('back') + '<span class="lbl-phone">Back</span><span class="lbl-desk">Close</span></button>' +
+        '<span class="iv-crumb" aria-label="Location"><span class="c-sec">' + (i > -1 ? 'Today' : 'Everything else') + '</span><span class="sep" aria-hidden="true">›</span>' +
+          '<span class="c-n">#' + pad(n) + '</span><span class="sep" aria-hidden="true">›</span><b>Agenda</b></span>' +
+        '<span class="kbd" aria-hidden="true">Esc</span>' +
+      '</div>' +
+      '<div class="iv-scroll' + (S.anim ? ' enter' : '') + '">' +
+        '<div class="iv-meta">' + srcHTML(it) + (it.color ? '<span class="cal-dot cal-' + esc(it.color) + '"></span>' : '') + '<span class="sep" aria-hidden="true">·</span><span>' + esc(U.whenLong(new Date(e.start).toISOString())) + ' – ' + esc(U.hhmm(new Date(e.end))) + '</span></div>' +
+        '<h2 class="iv-title" id="ivTitle" tabindex="-1">' + esc(titleOf(it)) + '</h2>' +
+        '<div class="iv-why"><span class="who" aria-hidden="true">' + ico('meeting') + '</span><p>' + esc(it.r.why) + '</p></div>' +
+        (e.location ? '<p class="muted">' + esc(e.location) + '</p>' : '') +
+        '<div class="held-act">' + link + (it.calKind === 'steerco' ? '<button class="btn-q" data-steer-open>' + ico('later') + 'Open STEERCO list</button>' : '') + '</div>' +
+      '</div>' +
+      '<div class="iv-bar"><div class="quiet"></div><button class="btn-send" id="sendBtn" data-done-primary>' + ico('check') + 'Done</button></div>';
+  }
   function barHTML(it) {
     var st = sendState(it.id), locked = st.phase === 'sent', busy = st.phase === 'sending';
     var q = function (key, icon, label, k, pressed) {
@@ -1311,7 +1458,7 @@
      timeout, so a consent prompt nobody answers or a stalled connector
      turns into one quiet line of its own and never blocks the rest. */
   var CORE = ['saved', 'me', 'mail', 'teams', 'atl', 'cal'];
-  var SRC_NAME = { saved: 'Saved items', me: 'Your profile', mail: 'Mail', teams: 'Teams', atl: 'Jira and Confluence', cal: 'Calendar',
+  var SRC_NAME = { saved: 'Saved items', me: 'Your profile', mail: 'Mail', teams: 'Teams', atl: 'Jira and Confluence', cal: 'Calendar', agenda: 'Agenda', leave: 'Leave approver (extension)',
     waits: 'Waiting on others', tx: 'Meeting transcripts', rank: 'Claude ranking', perms: 'Permissions' };
   var LOADING_TEXT = { saved: 'Loading your saved items…', mail: 'Loading mail…', teams: 'Loading Teams chats…', atl: 'Loading Jira and Confluence…' };
   S.src = {}; S.srcMail = []; S.srcTeams = []; S.jiraRaw = null; S.jiraFirst = null; S.calWanted = false; S.savedOk = false;
@@ -1348,7 +1495,7 @@
     if (opts.full || !S.savedOk) startSaved();
     if (opts.full) loadPlaces();
     startMe();
-    startMail(now); startTeams(now); startAtl();
+    startMail(now); startTeams(now); startAtl(); startAgenda(); startCowork();
     S.calWanted = true;
     rebuild();
   }
@@ -1452,6 +1599,40 @@
   }
   /* Today's calendar (R5): read once per sync, only when there are open
      items. Your own address is left out once get_me is known. */
+  /* The agenda for Today: each sync, on its own; it never blocks the list. */
+  /* The Cowork queue: read on every sync, so what Cowork wrote back shows. */
+  function startCowork() {
+    if (!D.cowork) return;
+    D.cowork.load().then(function () { if (S.loaded || S.items.length) { S.items.forEach(function (m) { if (isMine(m)) syncAction(m); }); renderAllKeepFocus(); } }, function (e) { noteError('cowork', e); });
+  }
+  /* Ask Claude's "Hand to Cowork" click: an action owned by Cowork plus its brief in the queue. */
+  function handToCowork(o) {
+    var from = o.scope && S.byId[o.scope];
+    var text = mine.clean(o.title); if (!text) return Promise.reject({ message: 'The task needs a title.' });
+    var now = new Date(), docId = mine.newId();
+    var a = { text: text, created: now.toISOString(), done: false, doneAt: null, due: null, dueBy: null, notes: '', pinnedToday: false, owner: 'Cowork' };
+    return D.cowork.queue(docId, { title: text, brief: o.brief, from: from ? { title: titleOf(from), ref: from.src === 'mail' ? from.id : from.issueKey || from.pageId || from.id } : null }).then(function () {
+      S.actions[docId] = a;
+      store.setAction(docId, a);
+      var it = syncAction(mine.toItem(docId, a));
+      S.items.push(it); S.byId[it.id] = it;
+      renderAll();
+      return docId;
+    });
+  }
+  function copyCowork(docId) {
+    var c = D.cowork && D.cowork.of(docId); if (!c) return;
+    copyText(D.cowork.prompt(c, D.cowork.HOME)).then(function () { toast('Copied. Paste it in Cowork if it hasn’t picked it up.'); }, function () { toast('Couldn’t copy. Open the action and copy the brief.'); });
+  }
+  function startAgenda() {
+    if (!D.agenda || !rt.mcp) return; /* without the connector the mail line already says so */
+    run('agenda', function () { return D.agenda.load(new Date()); }, rt.cfg.callMs + 2000).then(function (x) {
+      if (x.stale) return;
+      if (x.ok) { S.agenda = x.r || []; S.notes.agenda = null; }
+      else S.notes.agenda = 'Couldn’t read your agenda just now.';
+      arrived();
+    });
+  }
   function maybeStartCal() {
     if (!S.calWanted || !S.items.length) return;
     S.calWanted = false;
@@ -1519,7 +1700,7 @@
       if (j) { j.status = j.status || x.status; j.projectName = j.projectName || x.projectName; if (!j.project0) j.project0 = x.project0; return; }
       atlList.push(x);
     });
-    var all = S.srcMail.concat(S.srcTeams, S.jiraMail, atlList, hoursItems()), doneIds = {};
+    var all = S.srcMail.concat(S.srcTeams, S.jiraMail, atlList, hoursItems(), agendaItems(), leaveItems()), doneIds = {};
     var items = all.filter(function (m) {
       var done = S.doneDb && S.doneDb[m.key] && !S.doneNow[m.id];
       /* A Jira item comes back when a newer notification arrives after your comment. */
@@ -1535,7 +1716,7 @@
     var wi = waitItemsNow(now);
     items = items.concat(wi.due); S.waitPre = wi.pre;
     items = items.filter(function (m) {
-      if (isHours(m)) return true; /* never ranked, never drafted */
+      if (isHours(m) || isCal(m) || isLeave(m)) return true; /* never ranked, never drafted */
       try { attach(m); return true; } catch (e) { noteError('attach ' + (m.src || '?'), e); return !!m.src; }
     });
     /* R8: an item merged into one that is done is done too. */
@@ -1620,7 +1801,7 @@
   }
 
   /* ---------------- Diagnostics (tap the status strip) ---------------- */
-  var DIAG_KEYS = ['saved', 'me', 'mail', 'teams', 'atl', 'cal', 'waits', 'tx', 'rank', 'perms'];
+  var DIAG_KEYS = ['saved', 'me', 'mail', 'teams', 'atl', 'cal', 'agenda', 'leave', 'waits', 'tx', 'rank', 'perms'];
   function hms(d) { return d ? U.hhmm(d) + ':' + pad(d.getSeconds()) : '··:··'; }
   function diagState(s) { return s.state === 'idle' ? 'not started' : s.state === 'error' ? 'error · ' + s.code : s.state; }
   function renderDiag() {
@@ -1629,7 +1810,7 @@
     if (!S.diagOpen) return;
     var h = '<ul class="diag-list">';
     DIAG_KEYS.forEach(function (k) {
-      var s = srcState(k), extra = k === 'me' && S.meFrom === 'atlassian' ? ' · using the Atlassian email' : '';
+      var s = srcState(k), extra = k === 'me' && S.meFrom === 'atlassian' ? ' · using the Atlassian email' : k === 'leave' && s.state === 'ok' ? ' · connected' : '';
       h += '<li data-diag-src="' + k + '"><span class="d-name">' + esc(SRC_NAME[k]) + '</span>' +
         '<span class="d-state" data-state="' + esc(s.state) + '">' + esc(diagState(s) + extra) + '</span>' +
         '<span class="d-time">' + esc(hms(s.at)) + '</span>' +
@@ -1915,7 +2096,20 @@
             };
             S.actions[docId] = a; store.setAction(docId, a); existing.push(a.text); made++;
           });
-          cacheMeeting(ev, { state: 'done', n: made });
+          /* What others took on: an action with an owner, in Waiting on. */
+          (list.actions || []).forEach(function (c) {
+            var text = mine.clean(c.what);
+            if (!text || existing.some(function (x) { return tx.similar(x, text); })) return;
+            var docId = mine.newId(), a = {
+              text: text, owner: c.owner, created: new Date().toISOString(), done: false, doneAt: null, due: c.due || null, dueBy: c.due ? 'claude' : null, notes: '',
+              origin: { eventId: ev.id, quote: c.quote, subject: U.clip(d.subject || ev.subject, 160), date: new Date(ev.start).toISOString(), kind: 'task', who: [c.owner], project: c.project || null,
+                attendees: others.slice(0, 20) }
+            };
+            S.actions[docId] = a; store.setAction(docId, a); existing.push(text); made++;
+          });
+          var pts = (list.points || []).map(function (x) { return { what: x.what, quote: x.quote, state: 'new' }; });
+          cacheMeeting(ev, { state: 'done', n: made, points: pts, date: new Date(ev.start).toISOString() });
+          if (pts.length) renderRest();
         }, function () { /* Claude couldn't answer: read again on the next sync */ });
       });
     }, function () { /* the event couldn't be read: tried again on the next sync */ });
@@ -2503,6 +2697,7 @@
     delete S.byId[it.id]; delete S.rankings[it.key];
     S.confirmDel = null;
     store.deleteAction(it.docId); store.clearRanking(it.key);
+    if (D.cowork) D.cowork.drop(it.docId);
     back();
     toast('Deleted “' + U.clip(a && a.text || '', 40) + '”.');
   }
@@ -2798,6 +2993,7 @@
     delete S.byId[id];
     if (it) { delete S.rankings[it.key]; store.clearRanking(it.key); }
     store.deleteAction(docId);
+    if (D.cowork) D.cowork.drop(docId);
     if (S.view === 'item' && S.cur === id) back(); else renderAll();
   }
   function openInviteFromAsk(o) {
@@ -2846,7 +3042,7 @@
     ico: ico, item: function (id) { return S.byId[id] || null; }, title: titleOf, me: function () { return S.me; }, toast: toast,
     isExternal: isExternal, nameFor: nameFor, draftTarget: draftTarget, draftKind: function (it) { var t = draftTarget(it); return t ? t.kind : ''; },
     setDraft: setDraftFromClaude, undoDraft: undoClaudeDraft, chatContext: chatContext, focusList: focusList,
-    addAction: function (t) { return addAction(t); }, removeAction: removeActionQuiet, openInvite: openInviteFromAsk,
+    addAction: function (t) { return addAction(t); }, removeAction: removeActionQuiet, handToCowork: handToCowork, copyCowork: copyCowork, openInvite: openInviteFromAsk,
     replySent: replySent, jiraCommented: jiraCommentedKey, pageUpdated: pageUpdated, followUp: cardFollowUp
   });
   function renderAskbar() {
@@ -2866,6 +3062,7 @@
     if ((id = t.getAttribute('data-card-go'))) return ask.go(id);
     if ((id = t.getAttribute('data-card-open'))) return ask.openPage(id);
     if ((id = t.getAttribute('data-card-undo'))) return ask.undoCard(id);
+    if ((id = t.getAttribute('data-card-copy'))) return ask.copyCard(id);
     if ((id = t.getAttribute('data-card-invite'))) return ask.invite(id);
     if ((id = t.getAttribute('data-card-repropose'))) return ask.repropose(id);
     if ((id = t.getAttribute('data-ask-undo-draft'))) return undoClaudeDraft(id);
@@ -2929,7 +3126,7 @@
     else renderAll();
     var drop = $('focus').querySelector('[data-id="' + cssEsc(id) + '"]') || $('over').querySelector('[data-steer="' + cssEsc(id) + '"]') || $('over').querySelector('[data-open="' + cssEsc(id) + '"]');
     if (drop) { drop.classList.add('just-moved'); setTimeout(function () { drop.classList.remove('just-moved'); }, 900); }
-    toast(where === 'later' ? 'Moved to Later, for STEERCO.' : where === 'wait' ? 'Moved to Waiting on.' : where === 'off' ? (wasSteer ? 'Taken off the STEERCO list.' : 'Moved out of Today.') :
+    toast(where === 'later' ? 'Added to STEERCO.' : where === 'wait' ? 'Moved to Waiting on.' : where === 'off' ? (wasSteer ? 'Taken off the STEERCO list.' : 'Moved to Later.') :
       inToday ? 'Moved in Today.' : 'Moved to Today.', function () { setPlace(it, prev); renderAll(); });
   }
   function cssEsc(v) { return window.CSS && CSS.escape ? CSS.escape(v) : String(v).replace(/["\\]/g, '\\$&'); }
@@ -2941,6 +3138,7 @@
     moveTo(id, topItems().indexOf(it) > -1 ? 'later' : 'today');
     var back2 = document.querySelector('[data-drag="' + cssEsc(id) + '"]');
     if (back2 && !back2.matches('button')) back2 = back2.querySelector('[data-open]') || back2;
+    if (back2 && !back2.offsetParent) back2 = $('steerToggle'); /* went into the closed STEERCO tray */
     if (back2) back2.focus({ preventScroll: true });
     return true;
   }
@@ -2985,12 +3183,12 @@
     }
     if (w === 'later') {
       if (d.from === 'steer' || d.from === 'point') return null;
-      return { go: pt ? function () { pointLane(k, 'later'); } : function () { moveTo(d.id, 'later'); }, el: $('laterBox') };
+      return { go: pt ? function () { pointLane(k, 'later'); } : function () { moveTo(d.id, 'later'); }, el: $('steerTray') };
     }
     if (w === 'off') {
-      if (pt) return { no: 'Your own points live in Later or Waiting on. Drop it on Recently done when it’s handled.' };
+      if (pt) return { no: 'Your own points live in STEERCO or Waiting on. Drop it on the Week when it’s handled.' };
       if (d.from === 'rest') return null;
-      return { go: function () { moveTo(d.id, 'off'); }, el: $('restBox') };
+      return { go: function () { moveTo(d.id, 'off'); }, el: $('laterBox') };
     }
     return null;
   }
@@ -3019,6 +3217,7 @@
     src.classList.add('is-dragsrc');
     root.classList.add('is-dragging');
     if (S.view === 'item' && desk()) root.classList.add('drag-over-item');
+    if (d.el.closest('#steerBox')) root.classList.add('drag-from-steer'); /* the panel steps aside so the lanes show */
     if (navigator.vibrate && d.touch) try { navigator.vibrate(10); } catch (x) { /* none */ }
     dragMove(e);
   }
@@ -3030,7 +3229,7 @@
     /* Near an edge: scroll the page (phone) or the column under the pointer. */
     var edge = 56, dy = e.clientY < edge ? -14 : e.clientY > window.innerHeight - edge ? 14 : 0;
     if (dy) {
-      var under = document.elementFromPoint(e.clientX, e.clientY), col = under && under.closest('.list-col, .lane-b');
+      var under = document.elementFromPoint(e.clientX, e.clientY), col = under && under.closest('.list-main, .list-col, .lane-b');
       if (col && col.scrollHeight > col.clientHeight) col.scrollTop += dy; else window.scrollBy(0, dy);
     }
   }
@@ -3040,7 +3239,7 @@
     if (!d || !d.active) return;
     if (d.ghost) d.ghost.remove();
     if (d.src) d.src.classList.remove('is-dragsrc');
-    root.classList.remove('is-dragging', 'drag-over-item');
+    root.classList.remove('is-dragging', 'drag-over-item', 'drag-from-steer');
     clearPaint();
     /* The click the browser fires right after the release opens nothing. */
     S.dragSwallow = true; setTimeout(function () { S.dragSwallow = false; }, 0);
@@ -3077,7 +3276,10 @@
   document.addEventListener('touchmove', function (e) { if (S.drag && S.drag.active) e.preventDefault(); }, { passive: false });
   document.addEventListener('contextmenu', function (e) { if (S.drag && S.drag.touch) e.preventDefault(); });
   document.addEventListener('click', function (e) {
-    if (S.dragSwallow) { S.dragSwallow = false; e.stopPropagation(); e.preventDefault(); }
+    /* Only the pointer's own click after a drop is swallowed; a click made by
+       the keyboard (Enter in a form, Space on a button: detail 0) never is.
+       Input can run before the timer that clears the flag. */
+    if (S.dragSwallow && e.detail > 0) { S.dragSwallow = false; e.stopPropagation(); e.preventDefault(); }
   }, true);
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape' && S.drag && S.drag.active) { e.stopPropagation(); e.preventDefault(); S.drag.t = null; dragEnd(false); }
@@ -3085,6 +3287,7 @@
 
   /* ---------------- Events ---------------- */
   document.addEventListener('click', function (e) {
+    if (S.steerOpen && !e.target.closest('#steerTray, #toastHost, #sheetHost, [data-steer-open]')) setSteerOpen(false);
     if (e.target.closest('[data-ask-close]')) { ask.close(); return; }
     /* Tapping the status strip (not Sync) opens the diagnostics. */
     if (e.target.closest('#status') && !e.target.closest('[data-sync]')) { toggleDiag(); return; }
@@ -3102,12 +3305,18 @@
     if ((t.hasAttribute('data-done') || t.hasAttribute('data-done-primary') || t.hasAttribute('data-notwaiting')) && performance.now() < (S.doneGuardUntil || 0)) return;
     if ((t.hasAttribute('data-open') || t.hasAttribute('data-act')) && !desk() && performance.now() < (S.doneGuardUntil || 0) - 150) return;
     if ((id = t.getAttribute('data-open'))) return openItem(id, false);
-    if ((id = t.getAttribute('data-act'))) { var it = S.byId[id]; return openItem(id, !!(it && rk(it).kind === 'reply')); }
+    if ((id = t.getAttribute('data-act'))) {
+      var it = S.byId[id];
+      if (isCal(it)) { if (it.calKind === 'steerco') return setSteerOpen(true); if (it.ev.webLink) { try { window.open(it.ev.webLink, '_blank', 'noopener,noreferrer'); } catch (x) { /* blocked */ } } return; }
+      return openItem(id, !!(it && rk(it).kind === 'reply'));
+    }
     if ((id = t.getAttribute('data-move'))) return moveTo(id, 'later');
     if ((id = t.getAttribute('data-move-today'))) return moveTo(id, 'today');
     if ((id = t.getAttribute('data-steer-off'))) return moveTo(id, 'off');
     if ((id = t.getAttribute('data-steer-del'))) return delSteerPoint(id);
     if ((id = t.getAttribute('data-point-done'))) return pointDone(id);
+    if ((id = t.getAttribute('data-sugg-add'))) return suggest(id, true);
+    if ((id = t.getAttribute('data-sugg-skip'))) return suggest(id, false);
     if ((id = t.getAttribute('data-point-today'))) return pointToToday(id);
     /* Ask Claude on a Later card: about that item (its own conversation), or
        about his own point (the global prompt, with the point filled in). */
@@ -3119,6 +3328,8 @@
       return;
     }
     if (t.id === 'steerCopy') return copySteer();
+    if (t.id === 'steerToggle' || t.hasAttribute('data-steer-open')) return setSteerOpen(t.id === 'steerToggle' ? !S.steerOpen : true);
+    if (t.id === 'steerClose') return setSteerOpen(false, true);
     if ((id = t.getAttribute('data-jump'))) { var jt = $(id); if (jt) jt.scrollIntoView({ block: 'start', behavior: 'smooth' }); return; }
     if (t.id === 'restToggle') { S.restOpen = !S.restOpen; renderRest(); if (S.restOpen) $('q').focus(); return; }
     if (t.id === 'doneToggle') { S.doneOpen = !S.doneOpen; renderDone(); return; }
@@ -3174,6 +3385,7 @@
     if (t.hasAttribute('data-jira-post') && cur) return onJiraPost();
     if (t.hasAttribute('data-open-page') && cur) return openPage();
     if (t.hasAttribute('data-conf-ask') && cur) return ask.openSheet(cur, 'Update this page: ');
+    if ((id = t.getAttribute('data-cowork-copy'))) return copyCowork(id);
     if (t.hasAttribute('data-star') && cur) return toggleStar();
     if (t.hasAttribute('data-notimp') && cur) return notImportant();
     if (t.hasAttribute('data-nottoday') && cur) return notToday();
@@ -3264,6 +3476,7 @@
       }
       return;
     }
+    if (e.key === 'Escape' && S.steerOpen) { e.preventDefault(); setSteerOpen(false, true); return; }
     /* Esc in the draft only leaves the text field; a second Esc closes. */
     if (e.key === 'Escape') {
       if (e.target.id === 'draftText' || e.target.id === 'actText' || e.target.id === 'actNotes' || e.target.id === 'actDue') { e.target.blur(); return; }
@@ -3289,12 +3502,14 @@
     }
     if (e.key === '/') { e.preventDefault(); if (!S.restOpen) { S.restOpen = true; renderRest(); } $('q').focus(); return; }
     if (e.key === 'm' && moveFocused()) { e.preventDefault(); return; }
+    if (e.key === 's') { e.preventDefault(); $('steerIn').focus(); return; }
+    if (e.key === 'S') { e.preventDefault(); setSteerOpen(!S.steerOpen, !S.steerOpen ? false : true); return; }
     if (e.key === 'a' && (desk() || S.view === 'list')) { e.preventDefault(); $('addIn').focus(); return; }
     if (e.key === 'k' && ask.available()) { e.preventDefault(); ask.openSheet(null); return; }
     if (S.view !== 'item' || !S.cur) return;
     /* d (Done) works from either pane and also after a send. */
     if (e.key === 'd') { e.preventDefault(); markDone(); return; }
-    if (S.pane !== 'item' || isHours(S.byId[S.cur])) return;
+    if (S.pane !== 'item' || isHours(S.byId[S.cur]) || isCal(S.byId[S.cur]) || isLeave(S.byId[S.cur])) return;
     var ph = sendState(S.cur).phase;
     if (ph === 'sent' || ph === 'sending') return;
     if (e.key === 'c') { e.preventDefault(); toggleChat(); }
@@ -3302,7 +3517,7 @@
   });
 
   /* ---------------- Boot ---------------- */
-  S.restOpen = false; /* layout B: Everything else folds under the STEERCO list; / opens it */
+  S.restOpen = true; /* the rest of your open work shows under Today (More today); it can fold; / searches it */
   store.onError = function (path) { if (S.saveManaged && S.saveManaged[path]) return; S.notes.store = 'Couldn’t save a change; it may be gone after a reload.'; renderNotes(); };
   renderAll(); renderAskbar();
   /* A capability that answers after use()'s timeout lights up late. */
@@ -3312,10 +3527,19 @@
     else if (name === 'mcp') load({ full: false });
     else if (name === 'permissions') checkPerms();
   };
+  /* While Droplet is open it checks again every 30 minutes (mail, Teams,
+     Atlassian, waits and new meeting transcripts), only when visible. */
+  var REFRESH_MS = 30 * 60 * 1000;
+  setInterval(function () { if (!S.loading && rt.inited && document.visibilityState !== 'hidden') load({ full: false }); }, REFRESH_MS);
   rt.init().then(function () {
     renderStatus(); renderAskbar();
     checkPerms();
     load({ full: true });
     if (hours) hours.start({ onChange: rebuild });
+    if (D.leave) {
+      setSrc('leave', 'loading');
+      D.leave.start({ onChange: function () { rebuild(); renderAllKeepFocus(); },
+        onBridge: function (ok) { if (ok) setSrc('leave', 'ok'); else setSrc('leave', 'error', { code: 'not_found', message: 'The Planon leave approver extension did not answer in this browser.' }); } });
+    }
   });
 })(window.Droplet = window.Droplet || {});

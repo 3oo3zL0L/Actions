@@ -20,7 +20,11 @@
 <main class="app" id="app" data-view="list">
   <header class="lh">
     <div class="brand">
-      <span class="mark" aria-hidden="true"><svg viewBox="0 0 24 24" width="17" height="17"><path d="M6.5 5.5h3l8.5 13.5M12.6 11.2 6.5 18.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="square" stroke-linejoin="miter"/></svg></span>
+      <span class="mark" aria-hidden="true"><svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true">
+            <circle cx="9" cy="8.9" r="5.5" fill="none" stroke="currentColor" stroke-width="1.8"/>
+            <circle cx="17" cy="14.9" r="3.5" fill="none" stroke="currentColor" stroke-width="1.8"/>
+            <circle cx="9.5" cy="18.9" r="1.7" fill="currentColor"/>
+          </svg></span>
       <span class="brand-name">Droplet</span>
     </div>
     <div class="status" id="status"><span><i></i>M365 link</span><span><i></i>Teams</span><span><i></i>Atlassian</span><span><i></i>Claude</span><span>Sync ··:··</span><span>Nothing sends without you</span></div>
@@ -33,6 +37,33 @@
     </div>
     <div class="notes" id="notes" role="status" aria-live="polite"></div>
   </header>
+  <div class="steer-tray" id="steerTray" data-drop="later">
+    <button class="st-toggle" id="steerToggle" type="button" aria-expanded="false" aria-controls="steerBox" aria-keyshortcuts="Shift+S" title="Open the STEERCO list (Shift+S)">
+      <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 21V4h11l-2 4 2 4H6"/></svg>
+      <span class="st-l">STEERCO</span><span class="count" id="steerCount"></span><span class="st-sugg" id="steerSuggBadge" hidden></span>
+      <svg class="ico chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+    </button>
+    <form class="steer-add" id="steerForm" data-steerform autocomplete="off">
+      <label class="sr" for="steerIn">Add a point for STEERCO</label>
+      <input id="steerIn" type="text" maxlength="300" enterkeyhint="done" placeholder="+ Add a point…" aria-keyshortcuts="s">
+      <button class="steer-btn" type="submit" aria-label="Add point">Add</button>
+    </form>
+    <p class="st-pocket" aria-hidden="true"><span>Drop to raise in STEERCO</span><small>Your note goes with it</small></p>
+  <section class="lane lane-steer st-pop" id="steerBox" aria-label="STEERCO list" hidden>
+    <h2 class="lane-h"><b>STEERCO</b><span class="count" id="steerCountP"></span><span class="r" id="steerNext">To raise</span>
+      <button class="lane-btn" id="steerCopy" type="button" title="Copy the list, to paste in your STEERCO notes">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12"/><path d="M16 8V4H4v12h4"/></svg><span>Copy</span></button>
+      <button class="lane-btn" id="steerClose" type="button" aria-label="Close the STEERCO list"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg><span class="kbd">Esc</span></button></h2>
+    <div class="lane-b">
+      <p class="drop-hint" aria-hidden="true">Drop here for STEERCO</p>
+      <ol class="steer-list" id="steerList"></ol>
+      <div class="steer-sugg" id="steerSuggBox" hidden>
+        <h3 class="lane-sub"><b>From meetings</b><span class="count" id="steerSuggCount"></span><span class="r">Suggested by Claude</span></h3>
+        <ul class="sugg-list" id="steerSugg"></ul>
+      </div>
+    </div>
+  </section>
+  </div>
   <nav class="jump" id="jump" aria-label="Jump to lane"></nav>
   <section class="list-col is-active" id="listCol" aria-label="Today">
     <h2 class="lane-h lane-h-today"><b>Today</b><span class="count" id="todayCount"></span><span class="r">Your move</span></h2>
@@ -50,6 +81,21 @@
         </div>
       </form>
       <ol class="focus" id="focus" aria-label="Today"></ol>
+      <div class="ov-rest rest" id="restBox">
+        <button class="rest-toggle" id="restToggle" aria-expanded="true" aria-controls="restPanel" aria-keyshortcuts="/">
+          <span>More today<span class="count" id="restCount"></span></span>
+          <span class="kbd" aria-hidden="true">/</span>
+          <svg class="ico chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <div id="restPanel">
+          <div class="search">
+            <label class="sr" for="q">Search everything</label>
+            <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg>
+            <input id="q" type="search" placeholder="Search people, projects, words" autocomplete="off">
+          </div>
+          <ul class="rest-list" id="restList"></ul>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -67,33 +113,10 @@
           </div>
         </div>
       </section>
-      <section class="lane lane-steer" id="laterBox" aria-label="Later: for STEERCO" data-drop="later">
-        <h2 class="lane-h"><b>Later</b><span class="count" id="steerCount"></span><span class="r">For STEERCO</span>
-          <button class="lane-btn" id="steerCopy" type="button" title="Copy the list, to paste in your STEERCO notes">
-            <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12"/><path d="M16 8V4H4v12h4"/></svg><span>Copy</span></button></h2>
+      <section class="lane lane-later" id="laterBox" aria-label="Later" data-drop="off">
+        <h2 class="lane-h"><b>Later</b><span class="count" id="offCount"></span><span class="r">Out of Today</span></h2>
         <div class="lane-b">
-          <p class="drop-hint" aria-hidden="true">Drop here for STEERCO</p>
-          <form class="steer-add" id="steerForm" data-steerform autocomplete="off">
-            <label class="sr" for="steerIn">Add a point for STEERCO</label>
-            <input id="steerIn" type="text" maxlength="300" enterkeyhint="done" placeholder="Add a point for STEERCO">
-            <button class="steer-btn" type="submit">Add</button>
-          </form>
-          <ol class="steer-list" id="steerList"></ol>
-          <div class="ov-rest rest" id="restBox" data-drop="off">
-            <button class="rest-toggle" id="restToggle" aria-expanded="false" aria-controls="restPanel" aria-keyshortcuts="/">
-              <span>Everything else<span class="count" id="restCount"></span></span>
-              <span class="kbd" aria-hidden="true">/</span>
-              <svg class="ico chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
-            </button>
-            <div id="restPanel" hidden>
-              <div class="search">
-                <label class="sr" for="q">Search everything</label>
-                <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg>
-                <input id="q" type="search" placeholder="Search people, projects, words" autocomplete="off">
-              </div>
-              <ul class="rest-list" id="restList"></ul>
-            </div>
-          </div>
+          <ul class="rest-list is-off" id="offList"></ul>
         </div>
       </section>
       <section class="lane lane-week" id="laneWeek" aria-label="Week" data-drop="done">
@@ -112,7 +135,7 @@
               <p class="done-foot">Bring back puts it where it was. Nothing is unsent.</p>
             </div>
           </section>
-          <p class="ov-keys">Drag cards between Today, Later, Everything else and Recently done, or press <span class="kbd">m</span> on one. <span class="kbd">Enter</span> opens · <span class="kbd">Esc</span> closes.</p>
+          <p class="ov-keys">Drag cards between Today, Waiting on, Later, STEERCO and the Week (done), or press <span class="kbd">m</span> on one. <span class="kbd">Enter</span> opens · <span class="kbd">Esc</span> closes.</p>
         </div>
       </section>
     </div>
@@ -146,6 +169,9 @@
 <script src="js/atlassian.js"></script>
 <script src="js/send.js"></script>
 <script src="js/hours.js"></script>
+<script src="js/agenda.js"></script>
+<script src="js/leave.js"></script>
+<script src="js/cowork.js"></script>
 <script src="js/nextstep.js"></script>
 <script src="js/chat.js"></script>
 <script src="js/ask.js"></script>

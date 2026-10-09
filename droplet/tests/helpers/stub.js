@@ -121,7 +121,8 @@ function installDropletStub(cfg) {
   function calSearchShape(e) {
     return { uri: "calendar:///events/" + encodeURIComponent(e.id), id: e.id, subject: e.subject, organizer: e.organizer.address,
       attendees: (e.people || []).map(function (p) { return p.address; }), start: e.start, end: e.end, isCancelled: !!e.isCancelled,
-      showAs: e.showAs || "busy", isAllDay: !!e.isAllDay, isOrganizer: e.organizer.address === (cfg.me || {}).mail, webLink: "https://outlook.office365.com/calendar/item/" + e.id };
+      showAs: e.showAs || "busy", isAllDay: !!e.isAllDay, isOrganizer: e.organizer.address === (cfg.me || {}).mail, webLink: "https://outlook.office365.com/calendar/item/" + e.id,
+      categories: e.categories || null, location: e.location || null };
   }
   function bound(s, end) {
     if (!s) return end ? Infinity : -Infinity;
@@ -478,7 +479,8 @@ function installDropletStub(cfg) {
     if (/^You read one meeting transcript/.test(prompt)) {
       var subj = (/\nMeeting: "([^"]*)"/.exec(prompt) || [])[1] || "";
       var plan = cfg.commitPlan || {}, key = Object.keys(plan).filter(function (k) { return subj.indexOf(k) >= 0; })[0];
-      return { commitments: key ? JSON.parse(JSON.stringify(plan[key])) : [] };
+      var more = key && (cfg.txMore || {})[key] || {};
+      return { commitments: key ? JSON.parse(JSON.stringify(plan[key])) : [], actions: JSON.parse(JSON.stringify(more.actions || [])), points: JSON.parse(JSON.stringify(more.points || [])) };
     }
     if (/^You draft a short meeting invite/.test(prompt)) return cfg.inviteAnswer || { title: "DoD follow-up", agenda: "Agree the final DoD.\n\n- Walk through the draft\n- Decide what goes to PST" };
     if (/^You draft one new email/.test(prompt)) return cfg.newMailAnswer || { subject: "The DoD draft", draft: "Hi Anna,\n\nHere is the DoD draft we discussed. Can you review it by Tuesday?\n\nKR\nSam" };

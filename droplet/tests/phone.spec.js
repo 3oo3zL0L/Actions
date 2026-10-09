@@ -10,7 +10,7 @@ test.describe('Phone (390 px)', () => {
   test('list: no horizontal scroll, 44 px targets', async ({ app, page }) => {
     await app.boot();
     expect(await noSideScroll(page)).toBe(true);
-    await page.click('#restToggle');
+    await app.openRest();
     expect(await noSideScroll(page)).toBe(true);
     const heights = await page.$$eval('.btn-act, .fi-open, .rest-toggle, .rr, #q', (els) => els.map((e) => e.getBoundingClientRect().height));
     expect(Math.min(...heights)).toBeGreaterThanOrEqual(44);
@@ -18,7 +18,7 @@ test.describe('Phone (390 px)', () => {
 
   test('item: its own screen, no horizontal scroll, Send in thumb reach without scrolling', async ({ app, page }) => {
     await app.boot();
-    await page.tap('#restToggle');
+    await app.openRest();
     await page.tap('[data-open="a6-peter"]');
     await expect(page.locator('#ivTitle')).toBeVisible();
     await expect(page.locator('#listCol')).toBeHidden();

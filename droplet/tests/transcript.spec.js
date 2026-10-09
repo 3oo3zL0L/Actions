@@ -8,8 +8,8 @@ const txPrompts = async (app) => (await app.calls('sample')).filter((c) => /^You
 test.describe('R6: commitments from meeting transcripts', () => {
   test('"Ik plan een vervolg met Anna en Bas" becomes an own action with the quote and the meeting', async ({ app, page }) => {
     await app.boot(meetingsConfig());
-    const cal = (await app.calls('mcp')).filter((c) => c.tool === 'outlook_calendar_search' && c.input.afterDateTime !== 'today');
-    expect(cal.map((c) => c.input)).toEqual([{ query: '*', afterDateTime: '2026-09-29', beforeDateTime: 'tomorrow', limit: 25, offset: 0 }]);
+    const cal = (await app.calls('mcp')).filter((c) => c.tool === 'outlook_calendar_search' && c.input.afterDateTime !== 'today' && !/^(steerco|release)$/.test(c.input.query));
+    expect(cal.map((c) => c.input)).toEqual([{ query: '*', afterDateTime: '2026-09-27', beforeDateTime: 'tomorrow', limit: 25, offset: 0 }]);
     // Each ended meeting in the window is read once; the transcript URL is passed verbatim.
     const reads = (await app.calls('mcp')).filter((c) => c.tool === 'read_resource').map((c) => c.input.uri);
     expect(reads.filter((u) => u.startsWith('calendar:///')).sort()).toEqual(['calendar:///events/ev-dod', 'calendar:///events/ev-fail', 'calendar:///events/ev-none']);
@@ -136,5 +136,45 @@ test.describe('R6: commitments from meeting transcripts', () => {
     await app.openItem('mine:' + docId);
     await expect(page.locator('[data-quote]')).toHaveText('I will plan <img src=x onerror="window.__pwned=1"> the review with Anna.');
     expect(await page.evaluate(() => window.__pwned)).toBeUndefined();
+  });
+
+  test('what others took on goes to Waiting on with the owner; key points are STEERCO suggestions (Add / Skip)', async ({ app, page }) => {
+    const vtt = ['WEBVTT', '',
+      '00:01:00.000 --> 00:01:05.000', '<v Bas Visser>Ik maak de epics voor Datalake aan voor vrijdag.</v>', '',
+      '00:02:00.000 --> 00:02:08.000', '<v Anna Jansen>De einddatum van Datalake schuift naar Q1, dat moet naar de stuurgroep.</v>', '',
+      '00:03:00.000 --> 00:03:04.000', '<v Sam de Vries>Ik plan een vervolg met Anna en Bas om het af te tekenen.</v>', ''].join('\n');
+    await app.boot(meetingsConfig({
+      calendar: [ev('ev-ps', 'Platform Stability sync', at('2026-10-01', '10:00'), at('2026-10-01', '10:45'), { transcript: vtt })],
+      commitPlan: { 'Platform Stability sync': [] },
+      txMore: { 'Platform Stability sync': {
+        actions: [{ owner: 'Bas', what: 'Create the Datalake epics', due: '2026-10-09', project: null, quote: 'Ik maak de epics voor Datalake aan voor vrijdag.' },
+          { owner: 'Sam', what: 'Not mine to wait on', quote: 'Ik plan een vervolg met Anna en Bas om het af te tekenen.' },
+          { owner: 'Eve', what: 'Made up', quote: 'This sentence is not in the transcript at all.' }],
+        points: [{ what: 'Datalake end date slips to Q1', quote: 'De einddatum van Datalake schuift naar Q1, dat moet naar de stuurgroep.' }]
+      } }
+    }));
+    // Bas's action waits on Bas, with the meeting; not in Today. Sam's own and the invented one are dropped.
+    const row = page.locator('#waitList .rr', { hasText: 'Create the Datalake epics' });
+    await expect(row).toHaveCount(1);
+    await expect(row).toContainText('Bas');
+    await expect(row).toContainText('from Platform Stability sync');
+    await expect(page.locator('#focus')).not.toContainText('Create the Datalake epics');
+    await expect(page.locator('#waitList')).not.toContainText('Not mine to wait on');
+    await expect(page.locator('#waitList')).not.toContainText('Made up');
+    const acts = Object.values(await app.db()).filter((v) => v && v.owner);
+    expect(acts).toHaveLength(1);
+    expect(acts[0]).toMatchObject({ owner: 'Bas', text: 'Create the Datalake epics', due: '2026-10-09' });
+    // The point is a suggestion, not yet on the list; the tray shows +1.
+    await expect(page.locator('#steerSuggBadge')).toHaveText('+1');
+    await app.openSteer();
+    await expect(page.locator('#steerSugg .sugg')).toHaveCount(1);
+    await expect(page.locator('#steerList .sc')).toHaveCount(0);
+    await page.click('[data-sugg-add]');
+    await expect(page.locator('#steerSugg .sugg')).toHaveCount(0);
+    await expect(page.locator('#steerList [data-steer-free]')).toHaveValue(/Datalake end date slips to Q1\nFrom Platform Stability sync/);
+    // Remembered: after a reload the suggestion stays handled.
+    await page.reload(); await app.ready();
+    await expect(page.locator('#steerSugg .sugg')).toHaveCount(0);
+    expect(await app.writeTools()).toEqual([]);
   });
 });

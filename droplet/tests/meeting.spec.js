@@ -25,7 +25,7 @@ const meetingTag = (page, id) => page.locator(`[data-id="${id}"] [data-meeting],
 test.describe('R5: meeting today', () => {
   test('a meeting today with the sender or a chat participant adds a tag and goes into the prompt; cancelled, free, all-day and past meetings do not', async ({ app, page }) => {
     await app.boot(teamsConfig({ events: EVENTS, dropletConfig: { rankBatch: 50 } }));
-    const cal = (await app.calls('mcp')).filter((c) => c.tool === 'outlook_calendar_search' && c.input.afterDateTime === 'today'); // R5 only; R6 reads past meetings separately
+    const cal = (await app.calls('mcp')).filter((c) => c.tool === 'outlook_calendar_search' && c.input.afterDateTime === 'today' && !c.input.order); // R5 only; R6 reads past meetings separately
     expect(cal.map((c) => c.input)).toEqual([{ query: '*', afterDateTime: 'today', beforeDateTime: 'tomorrow', limit: 25 }]);
 
     await expect(page.locator(`[data-id="${TID('iris')}"] [data-meeting]`)).toHaveText('Meeting 14:00');
@@ -49,7 +49,7 @@ test.describe('R5: meeting today', () => {
 
   test('the calendar is only read when there are open items', async ({ app }) => {
     await app.boot({ mail: [], events: EVENTS });
-    expect((await app.calls('mcp')).filter((c) => c.tool === 'outlook_calendar_search' && c.input.afterDateTime === 'today')).toEqual([]);
+    expect((await app.calls('mcp')).filter((c) => c.tool === 'outlook_calendar_search' && c.input.afterDateTime === 'today' && !c.input.order)).toEqual([]);
   });
 
   test('a meeting that appears later asks Claude again for that person only', async ({ app, page }) => {
