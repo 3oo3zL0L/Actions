@@ -27,6 +27,27 @@ test.describe('Send', () => {
     expect((await app.db())['done/a3-bram']).toMatchObject({ how: 'sent' });
   });
 
+  test('a reply draft with the original’s inline images can’t be sent: the same reply goes once as a new mail to the same person, original quoted as text', async ({ app, page }) => {
+    await app.boot({ inlineImages: ['a3-bram'] });
+    await page.click('[data-act="a3-bram"]');
+    await expect(page.locator('#mailBody')).toContainText('Today please.');
+    await page.click('#sendBtn');
+    await expect(page.locator('#sendBtn')).toHaveText('Sent 10:00 · locked');
+    await expect(page.locator('.toast')).toContainText('Sent as a new mail');
+    const w = writeCalls(await app.calls('mcp'));
+    expect(w.map((c) => c.tool)).toEqual(['outlook_create_reply_draft', 'read_resource', 'outlook_send_draft', 'outlook_create_draft', 'read_resource', 'outlook_send_draft']);
+    // Same person as the reply (the original sender), nobody else.
+    expect(w[3].input.to).toHaveLength(1);
+    expect(w[3].input.to[0]).toMatch(/^bram/);
+    expect(w[3].input.subject).toMatch(/^RE: /);
+    expect(w[3].input.body).toContain('OK from me: go with the read replica.');
+    expect(w[3].input.body).toContain('-----');
+    expect(w[3].input.body).not.toMatch(/<img/i);
+    const sent = await page.evaluate(() => window.__stub.sent);
+    expect(sent).toHaveLength(1);
+    expect((await app.db())['done/a3-bram']).toMatchObject({ how: 'sent' });
+  });
+
   test('the user text is escaped into allowed reply HTML', async ({ app, page }) => {
     await app.boot();
     await page.click('[data-act="a2-anouk"]');

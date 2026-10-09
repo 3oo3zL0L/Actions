@@ -227,7 +227,7 @@
       c.st = { phase: "sending", draftId: st.draftId, draftLink: st.draftLink, draftText: st.draftText }; ask.rerender();
       mail.read({ uri: mail.uriFor(c.mailId) }).then(function (d) {
         if (!d || !d.conversationId) throw { code: "no_conversation_id" };
-        return flow.send({ item: { id: c.mailId, sender: c.to[0] }, text: body, conversationId: d.conversationId, reuse: reuse2 });
+        return flow.send({ item: { id: c.mailId, sender: c.to[0] }, text: body, conversationId: d.conversationId, reuse: reuse2, original: d });
       }, function (e) {
         return { phase: "failed", step: flow.STEPS.original, code: String(e && e.code || "unknown"), message: "Couldn’t read the original mail from Outlook, so nothing was sent. Try again." };
       }).then(function (res) {

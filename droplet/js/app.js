@@ -2340,19 +2340,19 @@
         return { phase: 'failed', step: flow.STEPS.original, code: dd && dd.state === 'ok' ? 'no_conversation_id' : (dd && dd.code) || 'unknown',
           detail: dd && dd.message || '', message: 'Couldn’t read the original mail from Outlook, so nothing was sent. Try again.' };
       }
-      return flow.send({ item: target, text: text, conversationId: dd.conversationId, reuse: reuse });
+      return flow.send({ item: target, text: text, conversationId: dd.conversationId, reuse: reuse, original: dd });
     }).then(function (res) {
       var ns = S.send[id] = { phase: res.phase, message: res.message || '', sentAt: res.sentAt, draftId: res.draftId || '', draftLink: res.draftLink || '', draftText: res.draftText || '',
         step: res.step || '', code: res.code || '', detail: res.detail || '', safeDetail: res.safeDetail || '' };
       if (res.phase === 'unclear') { ns.confirm = 0; ns.armAt = performance.now() + 700; }
       if (res.phase === 'blocked' && !res.keepDraft) { ns.draftId = ''; }
       if (res.phase === 'sent' && w) {
-        autoDone(it, 'chased', 'Chase sent by mail.');
+        autoDone(it, 'chased', res.plain ? 'Chase sent as a new mail (the original’s images couldn’t go along).' : 'Chase sent by mail.');
       } else if (res.phase === 'sent') {
         store.setSent(it.key, { sentAt: res.sentAt.toISOString() });
         if (S.sentDb) S.sentDb[it.key] = { sentAt: res.sentAt.toISOString() };
         S.chatOpen = false;
-        autoDone(it, 'sent', 'Sent.', null, { sentAt: res.sentAt.toISOString() });
+        autoDone(it, 'sent', res.plain ? 'Sent as a new mail (the original’s images couldn’t go along). The first draft is still in your Drafts.' : 'Sent.', null, { sentAt: res.sentAt.toISOString() });
       }
       renderAll();
       var b = $('sendBtn'); if (b && S.cur === id) b.focus({ preventScroll: true });
