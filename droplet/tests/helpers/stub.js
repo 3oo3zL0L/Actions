@@ -258,6 +258,8 @@ function installDropletStub(cfg) {
         toRecipients: [{ name: "", address: to }], ccRecipients: [],
         webLink: link, parentFolderId: "AAMkADinventedDrafts", internetMessageId: "<draft" + n + "@example>"
       };
+      /* Outlook copies the original's inline images into a reply draft: cfg.inlineImages [mail ids]. */
+      if ((cfg.inlineImages || []).indexOf(orig.id) > -1) drafts[id].hasAttachments = true;
       var shape = cfg.createShape || "text";
       if (shape === "json") return result(JSON.stringify({ id: id, webLink: link }));
       if (shape === "prose") return result("Your reply draft was created with id " + id + ". You can open it in Outlook on the web.");
@@ -293,6 +295,7 @@ function installDropletStub(cfg) {
     },
     outlook_send_draft: function (input) {
       if (!drafts[input.messageId]) throw err("tool_error", "Draft not found");
+      if (drafts[input.messageId].hasAttachments) throw err("tool_error", '{ "code": "VALIDATION_ERROR", "message": "VALIDATION_ERROR: Draft has attachments — sending drafts with attachments isn\'t supported. Remove them and try again." }');
       sent.push(input.messageId);
       return result("Draft sent to 1 recipient(s) and saved to Sent Items.");
     }

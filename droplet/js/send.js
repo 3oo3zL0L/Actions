@@ -129,6 +129,11 @@
         return { phase: "sent", draftId: draftId, draftLink: link, sentAt: new Date() };
       }, function (e) {
         var base = { step: S.send, code: codeOf(e), detail: errText(e), draftId: draftId, draftLink: link, draftText: text };
+        /* Outlook copies the original's inline images (signature logos) into
+           a reply draft, and drafts with attachments can't be sent. Nothing
+           went out, so the same reply goes as a new mail to the same person,
+           with the original quoted as text. Same Send click, same text. */
+        if (rt.isClear(e) && /attachment/i.test(String(e && e.message || ""))) return plainReply(o, r.d, text, link);
         throw Object.assign(base, rt.isClear(e)
           ? { phase: "failed", message: "Outlook didn’t send it" + (errText(e) ? ": " + errText(e) : "") + ". The draft is kept in your Drafts." }
           : { phase: "unclear", message: "Outlook didn’t confirm. It may have gone out: check Sent Items before sending again." });
@@ -138,6 +143,23 @@
       return { phase: "unclear", step: "unknown", code: "internal", detail: "", draftId: draftId, draftLink: link, draftText: text, message: "Something went wrong mid-way. Check Sent Items before sending again." };
     });
   };
+
+  /* The quote under a reply sent as a new mail: the original, as text. */
+  flow.quote = function (orig) {
+    if (!orig || !String(orig.text || "").trim()) return "";
+    var when = Date.parse(orig.received), head = ["-----", "From: " + (orig.fromName ? orig.fromName + (orig.fromAddress ? " <" + orig.fromAddress + ">" : "") : orig.fromAddress || "")];
+    if (!isNaN(when)) head.push("Sent: " + new Date(when).toLocaleString("en-GB", { timeZone: "Europe/Amsterdam", weekday: "short", day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }));
+    if (orig.subject) head.push("Subject: " + orig.subject);
+    return "\n\n" + head.join("\n") + "\n\n" + String(orig.text).trim().slice(0, 8000);
+  };
+  function plainReply(o, d, text, firstLink) {
+    var orig = o.original || null, subj = String(d && d.subject || orig && orig.subject || "").trim();
+    if (!/^(re|aw|antw):/i.test(subj)) subj = "RE: " + subj;
+    return flow.sendNew({ to: [String(o.item.sender || "").toLowerCase()], subject: subj.slice(0, 255), text: text + flow.quote(orig) }).then(function (res) {
+      if (res.phase === "sent") return Object.assign(res, { plain: true, firstDraftLink: firstLink });
+      return Object.assign(res, { message: "Outlook couldn’t send the reply with the original’s images, and sending it as a new mail didn’t work either. " + (res.message || "") });
+    });
+  }
 
   /* Read-back check for a new mail: a draft, going to exactly the chosen
      addresses (case-insensitive), containing the start of the user's text. */
